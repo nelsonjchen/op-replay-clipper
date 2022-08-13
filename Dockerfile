@@ -1,14 +1,9 @@
-FROM ubuntu:latest
+FROM ghcr.io/commaai/openpilot-prebuilt:latest
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
-    apt-transport-https \
-    ca-certificates \
-    curl \
-    gnupg-agent \
-    software-properties-common \
-    git \
+    gdb \
     htop \
     tigervnc-standalone-server \
     mesa-utils
