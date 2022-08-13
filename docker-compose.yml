@@ -5,5 +5,5 @@ services:
       context: .
     ports:
       - "5900:5900"
-    shm_size: '4gb'
+    shm_size: '2gb'
 
