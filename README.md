@@ -11,3 +11,7 @@ Xtigervnc :0 -geometry 2180x1080 -SecurityTypes None
 ```sh
 DISPLAY=:0 ./selfdrive/ui/ui
 ```
+
+```sh
+ffmpeg -video_size 2180x1080 -f x11grab -framerate 20 -i :0.0 -vf scale=1090x590 -preset ultrafast out.mp4
+```
