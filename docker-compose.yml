@@ -18,3 +18,5 @@ services:
         reservations:
           cpus: "8"
           memory: 4G
+    volumes:
+      - ./shared:/shared
