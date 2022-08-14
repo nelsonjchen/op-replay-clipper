@@ -7,5 +7,7 @@ RUN apt-get update && apt-get install -y \
     htop \
     vim \
     tigervnc-standalone-server \
+    apitrace-tracers \
+    apitrace \
     ffmpeg \
     mesa-utils
