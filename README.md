@@ -13,7 +13,7 @@ DISPLAY=:0 ./selfdrive/ui/ui
 ```
 
 ```sh
-ffmpeg -video_size 2180x1080 -f x11grab -framerate 20 -i :0.0 -vf scale=1090x590 -preset ultrafast out.mp4
+ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab  -i :0.0 -vcodec libx264 -preset medium -pix_fmt yuv444p -r 20 -filter:v "setpts=0.5*PTS,scale=1280:720" -y /shared/video.mkv
 ```
 
 ```sh
