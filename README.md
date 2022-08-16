@@ -25,14 +25,6 @@ ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab  -i :0.0 -vcodec libx264 -
 ```
 
 ```sh
-TRACE_FILE=/shared/dump.trace LD_PRELOAD="/home/batman/libfaketime/src/libfaketimeMT.so.1 /home/batman/apitrace/build/" ./selfdrive/ui/ui
-```
-
-```sh
-apitrace dump-images -o - /shared/dump.trace | ffmpeg -r 20 -f image2pipe -vcodec ppm -i pipe: -vcodec mpeg4 -y /shared/dump.mp4
-```
-
-```sh
 LD_PRELOAD="/home/batman/libfaketime/src/libfaketimeMT.so.1" FAKETIME="+0 x0.5" ./selfdrive/ui/ui
 ```
 
