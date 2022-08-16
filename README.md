@@ -15,7 +15,7 @@ DISPLAY=:0 ./selfdrive/ui/ui
 720p resolution
 
 ```sh
-ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab  -i :0.0 -vcodec libx264 -preset medium -pix_fmt yuv420p  -r 20 -filter:v "setpts=0.5*PTS,scale=1280:720" -y /shared/video.mkv
+ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab  -i :0.0 -vcodec libx264 -preset medium -pix_fmt yuv420p  -r 20 -filter:v "setpts=0.5*PTS,scale=1280:720" -y /shared/video.mp4
 ```
 
 1080p resolution
