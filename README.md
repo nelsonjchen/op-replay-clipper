@@ -25,9 +25,9 @@ ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab  -i :0.0 -vcodec libx264 -
 ```
 
 ```sh
-LD_PRELOAD="/home/batman/libfaketime/src/libfaketimeMT.so.1" FAKETIME="+0 x0.5" ./selfdrive/ui/ui
+faketime -m -f "+0 x0.5" ./selfdrive/ui/ui
 ```
 
 ```sh
-LD_PRELOAD="/home/batman/libfaketime/src/libfaketimeMT.so.1" FAKETIME="+0 x0.5" ./tools/replay/replay --demo
+faketime -m -f "+0 x0.5" ./tools/replay/replay --demo
 ```
