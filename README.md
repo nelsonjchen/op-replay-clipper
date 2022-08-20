@@ -2,6 +2,33 @@
 
 Replay openpilot routes and share it as a video service.
 
+# Usage
+
+Go to https://op-web-replay.mindflakes.com/
+
+Fill out the form with:
+
+- The route you want to replay
+- Seconds to start the route at
+- JWT key for if the route is non-public
+
+POST and get to a page that polls for an output. Should be done in about two minutes.
+
+# Architecture
+
+1. Google Cloud Run Web Server starts up
+1. Check if route is accessible with JWT key if provided
+3. Check if route has rlogs and has fcamera videos.
+4. If it does, insert Google Cloud Run job and redirect to page to poll for results.
+5. Run program to start X Server, Start Replay at seconds to start at (but immediately stop), and start the UI
+6. Restart the replay at seconds at.
+6. Wait a few seconds for the UI to catch up on downloads.
+7. Start Recording with ffmpeg
+9. Kill all processes when done
+10. Upload to Cloud Storage a manifest json and the video file
+11. Polling Page sees new file at Cloud Storage and presents it for downloading.
+12. Cloud Storage configured auto-cleans up files after 3 days.
+
 ## Random Notes
 
 ```sh
