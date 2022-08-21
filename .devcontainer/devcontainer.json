@@ -16,6 +16,7 @@
 		"vscode": {
 			"extensions": [
 				"vadimcn.vscode-lldb",
+				"ms-vsliveshare.vsliveshare",
 				"rust-lang.rust-analyzer",
 				"GitHub.copilot"
 			]
