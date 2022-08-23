@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     apitrace \
     ffmpeg \
     faketime \
+    tmux \
     mesa-utils
 
 ARG USERNAME=robin

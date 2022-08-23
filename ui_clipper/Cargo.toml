@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 env_logger = "0.9.0"
 log = "0.4.17"
+tmux_interface = { version = "0.2.1", default-features = false, features = ["tmux_3_0a"] }
