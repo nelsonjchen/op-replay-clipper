@@ -12,8 +12,17 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     faketime \
     tmux \
-    shell
+    shellcheck \
+    # for overlay
+    libx11-dev \
+    libxfixes-dev \
+    libxrandr-dev \
+    libxft-dev \
+    libfreetype-dev \
+    # For Debugging X stuff
     mesa-utils
+
+RUN git clone https://github.com/ftorkler/x11-overlay --depth 1 && make -C x11-overlay && cp x11-overlay/bin/overlay /usr/local/bin
 
 ARG USERNAME=robin
 ARG USER_UID=1000
@@ -37,8 +46,3 @@ RUN groupadd --gid $USER_GID $USERNAME \
 USER $USERNAME
 
 FROM base AS dev
-
-# Get Rust
-RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
-
-RUN echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
