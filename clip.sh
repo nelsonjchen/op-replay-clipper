@@ -20,8 +20,15 @@ trap ctrl_c INT
 cleanup
 
 STARTING_SEC=${1:-60}
+SMEARED_STARTING_SEC=$(($STARTING_SEC - 30))
 ROUTE=${2:-4cf7a6ad03080c90|2021-09-29--13-46-36}
 JWT_AUTH=${3:-false}
+
+# Starting seconds must be greater than 30
+if [ $STARTING_SEC -lt 30 ]; then
+    echo "Starting seconds must be greater than 30"
+    exit 1
+fi
 
 pushd /home/batman/openpilot
 
@@ -31,15 +38,18 @@ fi
 
 # Start processes
 tmux new-session -d -s clipper -n x11 "Xtigervnc :0 -geometry 1920x1080 -SecurityTypes None"
-tmux new-window -n replay -t clipper: "TERM=xterm-256color faketime -m -f \"+0 x0.5\" ./tools/replay/replay -s \"$STARTING_SEC\" \"$ROUTE\""
+tmux new-window -n replay -t clipper: "TERM=xterm-256color faketime -m -f \"+0 x0.5\" ./tools/replay/replay -s \"$SMEARED_STARTING_SEC\" \"$ROUTE\""
 tmux new-window -n ui -t clipper: 'faketime -m -f "+0 x0.5" ./selfdrive/ui/ui'
 
 # Pause replay and let it download the route
 tmux send-keys -t clipper:replay Space
-sleep 5
+sleep 3
 
-tmux send-keys -t clipper:replay Enter "$STARTING_SEC" Enter
+tmux send-keys -t clipper:replay Enter "$SMEARED_STARTING_SEC" Enter
+tmux send-keys -t clipper:replay Space
+sleep 1
+tmux send-keys -t clipper:replay Space
 # Record with ffmpeg
-ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab  -i :0.0 -vcodec libx264 -preset medium -pix_fmt yuv420p -r 20 -filter:v "setpts=0.5*PTS,scale=1920:1080" -y -t 60 /workspace/shared/video.mp4
+ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab -i :0.0 -ss 30 -vcodec libx264 -preset medium -pix_fmt yuv420p -r 20 -filter:v "setpts=0.5*PTS,scale=1920:1080" -y -t 30 /workspace/shared/video.mp4
 
 ctrl_c
