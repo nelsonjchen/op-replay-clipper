@@ -21,8 +21,13 @@ cleanup
 
 STARTING_SEC=${1:-60}
 ROUTE=${2:-4cf7a6ad03080c90|2021-09-29--13-46-36}
+JWT_AUTH=${3:-false}
 
 pushd /home/batman/openpilot
+
+if [ "$JWT_AUTH" != "false" ]; then
+    echo "{\"access_token\": \"$JWT_AUTH\"}" > $HOME/.comma/auth.json
+fi
 
 # Start processes
 tmux new-session -d -s clipper -n x11 "Xtigervnc :0 -geometry 1920x1080 -SecurityTypes None"
