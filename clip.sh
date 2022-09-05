@@ -28,7 +28,7 @@ ROUTE=${2:-4cf7a6ad03080c90|2021-09-29--13-46-36}
 JWT_AUTH=${3:-false}
 VIDEO_RAW_OUTPUT=${4:-/workspace/shared/clip.mkv}
 VIDEO_OUTPUT=${4:-/workspace/shared/clip.mp4}
-VIDEO_WD=${5:-/workspace/shared/}
+VIDEO_CWD=${5:-/workspace/shared/}
 
 # Starting seconds must be greater than 30
 if [ "$STARTING_SEC" -lt $SMEAR_AMOUNT ]; then
@@ -62,7 +62,7 @@ echo "Route: $ROUTE , Starting Second: $STARTING_SEC" > /tmp/overlay.txt
 overlay /tmp/overlay.txt &
 
 # Record with ffmpeg
-pushd "$VIDEO_WD"
+pushd "$VIDEO_CWD"
 
 ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=0.5*PTS,scale=1920:1080" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"
 ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v 2060k -pix_fmt yuv420p -pass 1 -an -f null /dev/null
