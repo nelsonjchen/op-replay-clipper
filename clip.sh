@@ -20,12 +20,12 @@ trap ctrl_c INT
 cleanup
 
 STARTING_SEC=${1:-60}
-SMEARED_STARTING_SEC=$(($STARTING_SEC - 30))
+SMEARED_STARTING_SEC=$($STARTING_SEC - 30)
 ROUTE=${2:-4cf7a6ad03080c90|2021-09-29--13-46-36}
 JWT_AUTH=${3:-false}
 
 # Starting seconds must be greater than 30
-if [ $STARTING_SEC -lt 30 ]; then
+if [ "$STARTING_SEC" -lt 30 ]; then
     echo "Starting seconds must be greater than 30"
     exit 1
 fi
@@ -33,7 +33,7 @@ fi
 pushd /home/batman/openpilot
 
 if [ "$JWT_AUTH" != "false" ]; then
-    echo "{\"access_token\": \"$JWT_AUTH\"}" > $HOME/.comma/auth.json
+    echo "{\"access_token\": \"$JWT_AUTH\"}" > "$HOME"/.comma/auth.json
 fi
 
 # Start processes
