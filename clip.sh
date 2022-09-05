@@ -20,9 +20,10 @@ trap ctrl_c INT
 cleanup
 
 STARTING_SEC=${1:-60}
-SMEARED_STARTING_SEC=$($STARTING_SEC - 30)
+SMEARED_STARTING_SEC=$(($STARTING_SEC - 30))
 ROUTE=${2:-4cf7a6ad03080c90|2021-09-29--13-46-36}
 JWT_AUTH=${3:-false}
+VIDEO_OUTPUT=${4:-/workspace/shared/clip.mp4}
 
 # Starting seconds must be greater than 30
 if [ "$STARTING_SEC" -lt 30 ]; then
@@ -33,6 +34,7 @@ fi
 pushd /home/batman/openpilot
 
 if [ "$JWT_AUTH" != "false" ]; then
+    mkdir -p "$HOME"/.comma/
     echo "{\"access_token\": \"$JWT_AUTH\"}" > "$HOME"/.comma/auth.json
 fi
 
@@ -49,7 +51,12 @@ tmux send-keys -t clipper:replay Enter "$SMEARED_STARTING_SEC" Enter
 tmux send-keys -t clipper:replay Space
 sleep 1
 tmux send-keys -t clipper:replay Space
+
+# Generate and start overlay
+echo "Route: $ROUTE , Starting Second: $STARTING_SEC" > /tmp/overlay.txt
+overlay /tmp/overlay.txt &
+
 # Record with ffmpeg
-ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab -i :0.0 -ss 30 -vcodec libx264 -preset medium -pix_fmt yuv420p -r 20 -filter:v "setpts=0.5*PTS,scale=1920:1080" -y -t 30 /workspace/shared/video.mp4
+ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab -i :0.0 -ss 30 -vcodec libx264 -preset medium -pix_fmt yuv420p -r 20 -filter:v "setpts=0.5*PTS,scale=1920:1080" -y -t 30 "$VIDEO_OUTPUT"
 
 ctrl_c
