@@ -46,3 +46,7 @@ RUN groupadd --gid $USER_GID $USERNAME \
 USER $USERNAME
 
 FROM base AS dev
+
+COPY ./clip.sh /workspace/clip.sh
+
+CMD ["/workspace/clip.sh"]
