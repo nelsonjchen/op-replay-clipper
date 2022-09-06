@@ -26,9 +26,9 @@ SMEARED_STARTING_SEC=$(($STARTING_SEC - $SMEAR_AMOUNT))
 RECORDING_LENGTH=30
 ROUTE=${2:-4cf7a6ad03080c90|2021-09-29--13-46-36}
 JWT_AUTH=${3:-false}
-VIDEO_RAW_OUTPUT=${4:-/workspace/shared/clip.mkv}
-VIDEO_OUTPUT=${4:-/workspace/shared/clip.mp4}
-VIDEO_CWD=${5:-/workspace/shared/}
+VIDEO_CWD=${4:-/shared}
+VIDEO_RAW_OUTPUT=${5:-$VIDEO_CWD/clip.mkv}
+VIDEO_OUTPUT=${6:-$VIDEO_CWD/clip.mp4}
 
 # Starting seconds must be greater than 30
 if [ "$STARTING_SEC" -lt $SMEAR_AMOUNT ]; then
@@ -63,7 +63,7 @@ overlay /tmp/overlay.txt &
 
 # Record with ffmpeg
 pushd "$VIDEO_CWD"
-
+mkdir -p "$VIDEO_CWD"
 ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=0.5*PTS,scale=1920:1080" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"
 ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v 2060k -pix_fmt yuv420p -pass 1 -an -f null /dev/null
 ffmpeg -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v 2060k -pix_fmt yuv420p -pass 2 -y "$VIDEO_OUTPUT"
