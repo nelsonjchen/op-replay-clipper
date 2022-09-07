@@ -15,12 +15,12 @@ Unfortunately, the requirements are quite high.
 * x86_64. Unfortunately, the `openpilot-prebuilt` image this setup is based on only comes in x86_64 architecture. No M-series Macs will work.
 * 6 GB of disk space.
 * 300MB/s disk speed.
-* Your device must be able to upload to Comma.ai servers. Roadmap for usage of a retropilot or alternative cloud backend is unclear or unknown.
-* A GPU is **not** needed.
+* Your comma device must be able to upload to Comma.ai servers. Roadmap for usage of a retropilot or alternative cloud backend is unclear or unknown.
+* A GPU is **not** needed and also unused here.
 
 The CPU requirement is due to a number of factors:
 
-* Reliable H.265 hardware decoding is hard to find. The captured H.265 forward video could only be decoded at 0.7 speed on a Ryzen 2800 and half speed reliabily for the purposes of capture.
+* Reliable/speedy H.265 hardware decoding is hard to find. The captured H.265 forward video could only be decoded at 0.7 speed on a Ryzen 2800 and half speed reliabily for the purposes of capture.
 * Reliable OpenGL is not always possible. Software OpenGL rendering is used instead.
 * Capturing the UI isn't free and can be quite intensive.
 * Capturing the UI must be done with everything not mismatching by speed. Otherwise, you get weird rendering issues like the planner's line lagging and not matching the video such as in the case of the video not decoding fast enough as in the case of H.265.
@@ -66,7 +66,11 @@ Some things have been done to make this do-able.
    * `clip.mp4` - 7.8MB file of the clip for uploading with Discord Free.
    * The rest are intermediaries such as logs/databases from doing a two-pass encoding to target a 7.8MB file size.
 9. Enjoy!
+
+## Architecture
+
+Just a single shell script that runs an X11 server, and tmux commands to control the replay executable.  There's some faketime to make it run reliably without extensive or any modifications to the pre-built openpilot that is used. Docker is used to just make it portable, but also easy to cleanup. Docker Compose is used to make sure  the `/dev/shm` size is correct.
     
 ## Future
 
-Since this is all CPU based and requires no acceleration, maybe it's possible to make a web service. 
+Since this is all CPU based, requires no acceleration, and is clearly shoved into Docker, maybe it's possible to make a web service.
