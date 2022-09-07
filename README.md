@@ -24,6 +24,7 @@ The CPU requirement is due to a number of factors:
 * Reliable OpenGL is not always possible. Software OpenGL rendering is used instead.
 * Capturing the UI isn't free and can be quite intensive due to all the Software/non-accelerated rendering and decoding.
 * Capturing the UI must be done with everything not mismatching by speed. Otherwise, you get weird rendering issues like the planner's line lagging and not matching the video such as in the case of the video not decoding fast enough as in the case of H.265.
+* This was originally targeting a web service usecase. It may still. CPUs are plentiful.
 
 Some things have been done to make this do-able.
 
