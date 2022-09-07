@@ -42,28 +42,31 @@ Some things have been done to make this do-able.
 1. Get a JWT Token from https://jwt.comma.ai. This token will last for a year. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Copy and save the whole thing.
 2. Find the drive you wish to take a clip from on https://my.comma.ai.
 3. Ensure your drive's files are fully uploaded on https://my.comma.ai. Click `Files` and select the option to upload all files (`Upload ## files`). 
-  * Not yet uploaded: 
-    <img width="347" alt="Screen Shot 2022-09-06 at 11 55 39 PM" src="https://user-images.githubusercontent.com/5363/188815682-6694c2f8-1d77-468e-9152-75a709477c9a.png">
-  * Uploaded: 
-    <img width="316" alt="Screen Shot 2022-09-07 at 12 27 26 AM" src="https://user-images.githubusercontent.com/5363/188816174-51045496-4614-4050-b911-c4abb987c5fe.png">
+   * Not yet uploaded: 
+     <img width="347" alt="Screen Shot 2022-09-06 at 11 55 39 PM" src="https://user-images.githubusercontent.com/5363/188815682-6694c2f8-1d77-468e-9152-75a709477c9a.png">
+   * Uploaded: 
+     <img width="316" alt="Screen Shot 2022-09-07 at 12 27 26 AM" src="https://user-images.githubusercontent.com/5363/188816174-51045496-4614-4050-b911-c4abb987c5fe.png">
 4. Find the starting seconds. The drive's timeline will have a widget below your cursor that's "segment number, local time". Segments are made every minute. So scrub it, and do a little mental arithmetic to get the starting second. Starting seconds must be greater than 30 seconds at the moment.
-  * <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
+   * <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
 5. Get the route ID from more info. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52`. Note the omission of the `--1`. That's the segment identifier that is not needed.
-  * <img width="336" alt="image" src="https://user-images.githubusercontent.com/5363/188817040-5341e1af-2176-47ad-87f3-ba0a3d88a32a.png">
+   * <img width="336" alt="image" src="https://user-images.githubusercontent.com/5363/188817040-5341e1af-2176-47ad-87f3-ba0a3d88a32a.png">
 6. Construct the `docker-compose` command to run with the working directory set to this repository on your machine.
-  * Fill this template in and run it.
+   * Fill this template in and run it.
     
-    ```
-    docker-compose run --rm dev /workspace/clip.sh <STARTING SECONDS> "<ROUTE_ID>" <JWT_TOKEN>
-    ```
+     ```
+     docker-compose run --rm dev /workspace/clip.sh <STARTING SECONDS> "<ROUTE_ID>" <JWT_TOKEN>
+     ```
+
+     Make sure to put the route ID in quotes. The route id has a `|` character, which can cause havoc in shells. 
     
-    Make sure to put the route ID in quotes. The route id has a `|` character, which can cause havoc in shells. 
-    
-7. Run the command. Here's a non-working but illustrative sample command.
-  * `docker-compose run --rm dev /workspace/clip.sh 180 "071ba9916a1da2fa|2022-09-04--11-15-52" eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o`
-8. Wait a few minutes, and a few files will appear in the `shared` folder.
-  * `clip.mkv` - 1GB+ Uncompressed video clip
-  * `clip.mp4` - 7.8MB file of the clip for uploading with Discord Free.
-  * The rest are intermediaries such as logs/databases from doing a two-pass encoding to target a 7.8MB file size.
+7. Run the command. Here's a non-working but illustrative sample command to capture seconds 180 to 210 of `071ba9916a1da2fa|2022-09-04--11-15-52` with a auth/ident token of `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o`.
+   * `docker-compose run --rm dev /workspace/clip.sh 180 "071ba9916a1da2fa|2022-09-04--11-15-52" eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o`
+8. Wait 3 minutes (more if it's the first time), and a few files will appear in the `shared` folder.
+   * `clip.mkv` - 1GB+ Uncompressed video clip
+   * `clip.mp4` - 7.8MB file of the clip for uploading with Discord Free.
+   * The rest are intermediaries such as logs/databases from doing a two-pass encoding to target a 7.8MB file size.
 9. Enjoy!
     
+## Future
+
+Since this is all CPU based and requires no acceleration, maybe it's possible to make a web service. 
