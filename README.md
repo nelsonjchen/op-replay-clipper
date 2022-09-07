@@ -1,6 +1,6 @@
 # Openpilot Replay Clipper
 
-Capture short 30 second route clips with the Openpilot UI included, and the route, seconds marker branded into it. 
+Capture short 30 second route clips with the Openpilot UI included, and the route, seconds marker branded into it. No openpilot development environment setup required. Just Docker-Compose and some computing resources. 
 
 https://user-images.githubusercontent.com/5363/188810452-47a479c4-fa9a-4037-9592-c6a47f2e1bb1.mp4
 
@@ -20,9 +20,9 @@ Unfortunately, the requirements are quite high.
 
 The CPU requirement is due to a number of factors:
 
-* Reliable/speedy H.265 hardware decoding is hard to find. The captured H.265 forward video could only be decoded at 0.7 speed on a Ryzen 2800 and half speed reliabily for the purposes of capture.
+* Reliable/speedy H.265 hardware decoding is hard to find. The forward video is only captured in H.265 and could only be decoded at 0.7 speed on a Ryzen 2800 and half speed reliabily for the purposes of capture.
 * Reliable OpenGL is not always possible. Software OpenGL rendering is used instead.
-* Capturing the UI isn't free and can be quite intensive.
+* Capturing the UI isn't free and can be quite intensive due to all the Software/non-accelerated rendering and decoding.
 * Capturing the UI must be done with everything not mismatching by speed. Otherwise, you get weird rendering issues like the planner's line lagging and not matching the video such as in the case of the video not decoding fast enough as in the case of H.265.
 
 Some things have been done to make this do-able.
@@ -50,17 +50,19 @@ Some things have been done to make this do-able.
    * <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
 5. Get the route ID from more info. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52`. Note the omission of the `--1`. That's the segment identifier that is not needed.
    * <img width="336" alt="image" src="https://user-images.githubusercontent.com/5363/188817040-5341e1af-2176-47ad-87f3-ba0a3d88a32a.png">
-6. Construct the `docker-compose` command to run with the working directory set to this repository on your machine.
-   * Fill this template in and run it.
+6. Construct and run the `docker-compose` command to run with the working directory set to this repository on your machine.
+   * Docker-Compose
+      1. Fill this template in and run it.
     
-     ```
-     docker-compose run --rm dev /workspace/clip.sh <STARTING SECONDS> "<ROUTE_ID>" <JWT_TOKEN>
-     ```
+         ```
+         docker-compose run --rm dev /workspace/clip.sh <STARTING SECONDS> "<ROUTE_ID>" <JWT_TOKEN>
+         ```
 
-     Make sure to put the route ID in quotes. The route id has a `|` character, which can cause havoc in shells. 
+         Make sure to put the route ID in quotes. The route id has a `|` character, which can cause havoc in shells. 
     
-7. Run the command. Here's a non-working but illustrative sample command to capture seconds 180 to 210 of `071ba9916a1da2fa|2022-09-04--11-15-52` with a auth/ident token of `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o`.
-   * `docker-compose run --rm dev /workspace/clip.sh 180 "071ba9916a1da2fa|2022-09-04--11-15-52" eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o`
+      2. Run the command. Here's a non-working but illustrative sample command to capture seconds 180 to 210 of `071ba9916a1da2fa|2022-09-04--11-15-52` with a auth/ident token of `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o` with the non-prebuilt configuration.
+         * `docker-compose run --rm dev /workspace/clip.sh 180 "071ba9916a1da2fa|2022-09-04--11-15-52" eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o`
+      
 8. Wait 3 minutes (more if it's the first time), and a few files will appear in the `shared` folder.
    * `clip.mkv` - 1GB+ Uncompressed video clip
    * `clip.mp4` - 7.8MB file of the clip for uploading with Discord Free.
