@@ -65,7 +65,10 @@ overlay /tmp/overlay.txt &
 pushd "$VIDEO_CWD"
 mkdir -p "$VIDEO_CWD"
 ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=0.5*PTS,scale=1920:1080" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"
+sleep 1
 ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v 2060k -pix_fmt yuv420p -pass 1 -an -f null /dev/null
+# FS Sync issues
+sleep 1
 ffmpeg -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v 2060k -pix_fmt yuv420p -pass 2 -y "$VIDEO_OUTPUT"
 
 ctrl_c
