@@ -34,7 +34,7 @@ Some things have been done to make this do-able.
 
 ### Time Estimates
 
-* Initial Download/Building: ? , will feel quick depending on internet connection.
+* Initial Download/Building: About 3 or more minutes. Also dependent on downloading a 1GB+ docker image base and the stuff to build atop of it.
 * Per Clip: About 3 minutes to capture a 30 second frame with the UI and compress the 30 second clip to 7.8MB (right underneath Discord Free's upload limits). Much of the time is spent waiting or for "safety"/fidelity reasons.
 
 ### Steps
