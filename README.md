@@ -1,4 +1,4 @@
-# Openpilot Web Replay Tool
+# Openpilot Replay Clipper
 
 Capture short 30 second route clips with the Openpilot UI included, and the route, seconds marker branded into it. 
 
