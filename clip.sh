@@ -65,7 +65,7 @@ overlay /tmp/overlay.txt &
 mkdir -p "$VIDEO_CWD"
 pushd "$VIDEO_CWD"
 ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=0.5*PTS,scale=1920:1080" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"
-ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v 2060k -pix_fmt yuv420p -pass 1 -an -f MP4 /dev/null
-ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v 2060k -pix_fmt yuv420p -pass 2 -f MP4 "$VIDEO_OUTPUT"
+ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v 2060k -pix_fmt yuv420p -preset medium -pass 1 -an -f MP4 /dev/null
+ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v 2060k -pix_fmt yuv420p -preset medium -pass 2 -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 
 ctrl_c
