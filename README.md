@@ -1,6 +1,6 @@
 # Openpilot Replay Clipper
 
-Capture short 30 second route clips with the Openpilot UI included, and the route, seconds marker branded into it. No openpilot development environment setup required. Just Docker-Compose and some computing resources. 
+Capture short 30 second route clips with the Openpilot UI included, and the route, seconds marker branded into it. No openpilot development environment setup required. Just Docker-Compose and some computing resources.
 
 https://user-images.githubusercontent.com/5363/188810452-47a479c4-fa9a-4037-9592-c6a47f2e1bb1.mp4
 
@@ -10,8 +10,8 @@ https://user-images.githubusercontent.com/5363/188810452-47a479c4-fa9a-4037-9592
 
 Unfortunately, the requirements are quite high.
 
-* 8 cores
-* A working Docker-Compose setup. Docker for Windows/Mac will work. 
+* 6 cores
+* A working Docker-Compose setup. Docker for Windows/Mac will work.
 * x86_64. Unfortunately, the `openpilot-prebuilt` image this setup is based on only comes in x86_64 architecture. No M-series Macs will work.
 * 6 GB of disk space.
 * 300MB/s disk speed.
@@ -42,10 +42,10 @@ Some things have been done to make this do-able.
 
 1. Get a JWT Token from https://jwt.comma.ai. This token will last for a year. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Copy and save the whole thing.
 2. Find the drive you wish to take a clip from on https://my.comma.ai.
-3. Ensure your drive's files are fully uploaded on https://my.comma.ai. Click `Files` and select the option to upload all files (`Upload ## files`). 
-   * Not yet uploaded: 
+3. Ensure your drive's files are fully uploaded on https://my.comma.ai. Click `Files` and select the option to upload all files (`Upload ## files`).
+   * Not yet uploaded:
      <img width="347" alt="Screen Shot 2022-09-06 at 11 55 39 PM" src="https://user-images.githubusercontent.com/5363/188815682-6694c2f8-1d77-468e-9152-75a709477c9a.png">
-   * Uploaded: 
+   * Uploaded:
      <img width="316" alt="Screen Shot 2022-09-07 at 12 27 26 AM" src="https://user-images.githubusercontent.com/5363/188816174-51045496-4614-4050-b911-c4abb987c5fe.png">
 4. Find the starting seconds. The drive's timeline will have a widget below your cursor that's "segment number, local time". Segments are made every minute. So scrub it, and do a little mental arithmetic to get the starting second. Starting seconds must be greater than 30 seconds at the moment.
    * <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
@@ -54,16 +54,16 @@ Some things have been done to make this do-able.
 6. Construct and run the `docker-compose` command to run with the working directory set to this repository on your machine.
    * Docker-Compose
       1. Fill this template in and run it.
-    
+
          ```
          docker-compose run --rm dev /workspace/clip.sh <STARTING SECONDS> "<ROUTE_ID>" <JWT_TOKEN>
          ```
 
-         Make sure to put the route ID in quotes. The route id has a `|` character, which can cause havoc in shells. 
-    
+         Make sure to put the route ID in quotes. The route id has a `|` character, which can cause havoc in shells.
+
       2. Run the command. Here's a non-working but illustrative sample command to capture seconds 180 to 210 of `071ba9916a1da2fa|2022-09-04--11-15-52` with a auth/ident token of `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o` with the non-prebuilt configuration.
          * `docker-compose run --rm dev /workspace/clip.sh 180 "071ba9916a1da2fa|2022-09-04--11-15-52" eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o`
-      
+
 8. Wait 3 minutes (more if it's the first time), and a few files will appear in the `shared` folder.
    * `clip.mkv` - 1GB+ Uncompressed video clip
    * `clip.mp4` - 7.8MB file of the clip for uploading with Discord Free.
@@ -73,7 +73,7 @@ Some things have been done to make this do-able.
 ## Architecture
 
 Just a single shell script that runs an X11 server, and tmux commands to control the replay executable.  There's some faketime to make it run reliably without extensive or any modifications to the pre-built openpilot that is used. Docker is used to just make it portable, but also easy to cleanup. Docker Compose is used to make sure  the `/dev/shm` size is correct.
-    
+
 ## Future
 
 Since this is all CPU based, requires no acceleration, and is clearly shoved into Docker, maybe it's possible to make a web service.
