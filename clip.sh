@@ -23,7 +23,7 @@ STARTING_SEC=${1:-60}
 # Sometimes it takes a bit of time for openpilot drawing to settle in.
 SMEAR_AMOUNT=30
 SMEARED_STARTING_SEC=$(($STARTING_SEC - $SMEAR_AMOUNT))
-RECORDING_LENGTH=30
+RECORDING_LENGTH=${7:-30}
 ROUTE=${2:-4cf7a6ad03080c90|2021-09-29--13-46-36}
 JWT_AUTH=${3:-false}
 VIDEO_CWD=${4:-/shared}
