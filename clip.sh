@@ -64,7 +64,10 @@ overlay /tmp/overlay.txt &
 # Record with ffmpeg
 mkdir -p "$VIDEO_CWD"
 pushd "$VIDEO_CWD"
-ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=0.5*PTS,scale=1920:1080" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"
+# Render with e2e_long
+echo -n "1" > ~/.comma/params/d/EndToEndLong
+# Some intermediate compression
+nice -n 10 ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -preset medium -r 20 -filter:v "setpts=0.5*PTS,scale=1920:1080" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"
 # The setup is no longer needed. Just transcode now.
 cleanup
 ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v 2060k -pix_fmt yuv420p -preset medium -pass 1 -an -f MP4 /dev/null
