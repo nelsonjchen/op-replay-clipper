@@ -4,7 +4,7 @@
 #
 # ARG_OPTIONAL_SINGLE([smear-seconds],[],[Seconds to start before the starting seconds for the view to settle],[30])
 # ARG_OPTIONAL_SINGLE([start-seconds],[s],[Seconds to start at],[60])
-# ARG_OPTIONAL_SINGLE([length-seconds],[],[Clip length],[30])
+# ARG_OPTIONAL_SINGLE([length-seconds],[l],[Clip length],[30])
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
 # ARG_OPTIONAL_SINGLE([video-cwd],[c],[video working and output directory],[/shared])
 # ARG_POSITIONAL_SINGLE([route_id],[comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) ])
@@ -28,7 +28,7 @@ die()
 
 begins_with_short_option()
 {
-	local first_option all_short_options='sjch'
+	local first_option all_short_options='sljch'
 	first_option="${1:0:1}"
 	test "$all_short_options" = "${all_short_options/$first_option/}" && return 1 || return 0
 }
@@ -46,11 +46,11 @@ _arg_video_cwd="/shared"
 print_help()
 {
 	printf '%s\n' "The general script's help msg"
-	printf 'Usage: %s [--smear-seconds <arg>] [-s|--start-seconds <arg>] [--length-seconds <arg>] [-j|--jwt-token <arg>] [-c|--video-cwd <arg>] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [--smear-seconds <arg>] [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-j|--jwt-token <arg>] [-c|--video-cwd <arg>] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "--smear-seconds: Seconds to start before the starting seconds for the view to settle (default: '30')"
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
-	printf '\t%s\n' "--length-seconds: Clip length (default: '30')"
+	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
 	printf '\t%s\n' "-j, --jwt-token: JWT Auth token to use (get token from https://jwt.comma.ai) (no default)"
 	printf '\t%s\n' "-c, --video-cwd: video working and output directory (default: '/shared')"
 	printf '\t%s\n' "-h, --help: Prints help"
@@ -83,13 +83,16 @@ parse_commandline()
 			-s*)
 				_arg_start_seconds="${_key##-s}"
 				;;
-			--length-seconds)
+			-l|--length-seconds)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
 				_arg_length_seconds="$2"
 				shift
 				;;
 			--length-seconds=*)
 				_arg_length_seconds="${_key##--length-seconds=}"
+				;;
+			-l*)
+				_arg_length_seconds="${_key##-l}"
 				;;
 			-j|--jwt-token)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
