@@ -17,3 +17,4 @@ services:
     mem_limit: 3g
     volumes:
       - ./shared:/shared
+      - ./:/workspace
