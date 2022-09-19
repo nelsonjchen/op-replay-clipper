@@ -8,7 +8,6 @@ services:
     ports:
       - "5900:5900"
     shm_size: '1gb'
-    # command: Xtigervnc :0 -geometry 1920x1080 -SecurityTypes None
     tty: true
     environment:
       - DISPLAY=:0
