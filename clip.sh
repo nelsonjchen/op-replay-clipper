@@ -186,15 +186,15 @@ trap ctrl_c INT
 # # Cleanup stale stuff from last run
 cleanup
 
-STARTING_SEC=_arg_start_seconds
+STARTING_SEC=$_arg_start_seconds
 # Sometimes it takes a bit of time for openpilot drawing to settle in.
-SMEAR_AMOUNT=_arg_smear_seconds
+SMEAR_AMOUNT=$_arg_smear_seconds
 SMEARED_STARTING_SEC=$(($STARTING_SEC - $SMEAR_AMOUNT))
-RECORDING_LENGTH=_arg_length_seconds
+RECORDING_LENGTH=$_arg_length_seconds
 # Cleanup trailing segment count. Seconds is what matters
 ROUTE=$(echo "$_arg_route_id" | sed 's/--[0-9]$//')
-JWT_AUTH=_arg_jwt_token
-VIDEO_CWD=_arg_video_cwd
+JWT_AUTH=$_arg_jwt_token
+VIDEO_CWD=$_arg_video_cwd
 VIDEO_RAW_OUTPUT=$VIDEO_CWD/clip.mkv
 VIDEO_OUTPUT=$VIDEO_CWD/clip.mp4
 
@@ -206,7 +206,7 @@ fi
 
 pushd /home/batman/openpilot
 
-if [ -z "$JWT_AUTH" ]; then
+if [ ! -z "$JWT_AUTH" ]; then
     mkdir -p "$HOME"/.comma/
     echo "{\"access_token\": \"$JWT_AUTH\"}" > "$HOME"/.comma/auth.json
 fi
