@@ -7,7 +7,7 @@
 # ARG_OPTIONAL_SINGLE([length-seconds],[],[Clip length],[30])
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
 # ARG_OPTIONAL_SINGLE([video-cwd],[c],[video working and output directory],[/shared])
-# ARG_POSITIONAL_SINGLE([route_id],[comma connect route id, (hint, put this in quotes otherwise your shell might misinterpret the pipe) ])
+# ARG_POSITIONAL_SINGLE([route_id],[comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) ])
 # ARG_HELP([The general script's help msg])
 # ARGBASH_GO()
 # needed because of Argbash --> m4_ignore([
@@ -47,7 +47,7 @@ print_help()
 {
 	printf '%s\n' "The general script's help msg"
 	printf 'Usage: %s [--smear-seconds <arg>] [-s|--start-seconds <arg>] [--length-seconds <arg>] [-j|--jwt-token <arg>] [-c|--video-cwd <arg>] [-h|--help] <route_id>\n' "$0"
-	printf '\t%s\n' "<route_id>: comma connect route id, (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
+	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "--smear-seconds: Seconds to start before the starting seconds for the view to settle (default: '30')"
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "--length-seconds: Clip length (default: '30')"
@@ -188,7 +188,8 @@ STARTING_SEC=_arg_start_seconds
 SMEAR_AMOUNT=_arg_smear_seconds
 SMEARED_STARTING_SEC=$(($STARTING_SEC - $SMEAR_AMOUNT))
 RECORDING_LENGTH=_arg_length_seconds
-ROUTE=_arg_route_id
+# Cleanup trailing segment count. Seconds is what matters
+ROUTE=$(echo "$_arg_route_id" | sed 's/--[0-9]$//')
 JWT_AUTH=_arg_jwt_token
 VIDEO_CWD=_arg_video_cwd
 VIDEO_RAW_OUTPUT=$VIDEO_CWD/clip.mkv
