@@ -56,7 +56,7 @@ Some things have been done to make this do-able.
       1. Fill this template in and run it.
 
          ```
-         docker-compose run --rm dev /workspace/clip.sh -s <STARTING SECONDS> "<ROUTE_ID>" -j <JWT_TOKEN>
+         docker-compose run --rm clipper /workspace/clip.sh -s <STARTING SECONDS> "<ROUTE_ID>" -j <JWT_TOKEN>
          ```
 
          Make sure to put the route ID in quotes. The route id has a `|` character, which can cause havoc in shells.
