@@ -2,7 +2,6 @@
 #
 # Clipper Argbash
 #
-# ARG_OPTIONAL_SINGLE([smear-seconds],[],[Seconds to start before the starting seconds for the view to settle],[60])
 # ARG_OPTIONAL_SINGLE([start-seconds],[s],[Seconds to start at],[60])
 # ARG_OPTIONAL_SINGLE([length-seconds],[l],[Clip length],[30])
 # ARG_OPTIONAL_BOOLEAN([e2e-long],[e],[Turn on or off e2e long],[off])
@@ -37,7 +36,6 @@ begins_with_short_option()
 # THE DEFAULTS INITIALIZATION - POSITIONALS
 _positionals=()
 # THE DEFAULTS INITIALIZATION - OPTIONALS
-_arg_smear_seconds="60"
 _arg_start_seconds="60"
 _arg_length_seconds="30"
 _arg_e2e_long="off"
@@ -48,9 +46,8 @@ _arg_video_cwd="/shared"
 print_help()
 {
 	printf '%s\n' "The general script's help msg"
-	printf 'Usage: %s [--smear-seconds <arg>] [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-e|--(no-)e2e-long] [-j|--jwt-token <arg>] [-c|--video-cwd <arg>] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-e|--(no-)e2e-long] [-j|--jwt-token <arg>] [-c|--video-cwd <arg>] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
-	printf '\t%s\n' "--smear-seconds: Seconds to start before the starting seconds for the view to settle (default: '60')"
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
 	printf '\t%s\n' "-e, --e2e-long, --no-e2e-long: Turn on or off e2e long (off by default)"
@@ -67,14 +64,6 @@ parse_commandline()
 	do
 		_key="$1"
 		case "$_key" in
-			--smear-seconds)
-				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
-				_arg_smear_seconds="$2"
-				shift
-				;;
-			--smear-seconds=*)
-				_arg_smear_seconds="${_key##--smear-seconds=}"
-				;;
 			-s|--start-seconds)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
 				_arg_start_seconds="$2"
@@ -203,7 +192,8 @@ cleanup
 
 STARTING_SEC=$_arg_start_seconds
 # Sometimes it takes a bit of time for openpilot drawing to settle in.
-SMEAR_AMOUNT=$_arg_smear_seconds
+# Calculate optimal smear seconds as starting seconds mod 60 plus 5 seconds.
+SMEAR_AMOUNT=$((($STARTING_SEC % 60) + 5))
 SMEARED_STARTING_SEC=$(($STARTING_SEC - $SMEAR_AMOUNT))
 RECORDING_LENGTH=$_arg_length_seconds
 # Cleanup trailing segment count. Seconds is what matters
