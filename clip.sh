@@ -242,7 +242,7 @@ sleep 1
 tmux send-keys -t clipper:replay Space
 
 # Generate and start overlay
-echo "Route: $ROUTE , Starting Second: $STARTING_SEC" > /tmp/overlay.txt
+echo "Route: $ROUTE , Starting Second: $STARTING_SEC, Clip Length: $RECORDING_LENGTH" > /tmp/overlay.txt
 overlay /tmp/overlay.txt &
 
 # Record with ffmpeg
