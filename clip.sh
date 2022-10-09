@@ -4,6 +4,7 @@
 #
 # ARG_OPTIONAL_SINGLE([start-seconds],[s],[Seconds to start at],[60])
 # ARG_OPTIONAL_SINGLE([length-seconds],[l],[Clip length],[30])
+# ARG_OPTIONAL_SINGLE([target-mb],[m],[Target converted file size in MB],[8])
 # ARG_OPTIONAL_BOOLEAN([e2e-long],[e],[Turn on or off e2e long],[off])
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
 # ARG_OPTIONAL_SINGLE([video-cwd],[c],[video working and output directory],[/shared])
@@ -28,7 +29,7 @@ die()
 
 begins_with_short_option()
 {
-	local first_option all_short_options='slejch'
+	local first_option all_short_options='slmejch'
 	first_option="${1:0:1}"
 	test "$all_short_options" = "${all_short_options/$first_option/}" && return 1 || return 0
 }
@@ -38,6 +39,7 @@ _positionals=()
 # THE DEFAULTS INITIALIZATION - OPTIONALS
 _arg_start_seconds="60"
 _arg_length_seconds="30"
+_arg_target_mb="8"
 _arg_e2e_long="off"
 _arg_jwt_token=
 _arg_video_cwd="/shared"
@@ -46,10 +48,11 @@ _arg_video_cwd="/shared"
 print_help()
 {
 	printf '%s\n' "The general script's help msg"
-	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-e|--(no-)e2e-long] [-j|--jwt-token <arg>] [-c|--video-cwd <arg>] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-e|--(no-)e2e-long] [-j|--jwt-token <arg>] [-c|--video-cwd <arg>] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
+	printf '\t%s\n' "-m, --target-mb: Target converted file size in MB (default: '8')"
 	printf '\t%s\n' "-e, --e2e-long, --no-e2e-long: Turn on or off e2e long (off by default)"
 	printf '\t%s\n' "-j, --jwt-token: JWT Auth token to use (get token from https://jwt.comma.ai) (no default)"
 	printf '\t%s\n' "-c, --video-cwd: video working and output directory (default: '/shared')"
@@ -85,6 +88,17 @@ parse_commandline()
 				;;
 			-l*)
 				_arg_length_seconds="${_key##-l}"
+				;;
+			-m|--target-mb)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_target_mb="$2"
+				shift
+				;;
+			--target-mb=*)
+				_arg_target_mb="${_key##--target-mb=}"
+				;;
+			-m*)
+				_arg_target_mb="${_key##-m}"
 				;;
 			-e|--no-e2e-long|--e2e-long)
 				_arg_e2e_long="on"
@@ -203,6 +217,10 @@ JWT_AUTH=$_arg_jwt_token
 VIDEO_CWD=$_arg_video_cwd
 VIDEO_RAW_OUTPUT=$VIDEO_CWD/clip.mkv
 VIDEO_OUTPUT=$VIDEO_CWD/clip.mp4
+# Target an appropiate bitrate of filesize of 8MB for the video length
+TARGET_MB=$_arg_target_mb
+TARGET_BYTES=$((($TARGET_MB - 1) * 1024 * 1024))
+TARGET_BITRATE=$(($TARGET_BYTES * 8 / $RECORDING_LENGTH))
 
 # Starting seconds must be greater than 30
 if [ "$STARTING_SEC" -lt $SMEAR_AMOUNT ]; then
@@ -248,7 +266,7 @@ fi
 nice -n 10 ffmpeg -framerate 10 -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=0.5*PTS,scale=1920:1080" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"
 # The setup is no longer needed. Just transcode now.
 cleanup
-ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v 2060k -pix_fmt yuv420p -preset medium -pass 1 -an -f MP4 /dev/null
-ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v 2060k -pix_fmt yuv420p -preset medium -pass 2 -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
+ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 1 -an -f MP4 /dev/null
+ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 2 -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 
 ctrl_c
