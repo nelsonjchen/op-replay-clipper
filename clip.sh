@@ -219,7 +219,8 @@ VIDEO_RAW_OUTPUT=$VIDEO_CWD/clip.mkv
 VIDEO_OUTPUT=$VIDEO_CWD/clip.mp4
 # Target an appropiate bitrate of filesize of 8MB for the video length
 TARGET_MB=$_arg_target_mb
-TARGET_BYTES=$((($TARGET_MB - 1) * 1024 * 1024))
+# Subtract a quarter of a megabyte to give some leeway for uploader limits
+TARGET_BYTES=$((($TARGET_MB - 1) * 1024 * 1024 + 768 * 1024))
 TARGET_BITRATE=$(($TARGET_BYTES * 8 / $RECORDING_LENGTH))
 
 # Starting seconds must be greater than 30
