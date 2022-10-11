@@ -10,7 +10,7 @@ https://user-images.githubusercontent.com/5363/188810452-47a479c4-fa9a-4037-9592
 
 Unfortunately, the requirements are quite high.
 
-* 6 cores
+* 8 vCPUs/hyperthreads
 * A working Docker-Compose setup. Docker for Windows/Mac will work.
 * x86_64. Unfortunately, the `openpilot-prebuilt` image this setup is based on only comes in x86_64 architecture. The x86 emulation with Apple Silicon Macs is simply too slow by 10x and thus Apple Silicon Macs currently will not work.
 * 6 GB of disk space.
