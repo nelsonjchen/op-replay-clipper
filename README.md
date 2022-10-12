@@ -107,10 +107,12 @@ If you are knowledgeable about Docker, Linux, Docker-Compose and whatnot, I'm su
       2. Run the command. Here's a non-working but illustrative sample command to capture seconds 180 to 210 of `071ba9916a1da2fa|2022-09-04--11-15-52` with a auth/ident token of `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o` with the non-prebuilt configuration.
          * `docker-compose run --rm clipper /workspace/clip.sh -s 180 "071ba9916a1da2fa|2022-09-04--11-15-52" -j eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o`
 
-8. Wait 3 minutes (more if it's the first time), and a few files will appear in the `shared` folder.
+8. Wait 3 minutes (more if it's the first time), and a few files will appear in the `shared` folder.   
    * `clip.mkv` - 1GB+ Uncompressed video clip
    * `clip.mp4` - 7.8MB file of the clip for uploading with Discord Free.
    * The rest are intermediaries such as logs/databases from doing a two-pass encoding to target a 7.8MB file size.
+   * Here is a picture of what completed looks like:
+     * <img width="1146" alt="Screen Shot 2022-10-11 at 9 51 15 PM" src="https://user-images.githubusercontent.com/5363/195253293-d4fa6065-f387-4c32-8587-6d65dbabafa0.png">
 
 #### File Retrieval
 
@@ -121,12 +123,13 @@ If you are knowledgeable about Docker, Linux, Docker-Compose and whatnot, I'm su
 ##### DigitalOcean
 
 1. Run `curl icanhazip.com` and note the IP address
-2. Run `docker run -it --rm -p 8080:80 -v $(pwd)/shared:/public danjellz/http-server`
+2. Run `docker run -it --rm -p 8080:8080 -v $(pwd)/shared:/public danjellz/http-server`
 3. Go to http://<ip address>/ and download `clip.mp4`.
+   * <img width="994" alt="Screen Shot 2022-10-11 at 9 52 53 PM" src="https://user-images.githubusercontent.com/5363/195253322-da9d380e-6bb7-4e38-b2f9-a573974831ab.png">
 
 ##### DIY
 
-1. It's in the shared folder and named `clip.mp4`.
+1. It's in the `shared` folder and named `clip.mp4`.
 
 ### Teardown
 
@@ -155,10 +158,10 @@ You may want to prune images. Up to you, DIYer!
 
 Run the script with `-h` to get a usage text to help
 
-Here are some common ones that may be used:
+Here are some common options that may be of interest:
 
 * You can change the length from 30 seconds to anything with the `-l` argument. e.g. `-l 60` for a minute
-  * Be aware that increasing the clip length proportionally doubles the time it takes to record.
+  * Be aware that increasing the clip length proportionally doubles the time it takes to record. 60 seconds takes 2 minutes to record. 5 minutes will take 10 minutes! 10, 20!
 * You can change the target file size for the clip with `-m` for the size in MB. e.g. `-m 50` to target 50MB
   * For reference, here are some common target file sizes
     * Discord Free w/ Video Preview: 8MB 
