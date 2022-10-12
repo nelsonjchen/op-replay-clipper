@@ -17,6 +17,7 @@ Unfortunately, the requirements are quite high.
 * 300MB/s disk speed.
 * Your comma device must be able to upload to Comma.ai servers. Roadmap for usage of a retropilot or alternative cloud backend is unclear or unknown.
 * A GPU is **not** needed and also unused here.
+* The UI replayed is comma.ai's latest stock UI; forks that differ alot are very much YMMV.
 
 The CPU requirement is due to a number of factors:
 
