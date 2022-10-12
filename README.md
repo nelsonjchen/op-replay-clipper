@@ -130,6 +130,10 @@ If you are knowledgeable about Docker, Linux, Docker-Compose and whatnot, I'm su
 
 1. It's in the `shared` folder and named `clip.mp4`.
 
+### Multiple Clips
+
+You can absolutely do multiple clips! Just make sure to save the existing `clip.mp4` before kicking off the next run with the `docker-compose` command.
+
 ### Teardown
 
 #### Docker for Windows
