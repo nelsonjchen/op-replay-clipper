@@ -152,7 +152,7 @@ The clip files are stored in the `shared` folder. You can retrieve them by:
 
 ### Multiple Clips
 
-You can absolutely do multiple clips! Just make sure to save the existing `clip.mp4` before kicking off the next run with the `docker-compose` command from Steps as the existing `clip.mp4` in `shared` will be overwritten on each run.
+You can absolutely do multiple clips! Just make sure to save the existing `clip.mp4` before kicking off the next run with the `docker-compose` command from [Steps](#steps) as any existing `clip.mp4` in `shared` will be overwritten on each run.
 
 ### Teardown
 
