@@ -12,8 +12,12 @@ on:
     branches: [ "master" ]
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
+    paths-ignore:
+      - '**/README.md'
   pull_request:
     branches: [ "master" ]
+    paths-ignore:
+      - '**/README.md'
 
 env:
   # Use docker.io for Docker Hub if empty
