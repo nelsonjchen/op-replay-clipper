@@ -2,6 +2,18 @@ version: "2.4"
 
 services:
   clipper:
+    image: ghcr.io/nelsonjchen/op-replay-clipper:master
+    shm_size: '1gb'
+    tty: true
+    environment:
+      - DISPLAY=:0
+      - SCALE=1
+    cpuset: 0-7
+    mem_limit: 3g
+    volumes:
+      - ./shared:/shared
+      - ./:/workspace
+  dev:
     build:
       context: .
       target: clipper
