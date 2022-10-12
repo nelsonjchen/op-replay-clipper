@@ -12,7 +12,8 @@ Unfortunately, the requirements are quite high.
 
 * 8 vCPUs/hyperthreads
 * A working Docker-Compose setup. Docker for Windows/Mac will work.
-* x86_64. Unfortunately, the `openpilot-prebuilt` image this setup is based on only comes in x86_64 architecture. The x86 emulation with Apple Silicon Macs is simply too slow by 10x and thus Apple Silicon Macs currently will not work.
+* x86_64. Unfortunately, the `openpilot-prebuilt` image this setup is based on only comes in x86_64 architecture. The x86 emulation with Apple Silicon Macs is simply too slow by 10x and thus Apple Silicon Macs currently will not work. Intel Macs also may be too slow from simply too much overhead.
+  * Users in this case are advised to use rental computing resources like a temporary VPS.
 * 6 GB of disk space.
 * 300MB/s disk speed.
 * Your comma device must be able to upload to Comma.ai servers. Roadmap for usage of a retropilot or alternative cloud backend is unclear or unknown.
