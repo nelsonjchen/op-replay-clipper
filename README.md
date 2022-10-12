@@ -41,19 +41,24 @@ Even with the higher CPU requirements, it is not enough to run the tooling at fu
 
 ## Usage
 
+### Setup
+
+You can set up your own machine or rent a temporary server. There are many server vendors out there but DigitalOcean was chosen for the guide due to its relative ease of use, accessibility, and affordable pricing.
+
+### The Way Or The Path
+
+* For most people, DigitalOcean is probably the easiest, cleanest, most hygenic way, but you will need to create an account and pay for the resources. The cost is really cheap though as long as you remember to delete the droplet after you are done ([Teardown](#teardown)). The cost is based on how long the server is running and after you destroy the server, no more cost is accrued. Recording a 30 second clip this way will probably cost about 3-6 cents total.
+* Machine Setup is the way to go if you want to use your own computer and it has the power to do it. If you're making many clips, long clip lengths, and/or already have some pre-existing expertise, this is the way to go.
+
 ### Time Estimates
 
 * Setup
   * Machine Setup: 20 minutes
-  * DigitalOcean VPS/Droplet Rental: 5-15 minutes
-  * As with any setup option, if you've alreadys setup some of the stuff before such as having a DigitalOcean account or already have WSL2 running and so on, you do not need to repeat those steps.
-* Initial Download/Building: About 1-5 minutes. This part may be download intensive and depend on your internet connection.
-* Per Clip: About 3 minutes to capture a 30 second frame with the UI and compress the 30 second clip to 7.8MB (right underneath Discord Free's upload limits).
-* Teardown and cleanup: 1 minute
-
-### Setup
-
-You can set up your own machine or rent a temporary server. There are many server vendors out there but DigitalOcean was chosen for the guide due to its relative ease of use, accessibility, and affordable pricing.
+  * DigitalOcean VPS/Droplet Rental: 3-10 minutes
+  * For all setup options, if you've alreadys setup some of the resources beforehand such as having a DigitalOcean account, already have Docker or WSL2 running and so on, you will not need to repeat those steps.
+* Initial Download/Building: About 1-5 minutes. This part may be download intensive and depend on your internet connection. This may be cached as well.
+* [Per Clip](#steps): About 3 minutes to capture a 30 second frame with the UI and compress the 30 second clip to 7.8MB.
+* [Teardown and Cleanup](#teardown): 1 minute
 
 #### 🪟 Docker for Windows
 
