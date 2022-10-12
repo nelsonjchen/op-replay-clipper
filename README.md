@@ -32,7 +32,6 @@ The heavy CPU requirement is due to a number of factors:
 * Reliable OpenGL rendering is not always available. Software OpenGL rendering is used instead to guarantee compatibility.
 * Capturing the UI can be quite intensive due to all the software and non-hardware-accelerated rendering and decoding.
 * Capturing the UI must be done with everything not mismatching by speed. Otherwise, you get weird rendering issues like the planner's line lagging and not matching the forward video such as in the case of the forward video not decoding fast enough. A generous margin is used to ensure that the UI is captured at the same speed as the forward video.
-* This tool was originally targeting a web service usecase. It may still. CPUs are plentiful, unrestricted, and cheap.
 
 Even with the higher CPU requirements, it is not enough to run the tooling at full speed on the CPU. Some measures have been done to make clip recording possible.
 
@@ -195,9 +194,5 @@ Common options that may be of interest:
 ## Architecture
 
 Just a single shell script that runs an X11 server, and tmux commands to control the replay executable.  There is `faketime` to make it run reliably without modifications to the pre-built openpilot that is in the image. Docker is used to just make it portable, but also easy to cleanup. Docker-Compose is used to make sure  the `/dev/shm` size is correct.
-
-## Future
-
-Since this is all CPU based, requires no acceleration, and is clearly shoved into Docker, maybe it's possible to make a web service.
 
 [do]: https://www.digitalocean.com/
