@@ -132,7 +132,7 @@ If you are knowledgeable about Docker, Linux, Docker-Compose and whatnot, I'm su
 
 ### Multiple Clips
 
-You can absolutely do multiple clips! Just make sure to save the existing `clip.mp4` before kicking off the next run with the `docker-compose` command.
+You can absolutely do multiple clips! Just make sure to save the existing `clip.mp4` before kicking off the next run with the `docker-compose` command as the existing `clip.mp4` in `shared` will be overwritten.
 
 ### Teardown
 
