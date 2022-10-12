@@ -193,7 +193,7 @@ Common options that may be of interest:
     * Discord Free w/ Video Preview: 8MB
     * Discord Nitro w/ Video Preview: 50MB
     * Modern Discord Nitro + Desktop Max: 500MB
-* `e2e_long` or "🌮 End-to-end longitudinal (extremely alpha) 🌮"'s status is not reflected correctly from the route data. Add `--e2e-long` to turn on that rendering mode. In "🌮 End-to-end longitudinal (extremely alpha) 🌮" mode, the rendered path will change its colors according to longitudinal desires, not latitiude.
+* Usage of `e2e_long` or "🌮 End-to-end longitudinal (extremely alpha) 🌮"'s is not reflected correctly from the route data. Add `--e2e-long` to turn on that rendering mode with the yellow path in place of the green path. In "🌮 End-to-end longitudinal (extremely alpha) 🌮" mode, the rendered path will be  colored according to longitudinal desires, not latitiude. For example, future braking will be more red.
 
 ## Architecture
 
