@@ -64,13 +64,13 @@ Note: Pay attention to Teardown. You need to delete this droplet after you are d
 1. Sign up for a DigitalOcean account and put in payment information and whatnot.
 2. Visit https://marketplace.digitalocean.com/apps/docker and click Create Docker Droplet
 3. At the droplet creation screen, choose any option with 8 CPUs. Note the prices. **Remember to delete the droplet!**
-  * <img width="1273" alt="Screen Shot 2022-10-11 at 9 23 42 PM" src="https://user-images.githubusercontent.com/5363/195249619-53828bb6-6c9d-4169-9757-ac11d41a2495.png">
+   * <img width="1273" alt="Screen Shot 2022-10-11 at 9 23 42 PM" src="https://user-images.githubusercontent.com/5363/195249619-53828bb6-6c9d-4169-9757-ac11d41a2495.png">
 4. Go through all the options below. Nothing needs to be selected other than the minimum. Any region is fine. Password doesn't matter so anything is fine. No options need to be checked.
 5. Once you press create, click on the droplet you created. Wait for it to be created. You may need to refresh the page once in a while.
 6. Once it is up and running, click on the Console link on the right.
-  * <img width="1234" alt="Screen Shot 2022-10-11 at 9 11 42 PM" src="https://user-images.githubusercontent.com/5363/195248204-e20be940-05be-4dcb-b808-172e7f491102.png">
+   * <img width="1234" alt="Screen Shot 2022-10-11 at 9 11 42 PM" src="https://user-images.githubusercontent.com/5363/195248204-e20be940-05be-4dcb-b808-172e7f491102.png">
 7. You'll get a window popup and a shell like this:
-  * <img width="1146" alt="Screen Shot 2022-10-11 at 9 13 28 PM" src="https://user-images.githubusercontent.com/5363/195248431-54841a6f-271b-4835-9d44-a5ce4cfefb1f.png">
+   * <img width="1146" alt="Screen Shot 2022-10-11 at 9 13 28 PM" src="https://user-images.githubusercontent.com/5363/195248431-54841a6f-271b-4835-9d44-a5ce4cfefb1f.png">
 8. Run `git clone https://github.com/nelsonjchen/op-replay-clipper/`
 9. Run `cd op-replay-clipper`
 10. Run `chmod -R 777 shared`
@@ -141,11 +141,11 @@ While Docker for Windows is running, you may also want to click Clean Up while i
 This is extremely important if you don't want to be overcharged.
 
 1. Go back to the droplet view screen in DigitalOcean
-  * <img width="1243" alt="Screen Shot 2022-10-11 at 9 18 59 PM" src="https://user-images.githubusercontent.com/5363/195249068-7e748e7a-539e-43c3-97bd-fc9508bd91b7.png">
+   * <img width="1243" alt="Screen Shot 2022-10-11 at 9 18 59 PM" src="https://user-images.githubusercontent.com/5363/195249068-7e748e7a-539e-43c3-97bd-fc9508bd91b7.png">
 2. Click on Destroy Droplet and follow the dialog to destroy the droplet.
-  * <img width="1235" alt="Screen Shot 2022-10-11 at 9 19 38 PM" src="https://user-images.githubusercontent.com/5363/195249143-59d40d50-b094-49b9-9d77-cd8febdd3027.png">
+   * <img width="1235" alt="Screen Shot 2022-10-11 at 9 19 38 PM" src="https://user-images.githubusercontent.com/5363/195249143-59d40d50-b094-49b9-9d77-cd8febdd3027.png">
 3. Hopefuly you don't have any OP clipper related droplets running. If so, great!
-  * <img width="1265" alt="Screen Shot 2022-10-11 at 9 20 45 PM" src="https://user-images.githubusercontent.com/5363/195249252-a28f2265-e99c-4e2a-b67f-f3cdd0cb1f87.png">
+   * <img width="1265" alt="Screen Shot 2022-10-11 at 9 20 45 PM" src="https://user-images.githubusercontent.com/5363/195249252-a28f2265-e99c-4e2a-b67f-f3cdd0cb1f87.png">
 
 #### DIY 
 
