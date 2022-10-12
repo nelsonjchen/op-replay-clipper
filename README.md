@@ -6,18 +6,22 @@ https://user-images.githubusercontent.com/5363/188810452-47a479c4-fa9a-4037-9592
 
 ## Requirements
 
-Unfortunately, the requirements are quite high. You will need a decent computer, either your own or one that is remote, to run this. 
+Unfortunately, the requirements are quite high. You will need a decent computer, either your own or one that is rented such as one on DigitalOcean, to run this tool. 
 
 * 8 vCPUs/hyperthreads
 * A working Docker-Compose setup. Docker for Windows will work.
 * Intel or AMD processor.
-  * Users who do not hace access are advised to use rental computing resources like a temporary VPS from DigitalOcean.
-* 6 GB of disk space.
+  * Emulation of Intel on Apple Silicon with Docker for Mac is too slow to handle the requirements.
+* 10 GB of disk space.
 * 300MB/s disk speed.
-  * Docker for Mac users currently cannot use this due to Docker's FS overhead.
-* The desired route to be rendered must be able to upload to Comma.ai servers and must be accessible.
+  * Docker for Mac Intel users currently cannot use the clipper due to Docker's serious shared filesystem CPU overhead.
+  * Docker for Windows users need to clone the repository to the Linux filesystem to meet the requirement.
 * A GPU is **not** needed and also unused here.
+
+There are other notes too regarding the data you want to render:
+
 * The UI replayed is comma.ai's latest stock UI; routes from forks that differ alot are very much YMMV.
+* The desired route to be rendered must have been able to upload to Comma.ai servers and must be accessible.
 
 The heavy CPU requirement is due to a number of factors:
 
