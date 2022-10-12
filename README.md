@@ -144,6 +144,7 @@ The clip files are stored in the `shared` folder. You can retrieve them by:
 2. Run `docker run -it --rm -p 8080:8080 -v $(pwd)/shared:/public danjellz/http-server`
 3. Go to `http://<ip address>:8080/` and download `clip.mp4`.
    * <img width="994" alt="Screen Shot 2022-10-11 at 9 52 53 PM" src="https://user-images.githubusercontent.com/5363/195253322-da9d380e-6bb7-4e38-b2f9-a573974831ab.png">
+4. Stop the web server by pressing `Ctrl+C`.
 
 ##### 🔨 DIY
 
