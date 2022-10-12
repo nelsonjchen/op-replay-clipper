@@ -170,7 +170,9 @@ This is extremely important if you don't want to be overcharged.
    * <img width="1243" alt="Screen Shot 2022-10-11 at 9 18 59 PM" src="https://user-images.githubusercontent.com/5363/195249068-7e748e7a-539e-43c3-97bd-fc9508bd91b7.png">
 2. Click on Destroy Droplet and follow the dialog to destroy the droplet.
    * <img width="1235" alt="Screen Shot 2022-10-11 at 9 19 38 PM" src="https://user-images.githubusercontent.com/5363/195249143-59d40d50-b094-49b9-9d77-cd8febdd3027.png">
-3. Hopefuly you don't have any OP clipper related droplets running. If so, great!
+3. Follow the dialog to destroy the droplet
+   * <img width="634" alt="Screen Shot 2022-10-12 at 10 16 06 AM" src="https://user-images.githubusercontent.com/5363/195406895-e621b141-9ef3-4520-b1e6-73a80fc0300b.png">
+4. Hopefuly you don't have any OP clipper related droplets running. If so, great!
    * <img width="1265" alt="Screen Shot 2022-10-11 at 9 20 45 PM" src="https://user-images.githubusercontent.com/5363/195249252-a28f2265-e99c-4e2a-b67f-f3cdd0cb1f87.png">
 
 #### 🔨 DIY
