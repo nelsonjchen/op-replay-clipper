@@ -53,9 +53,8 @@ You can set up your own machine or rent a temporary VPS server. There are many V
 
 1. Install Ubuntu for WSL2: https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-10
 2. Install Docker for Windows: https://docs.docker.com/desktop/install/windows-install/
-3. Open up the Ubuntu terminal to your home folder and clone this repository: `git clone https://github.com/nelsonjchen/op-replay-clipper/`
+3. Open up the Ubuntu terminal and clone this repository: `git clone https://github.com/nelsonjchen/op-replay-clipper/`
 4. Change folders to `cd op-replay-clipper`
-5. Open Windows Explorer to the current folder `explorer.exe .` 
 
 #### DigitalOcean VPS
 
