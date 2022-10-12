@@ -4,41 +4,76 @@ Capture short 30 second route clips with the Openpilot UI included, and the rout
 
 https://user-images.githubusercontent.com/5363/188810452-47a479c4-fa9a-4037-9592-c6a47f2e1bb1.mp4
 
-🚧 This is all very WIP at the moment and definitely rough!
-
 ## Requirements
 
-Unfortunately, the requirements are quite high.
+Unfortunately, the requirements are quite high. You will need a decent computer, either your own or one that is remote, to run this. 
 
 * 8 vCPUs/hyperthreads
-* A working Docker-Compose setup. Docker for Windows/Mac will work.
-* x86_64. Unfortunately, the `openpilot-prebuilt` image this setup is based on only comes in x86_64 architecture. The x86 emulation with Apple Silicon Macs is simply too slow by 10x and thus Apple Silicon Macs currently will not work. Intel Macs also may be too slow from simply too much overhead.
-  * Users in this case are advised to use rental computing resources like a temporary VPS.
+* A working Docker-Compose setup. Docker for Windows will work.
+* Intel or AMD processor.
+  * Users who do not hace access are advised to use rental computing resources like a temporary VPS from DigitalOcean.
 * 6 GB of disk space.
 * 300MB/s disk speed.
-* Your comma device must be able to upload to Comma.ai servers. Roadmap for usage of a retropilot or alternative cloud backend is unclear or unknown.
+  * Docker for Mac users currently cannot use this due to Docker's FS overhead.
+* The desired route to be rendered must be able to upload to Comma.ai servers and must be accessible.
 * A GPU is **not** needed and also unused here.
-* The UI replayed is comma.ai's latest stock UI; forks that differ alot are very much YMMV.
+* The UI replayed is comma.ai's latest stock UI; routes from forks that differ alot are very much YMMV.
 
-The CPU requirement is due to a number of factors:
+The heavy CPU requirement is due to a number of factors:
 
-* Reliable/speedy H.265 hardware decoding is hard to find. The forward video is only captured in H.265 and could only be decoded at 0.7 speed on a Ryzen 2800 and half speed reliabily for the purposes of capture.
-* Reliable OpenGL is not always possible. Software OpenGL rendering is used instead.
-* Capturing the UI isn't free and can be quite intensive due to all the Software/non-accelerated rendering and decoding.
-* Capturing the UI must be done with everything not mismatching by speed. Otherwise, you get weird rendering issues like the planner's line lagging and not matching the video such as in the case of the video not decoding fast enough as in the case of H.265.
-* This was originally targeting a web service usecase. It may still. CPUs are plentiful.
+* Reliable/speedy H.265 hardware decoding is hard to find. The high quality forward video is only captured in H.265 and could only be decoded at 0.7 speed on a Ryzen 2800 and at half speed reliabily for the purposes of capture.
+* Reliable OpenGL rendering is not always possible. Software OpenGL rendering is used instead to guarantee compatibility.
+* Capturing the UI isn't free and can be quite intensive due to all the software/non-accelerated rendering and decoding.
+* Capturing the UI must be done with everything not mismatching by speed. Otherwise, you get weird rendering issues like the planner's line lagging and not matching the forward video such as in the case of the forwardvideo not decoding fast enough as in the case of H.265 which is very computationally intensive to decode without acceleration.
+* This tool was originally targeting a web service usecase. It may still. CPUs are plentiful and unrestricted.
 
 Some things have been done to make this do-able.
 
 * Relevant processes are speedhack'd with `faketime` to run at half speed.
-* Capture is done in real time but undercranked to simulate full speed.
+* Capture is done in real time but undercranked to simulate full speed. 
 
 ## Usage
 
 ### Time Estimates
 
-* Initial Download/Building: About 3 or more minutes. Also dependent on downloading a 1GB+ docker image base and the stuff to build atop of it.
+* Machine Setup or DigitalOcean Rental (One Time for Machine): 0-15 minutes.
+* Initial Download/Building (One Time for Machine): About 3 or more minutes. Also dependent on downloading a 1GB+ docker image base and the stuff to build atop of it. 
 * Per Clip: About 3 minutes to capture a 30 second frame with the UI and compress the 30 second clip to 7.8MB (right underneath Discord Free's upload limits). Much of the time is spent waiting or for "safety"/fidelity reasons.
+* Teardown and cleanup: 1 minute
+
+### Setup
+
+You can set up your own machine or rent a temporary VPS server. There are many VPS vendors out there but DigitalOcean was chosen for the guide due to its relative ease of use and accessibility.
+
+#### Docker for Windows
+
+1. Install Ubuntu for WSL2: https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-10
+2. Install Docker for Windows: https://docs.docker.com/desktop/install/windows-install/
+3. Open up the Ubuntu terminal to your home folder and clone this repository: `git clone https://github.com/nelsonjchen/op-replay-clipper/`
+4. Change folders to `cd op-replay-clipper`
+5. Open Windows Explorer to the current folder `explorer.exe .` 
+
+#### DigitalOcean VPS
+
+Note: Pay attention to Teardown. You need to delete this droplet after you are done or otherwise you may be billed a lot. If at anytime you want to abort, go to Teardown.
+
+1. Sign up for a DigitalOcean account and put in payment information and whatnot.
+2. Visit https://marketplace.digitalocean.com/apps/docker and click Create Docker Droplet
+3. At the droplet creation screen, choose any option with 8 CPUs. Note the prices. **Remember to delete the droplet!**
+  * <img width="1273" alt="Screen Shot 2022-10-11 at 9 23 42 PM" src="https://user-images.githubusercontent.com/5363/195249619-53828bb6-6c9d-4169-9757-ac11d41a2495.png">
+4. Go through all the options below. Nothing needs to be selected other than the minimum. Any region is fine. Password doesn't matter so anything is fine. No options need to be checked.
+5. Once you press create, click on the droplet you created. Wait for it to be created. You may need to refresh the page once in a while.
+6. Once it is up and running, click on the Console link on the right.
+  * <img width="1234" alt="Screen Shot 2022-10-11 at 9 11 42 PM" src="https://user-images.githubusercontent.com/5363/195248204-e20be940-05be-4dcb-b808-172e7f491102.png">
+7. You'll get a window popup and a shell like this:
+  * <img width="1146" alt="Screen Shot 2022-10-11 at 9 13 28 PM" src="https://user-images.githubusercontent.com/5363/195248431-54841a6f-271b-4835-9d44-a5ce4cfefb1f.png">
+8. Run `git clone https://github.com/nelsonjchen/op-replay-clipper/`
+9. Run `cd op-replay-clipper`
+10. Run `chmod -R 777 shared`
+
+#### DIY (Misc, I already have Docker, I already run Docker on Linux, Advanced)
+
+If you are knowledgeable about Docker, Linux, Docker-Compose and whatnot, I'm sure you can figure it out. Just clone this repo down and go through the steps.
 
 ### Steps
 
@@ -72,7 +107,59 @@ Some things have been done to make this do-able.
    * `clip.mkv` - 1GB+ Uncompressed video clip
    * `clip.mp4` - 7.8MB file of the clip for uploading with Discord Free.
    * The rest are intermediaries such as logs/databases from doing a two-pass encoding to target a 7.8MB file size.
-9. Enjoy!
+
+#### File Retrieval
+
+##### Docker for Windows
+
+1. Run `explorer.exe shared` and copy or do whatever you want with `clip.mp4`
+
+##### DigitalOcean
+
+1. Run `curl icanhazip.com` and note the IP address
+2. Run `docker run -it --rm -p 8080:80 -v $(pwd)/shared:/public danjellz/http-server`
+3. Go to http://<ip address>/ and download `clip.mp4`.
+
+##### DIY
+
+1. It's in the shared folder and named `clip.mp4`.
+
+### Teardown
+
+#### Docker for Windows
+
+Docker for Windows has a terrible memory leak. Quit it from the system tray. Additionally, you may want to also shutdown Ubuntu by running `wsl --shutdown` from a PowerShell or Command Prompt to regain maximum performance. 
+
+While Docker for Windows is running, you may also want to click Clean Up while inside it if you want to regain some disk space. 
+
+#### DigitalOcean
+
+This is extremely important if you don't want to be overcharged.
+
+1. Go back to the droplet view screen in DigitalOcean
+  * <img width="1243" alt="Screen Shot 2022-10-11 at 9 18 59 PM" src="https://user-images.githubusercontent.com/5363/195249068-7e748e7a-539e-43c3-97bd-fc9508bd91b7.png">
+2. Click on Destroy Droplet and follow the dialog to destroy the droplet.
+  * <img width="1235" alt="Screen Shot 2022-10-11 at 9 19 38 PM" src="https://user-images.githubusercontent.com/5363/195249143-59d40d50-b094-49b9-9d77-cd8febdd3027.png">
+3. Hopefuly you don't have any OP clipper related droplets running. If so, great!
+  * <img width="1265" alt="Screen Shot 2022-10-11 at 9 20 45 PM" src="https://user-images.githubusercontent.com/5363/195249252-a28f2265-e99c-4e2a-b67f-f3cdd0cb1f87.png">
+
+#### DIY 
+
+You may want to prune images. Up to you, DIYer!
+
+### Advanced
+
+Run the script with `-h` to get a usage text to help
+
+Here are some common ones that may be used:
+
+* You can change the length from 30 seconds to anything with the `-l` argument. e.g. `-l 60` for a minute
+  * Be aware that increasing the clip length proportionally doubles the time it takes to record.
+* You can change the target file size for the clip with `-m` for the size in MB. e.g. `-m 50` to target 50MB
+  * For reference, here are some common target file sizes
+    * Discord Free w/ Video Preview: 8MB 
+    * Discord Nitro w/ Video Preview: 50MB
+    * Modern Discord Nitro + Desktop Max: 500MB
 
 ## Architecture
 
