@@ -66,7 +66,7 @@ Note: Pay attention to Teardown. You need to delete this droplet after you are d
 3. At the droplet creation screen, choose any option with 8 CPUs. Note the prices. **Remember to delete the droplet!**
    * <img width="1273" alt="Screen Shot 2022-10-11 at 9 23 42 PM" src="https://user-images.githubusercontent.com/5363/195249619-53828bb6-6c9d-4169-9757-ac11d41a2495.png">
 4. Go through all the options below. Nothing needs to be selected other than the minimum. Any region is fine. Password doesn't matter so anything is fine. No options need to be checked.
-5. Once you press create, click on the droplet you created. Wait for it to be created. You may need to refresh the page once in a while.
+5. Once you press create, click on the droplet you created. Wait for it to be created. You may need to refresh the page once in a while. It'll take about a minute or two.
 6. Once it is up and running, click on the Console link on the right.
    * <img width="1234" alt="Screen Shot 2022-10-11 at 9 11 42 PM" src="https://user-images.githubusercontent.com/5363/195248204-e20be940-05be-4dcb-b808-172e7f491102.png">
 7. You'll get a window popup and a shell like this:
