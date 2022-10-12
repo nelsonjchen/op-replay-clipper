@@ -158,7 +158,7 @@ You can absolutely do multiple clips! Just make sure to save the existing `clip.
 
 #### 🪟 Docker for Windows
 
-Docker for Windows has a terrible memory leak. Quit it from the system tray. Additionally, you may want to also shutdown Ubuntu by running `wsl --shutdown` from a PowerShell or Command Prompt to regain maximum performance.
+Docker for Windows has a terrible memory or handle leak issue. Quit it from the black whale icon in system tray. Additionally, you may want to also shutdown Ubuntu by running `wsl --shutdown` from a PowerShell or Command Prompt to regain maximum performance.
 
 While Docker for Windows is running, you may also want to click Clean Up while inside it if you want to regain some disk space.
 
