@@ -209,6 +209,10 @@ STARTING_SEC=$_arg_start_seconds
 # Calculate optimal smear seconds as starting seconds mod 60 plus 5 seconds.
 SMEAR_AMOUNT=$((($STARTING_SEC % 60) + 5))
 SMEARED_STARTING_SEC=$(($STARTING_SEC - $SMEAR_AMOUNT))
+# SMEARED_STARTING_SEC must be greater than 0
+if [ $SMEARED_STARTING_SEC -lt 0 ]; then
+		SMEARED_STARTING_SEC=0
+fi
 RECORDING_LENGTH=$_arg_length_seconds
 # Cleanup trailing segment count. Seconds is what matters
 ROUTE=$(echo "$_arg_route_id" | sed 's/--[0-9]$//')
