@@ -24,7 +24,7 @@ There are other notes too regarding the data you want to render:
 
 * The UI replayed is comma.ai's latest stock UI; routes from forks that differ alot from stock may not render correctly. Your experience may vary.
 * The desired route to be rendered must have been able to upload to Comma.ai servers and must be accessible.
-* You are advised to upload all files of the route to Comma.ai servers before attempting to render a route.
+* You are advised to upload all files of the route to Comma.ai servers before attempting to render a route. If you do not upload all files, the replay will be slow, jerky, and the video quality will be greatly degraded.
 
 The heavy CPU requirement is due to a number of factors:
 
@@ -43,18 +43,18 @@ Even with the higher CPU requirements, it is not enough to run the tooling at fu
 
 ### Setup
 
-You can set up your own machine or rent a temporary server. There are many server vendors out there but DigitalOcean was chosen for the guide due to its relative ease of use, accessibility, and affordable pricing.
+You can set up your own machine or rent a temporary server. There are many online server vendors out there but [DigitalOcean][do] was chosen for the guide due to its relative ease of use, accessibility, and affordable pricing.
 
 ### The Way Or The Path
 
-* For most people, DigitalOcean is probably the easiest, cleanest, most hygenic way, but you will need to create an account and pay for the resources. The cost is really cheap though as long as you remember to delete the droplet after you are done ([Teardown](#teardown)). The cost is based on how long the server is running and after you destroy the server, no more cost is accrued. Recording a 30 second clip this way will probably cost about 3-6 cents total.
-* Machine Setup is the way to go if you want to use your own computer and it has the power to do it. If you're making many clips, long clip lengths, and/or already have some pre-existing expertise, this is the way to go.
+* For most people, [DigitalOcean][do] is probably the easiest, cleanest, most hygenic way, but you will need to create an account and pay for the resources. The cost is really cheap though as long as you remember to delete the droplet after you are done ([Teardown](#teardown)). The cost is based on how long the server is running and after you destroy the server, no more cost is accrued. Recording a 30 second clip this way will probably cost about 3-6 cents total.
+* Machine Setup such as Docker for Windows or "DIY" is the way to go if you want to use your own computer and it has the power to do it. If you're making many clips, long clip lengths, and/or already have some pre-existing expertise, this is the way to go.
 
 ### Time Estimates
 
 * Setup
   * Machine Setup: 20 minutes
-  * DigitalOcean VPS/Droplet Rental: 3-10 minutes
+  * DigitalOcean Droplet/Server Rental: 3-10 minutes
   * For all setup options, if you've alreadys setup some of the resources beforehand such as having a DigitalOcean account, already have Docker or WSL2 running and so on, you will not need to repeat those steps.
 * Initial Download/Building: About 1-5 minutes. This part may be download intensive and depend on your internet connection. This may be cached as well.
 * [Per Clip](#steps): About 3 minutes to capture a 30 second frame with the UI and compress the 30 second clip to 7.8MB.
@@ -76,10 +76,10 @@ Note: Pay attention to [Teardown](#teardown). You need to delete this droplet af
 
 1. Sign up for a DigitalOcean account and put in payment information and whatnot.
 2. Visit https://marketplace.digitalocean.com/apps/docker and click the `Create Docker Droplet` button on the right.
-3. At the droplet creation screen, choose any option with 8 CPUs. Note the prices. **Remember to delete the droplet!**
+3. At the droplet creation screen, choose any option with 8 CPUs. Note the prices. **Remember to destroy the droplet!**
    * <img width="1273" alt="Screen Shot 2022-10-11 at 9 23 42 PM" src="https://user-images.githubusercontent.com/5363/195249619-53828bb6-6c9d-4169-9757-ac11d41a2495.png">
-4. Go through all the options below. Nothing needs to be selected other than the minimum. Any region is fine. Password doesn't matter so anything is fine. No options need to be checked.
-5. Once you press create, click on the droplet you created. Wait for it to be created. You may need to refresh the page once in a while. It'll take about a minute or two.
+4. Go through all the options below. Nothing needs to be selected other than the minimum. Any region is fine. Password doesn't matter so anything that satisfies it is fine. No optional options need to be checked.
+5. Once you press `Create Droplet` at the bottom of the Create Droplets screen, click on the droplet you created. Wait for it to be created. You may need to refresh the page once in a while. It'll take about a minute or two.
 6. Once it is up and running, click on the Console link on the right.
    * <img width="1234" alt="Screen Shot 2022-10-11 at 9 11 42 PM" src="https://user-images.githubusercontent.com/5363/195248204-e20be940-05be-4dcb-b808-172e7f491102.png">
 7. You'll get a window popup and a shell like this:
@@ -103,7 +103,7 @@ You may need to `chmod` the `shared` folder to be writable by the internal Docke
      * <img width="347" alt="Screen Shot 2022-09-06 at 11 55 39 PM" src="https://user-images.githubusercontent.com/5363/188815682-6694c2f8-1d77-468e-9152-75a709477c9a.png">
    * Uploaded:
      * <img width="316" alt="Screen Shot 2022-09-07 at 12 27 26 AM" src="https://user-images.githubusercontent.com/5363/188816174-51045496-4614-4050-b911-c4abb987c5fe.png">
-   * Note: Driver camera is not required to be enabled for recording or uploading for this. It still might be easier to just hit that button though.
+   * Note: Driver camera is not required to be enabled for recording or uploading for this. It's easier to just hit that "Upload all" button though.
    * Note: If you do not upload the files, the replay will be slow, jerky, and the video quality will be greatly degraded.
 3. Find the starting seconds. The drive's timeline will have a widget below your cursor that's "segment number, local time". Segments are made every minute. So scrub it, and do a little mental arithmetic to get the starting second. I usually do "60 * segment number + offset" as my calculation. Starting seconds must be greater than 60 seconds at the moment.
    * <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
@@ -198,3 +198,5 @@ Just a single shell script that runs an X11 server, and tmux commands to control
 ## Future
 
 Since this is all CPU based, requires no acceleration, and is clearly shoved into Docker, maybe it's possible to make a web service.
+
+[do]: https://www.digitalocean.com/
