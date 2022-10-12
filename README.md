@@ -1,12 +1,14 @@
-# Openpilot Replay Clipper
+# 📽 Openpilot Replay Clipper
 
-Capture short 30 second route clips with the Openpilot UI included, and the route, seconds marker branded into it. No openpilot development environment setup required. Just Docker-Compose and some computing resources.
+Capture short 30 seconds clips of Openpilot routes with the Openpilot UI included, with the route and seconds marker branded into the clip. No openpilot development environment setup required. Just Docker-Compose and some computing resources.
 
 https://user-images.githubusercontent.com/5363/188810452-47a479c4-fa9a-4037-9592-c6a47f2e1bb1.mp4
 
 ## Requirements
 
-Unfortunately, the requirements are quite high. You will need a decent computer, either your own or one that is rented for a few minutes such as one on DigitalOcean, to run this tool. 
+Unfortunately, the requirements are quite high.
+
+You will need a decent computer, either your own or one that is rented for a few minutes such as one on DigitalOcean, to run this tool.
 
 * 8 vCPUs/hyperthreads
 * A working Docker-Compose setup. Docker for Windows will work.
@@ -16,52 +18,59 @@ Unfortunately, the requirements are quite high. You will need a decent computer,
 * 300MB/s disk speed.
   * Docker for Mac Intel users currently cannot use the clipper due to Docker's serious shared filesystem CPU overhead.
   * Docker for Windows users need to clone the repository to the Linux filesystem to meet the requirement.
-* A GPU is **not** needed and also unused here.
+* A GPU is **not** needed and is also unused in the tool.
 
 There are other notes too regarding the data you want to render:
 
-* The UI replayed is comma.ai's latest stock UI; routes from forks that differ alot are very much YMMV.
+* The UI replayed is comma.ai's latest stock UI; routes from forks that differ alot from stock may not render correctly. Your experience may vary.
 * The desired route to be rendered must have been able to upload to Comma.ai servers and must be accessible.
+* You are advised to upload all files of the route to Comma.ai servers before attempting to render a route.
 
 The heavy CPU requirement is due to a number of factors:
 
-* Reliable/speedy H.265 hardware decoding is hard to find. The high quality forward video is only captured in H.265 and could only be decoded at 0.7 speed on a Ryzen 2800 and at half speed reliabily for the purposes of capture.
-* Reliable OpenGL rendering is not always possible. Software OpenGL rendering is used instead to guarantee compatibility.
-* Capturing the UI isn't free and can be quite intensive due to all the software/non-accelerated rendering and decoding.
-* Capturing the UI must be done with everything not mismatching by speed. Otherwise, you get weird rendering issues like the planner's line lagging and not matching the forward video such as in the case of the forwardvideo not decoding fast enough as in the case of H.265 which is very computationally intensive to decode without acceleration.
-* This tool was originally targeting a web service usecase. It may still. CPUs are plentiful and unrestricted.
+* Reliable H.265 hardware decoding is not always available. The high quality forward video is only captured in H.265 and could only be decoded at 0.7 speed on a Ryzen 2800 and at half speed reliabily for the purposes of capture.
+* Reliable OpenGL rendering is not always available. Software OpenGL rendering is used instead to guarantee compatibility.
+* Capturing the UI can be quite intensive due to all the software and non-hardware-accelerated rendering and decoding.
+* Capturing the UI must be done with everything not mismatching by speed. Otherwise, you get weird rendering issues like the planner's line lagging and not matching the forward video such as in the case of the forward video not decoding fast enough. A generous margin is used to ensure that the UI is captured at the same speed as the forward video.
+* This tool was originally targeting a web service usecase. It may still. CPUs are plentiful, unrestricted, and cheap.
 
-Some things have been done to make this do-able.
+Even with the higher CPU requirements, it is not enough to run the tooling at full speed on the CPU. Some measures have been done to make clip recording possible.
 
 * Relevant processes are speedhack'd with `faketime` to run at half speed.
-* Capture is done in real time but undercranked to simulate full speed. 
+* Capture is done in real time but undercranked to simulate full speed.
 
 ## Usage
 
 ### Time Estimates
 
-* Machine Setup or DigitalOcean Rental (One Time for Machine): 0-15 minutes.
-* Initial Download/Building (One Time for Machine): About 3 or more minutes. Also dependent on downloading a 1GB+ docker image base and the stuff to build atop of it. 
-* Per Clip: About 3 minutes to capture a 30 second frame with the UI and compress the 30 second clip to 7.8MB (right underneath Discord Free's upload limits). Much of the time is spent waiting or for "safety"/fidelity reasons.
+* Setup
+  * Machine Setup: 20 minutes
+  * DigitalOcean VPS/Droplet Rental: 5-15 minutes
+  * As with any setup option, if you've alreadys setup some of the stuff before such as having a DigitalOcean account or already have WSL2 running and so on, you do not need to repeat those steps.
+* Initial Download/Building: About 1-5 minutes. This part may be download intensive and depend on your internet connection.
+* Per Clip: About 3 minutes to capture a 30 second frame with the UI and compress the 30 second clip to 7.8MB (right underneath Discord Free's upload limits).
 * Teardown and cleanup: 1 minute
 
 ### Setup
 
-You can set up your own machine or rent a temporary VPS server. There are many VPS vendors out there but DigitalOcean was chosen for the guide due to its relative ease of use and accessibility.
+You can set up your own machine or rent a temporary server. There are many server vendors out there but DigitalOcean was chosen for the guide due to its relative ease of use, accessibility, and affordable pricing.
 
-#### Docker for Windows
+#### 🪟 Docker for Windows
 
 1. Install Ubuntu for WSL2: https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-10
 2. Install Docker for Windows: https://docs.docker.com/desktop/install/windows-install/
 3. Open up the Ubuntu terminal and clone this repository: `git clone https://github.com/nelsonjchen/op-replay-clipper/`
 4. Change folders to `cd op-replay-clipper`
+5. Continue to [Steps](#steps).
 
-#### DigitalOcean VPS
+#### 🌊 DigitalOcean Droplet/VPS
 
-Note: Pay attention to Teardown. You need to delete this droplet after you are done or otherwise you may be billed a lot. If at anytime you want to abort, go to Teardown.
+DigitalOcean calls their servers Droplets. The guide will use the term Droplet for simplicity.
+
+Note: Pay attention to [Teardown](#teardown). You need to delete this droplet after you are done or otherwise you may be billed a lot. If at anytime you want to abort, go to [Teardown](#teardown) and destroy the droplet.
 
 1. Sign up for a DigitalOcean account and put in payment information and whatnot.
-2. Visit https://marketplace.digitalocean.com/apps/docker and click Create Docker Droplet
+2. Visit https://marketplace.digitalocean.com/apps/docker and click the `Create Docker Droplet` button on the right.
 3. At the droplet creation screen, choose any option with 8 CPUs. Note the prices. **Remember to delete the droplet!**
    * <img width="1273" alt="Screen Shot 2022-10-11 at 9 23 42 PM" src="https://user-images.githubusercontent.com/5363/195249619-53828bb6-6c9d-4169-9757-ac11d41a2495.png">
 4. Go through all the options below. Nothing needs to be selected other than the minimum. Any region is fine. Password doesn't matter so anything is fine. No options need to be checked.
@@ -73,10 +82,13 @@ Note: Pay attention to Teardown. You need to delete this droplet after you are d
 8. Run `git clone https://github.com/nelsonjchen/op-replay-clipper/`
 9. Run `cd op-replay-clipper`
 10. Run `chmod -R 777 shared`
+11. Continue to [Steps](#steps).
 
-#### DIY (Misc, I already have Docker, I already run Docker on Linux, Advanced)
+#### 🔨 DIY (Misc, I already have Docker, I already run Docker on Linux, I have my own setup, Advanced)
 
-If you are knowledgeable about Docker, Linux, Docker-Compose and whatnot, I'm sure you can figure it out. Just clone this repo down and go through the steps.
+If you are knowledgeable about Docker, Linux, Docker-Compose and whatnot, I'm sure you can figure it out. Just clone this repo down and go through the [Steps](#steps).
+
+You may need to `chmod` the `shared` folder to be writable by the internal Docker user of the image. Just do `777`, it's all temporary anyway.
 
 ### Steps
 
@@ -92,57 +104,60 @@ If you are knowledgeable about Docker, Linux, Docker-Compose and whatnot, I'm su
    * <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
 4. Get the route ID from more info. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52`. Note the omission of the `--1`. That's the segment identifier that is not needed.
    * <img width="336" alt="image" src="https://user-images.githubusercontent.com/5363/188817040-5341e1af-2176-47ad-87f3-ba0a3d88a32a.png">
-5. Get a JWT Token from https://jwt.comma.ai. This token will last for a year. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Copy and save the whole thing.   
+5. Get a JWT Token from https://jwt.comma.ai. This token will last for a year. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Copy and save the whole thing. This token allows access to routes your Comma connect account has access to. **Keep this token private, do not share it with anyone.**
 6. Construct and run the `docker-compose` command to run with the working directory set to this repository on your machine.
-   * Docker-Compose
-      1. Fill this template in and run it.
+   1. Fill this template in a text editor, copy it back out once it's filled, and run it.
 
-         ```
-         docker-compose run --rm clipper /workspace/clip.sh -s <STARTING SECONDS> "<ROUTE_ID>" -j <JWT_TOKEN>
-         ```
+      ```
+      docker-compose run --rm clipper /workspace/clip.sh -j <JWT_TOKEN> "<ROUTE_ID>" -s <STARTING SECONDS>
+      ```
 
-         Make sure to put the route ID in quotes. The route id has a `|` character, which can cause havoc in shells.
+      Make sure to put the route ID in quotes. The route id has a `|` character, which can cause havoc in shells.
 
-      2. Run the command. Here's a non-working but illustrative sample command to capture seconds 180 to 210 of `071ba9916a1da2fa|2022-09-04--11-15-52` with a auth/ident token of `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o`.
-         * `docker-compose run --rm clipper /workspace/clip.sh -s 180 "071ba9916a1da2fa|2022-09-04--11-15-52" -j eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o`
+   2. Run the command. Here's a non-working but illustrative sample command to capture seconds 180 to 210 of `071ba9916a1da2fa|2022-09-04--11-15-52` with a auth/ident token of `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o`.
+      * ```
+        docker-compose run --rm clipper /workspace/clip.sh -j eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o "071ba9916a1da2fa|2022-09-04--11-15-52" -s 180
+        ```
 
-8. Wait 3 minutes (more if it's the first time), and a few files will appear in the `shared` folder.   
-   * `clip.mkv` - 1GB+ Uncompressed video clip
-   * `clip.mp4` - 7.8MB file of the clip for uploading with Discord Free.
-   * The rest are intermediaries such as logs/databases from doing a two-pass encoding to target a 7.8MB file size.
-   * Here is a picture of what completed looks like:
+7. Wait 3 minutes (more if it's the first time), and a few files will appear in the `shared` folder.
+   * `clip.mkv` - 1GB+ Uncompressed video clip in RGB
+   * `clip.mp4` - ~7.8MB file of the clip for uploading with Discord Free. It is encoded for maximum compatibility.
+   * The rest are intermediaries such as logs/databases from doing a two-pass encoding to target a 7.8MB file size. They are irrelevant.
+   * Here is a picture of what completed run's shell looks like:
      * <img width="1146" alt="Screen Shot 2022-10-11 at 9 51 15 PM" src="https://user-images.githubusercontent.com/5363/195253293-d4fa6065-f387-4c32-8587-6d65dbabafa0.png">
 
 #### Clip File Retrieval
 
-##### Docker for Windows
+The clip files are stored in the `shared` folder. You can retrieve them by:
+
+##### 🪟 Docker for Windows
 
 1. Run `explorer.exe shared` and copy or do whatever you want with `clip.mp4`
 
-##### DigitalOcean
+##### 🌊 DigitalOcean
 
 1. Run `curl icanhazip.com` and note the IP address
 2. Run `docker run -it --rm -p 8080:8080 -v $(pwd)/shared:/public danjellz/http-server`
 3. Go to `http://<ip address>:8080/` and download `clip.mp4`.
    * <img width="994" alt="Screen Shot 2022-10-11 at 9 52 53 PM" src="https://user-images.githubusercontent.com/5363/195253322-da9d380e-6bb7-4e38-b2f9-a573974831ab.png">
 
-##### DIY
+##### 🔨 DIY
 
 1. It's in the `shared` folder and named `clip.mp4`.
 
 ### Multiple Clips
 
-You can absolutely do multiple clips! Just make sure to save the existing `clip.mp4` before kicking off the next run with the `docker-compose` command as the existing `clip.mp4` in `shared` will be overwritten.
+You can absolutely do multiple clips! Just make sure to save the existing `clip.mp4` before kicking off the next run with the `docker-compose` command from Steps as the existing `clip.mp4` in `shared` will be overwritten on each run.
 
 ### Teardown
 
-#### Docker for Windows
+#### 🪟 Docker for Windows
 
-Docker for Windows has a terrible memory leak. Quit it from the system tray. Additionally, you may want to also shutdown Ubuntu by running `wsl --shutdown` from a PowerShell or Command Prompt to regain maximum performance. 
+Docker for Windows has a terrible memory leak. Quit it from the system tray. Additionally, you may want to also shutdown Ubuntu by running `wsl --shutdown` from a PowerShell or Command Prompt to regain maximum performance.
 
-While Docker for Windows is running, you may also want to click Clean Up while inside it if you want to regain some disk space. 
+While Docker for Windows is running, you may also want to click Clean Up while inside it if you want to regain some disk space.
 
-#### DigitalOcean
+#### 🌊 DigitalOcean
 
 This is extremely important if you don't want to be overcharged.
 
@@ -153,27 +168,27 @@ This is extremely important if you don't want to be overcharged.
 3. Hopefuly you don't have any OP clipper related droplets running. If so, great!
    * <img width="1265" alt="Screen Shot 2022-10-11 at 9 20 45 PM" src="https://user-images.githubusercontent.com/5363/195249252-a28f2265-e99c-4e2a-b67f-f3cdd0cb1f87.png">
 
-#### DIY 
+#### 🔨 DIY
 
 You may want to prune images. Up to you, DIYer!
 
 ### Advanced
 
-Run the script with `-h` to get a usage text to help
+Run the script with `-h` to get a usage text to help with more options.
 
-Here are some common options that may be of interest:
+Common options that may be of interest:
 
 * You can change the length from 30 seconds to anything with the `-l` argument. e.g. `-l 60` for a minute
   * Be aware that increasing the clip length proportionally doubles the time it takes to record. 60 seconds takes 2 minutes to record. 5 minutes will take 10 minutes! 10, 20!
 * You can change the target file size for the clip with `-m` for the size in MB. e.g. `-m 50` to target 50MB
   * For reference, here are some common target file sizes
-    * Discord Free w/ Video Preview: 8MB 
+    * Discord Free w/ Video Preview: 8MB
     * Discord Nitro w/ Video Preview: 50MB
     * Modern Discord Nitro + Desktop Max: 500MB
 
 ## Architecture
 
-Just a single shell script that runs an X11 server, and tmux commands to control the replay executable.  There's some faketime to make it run reliably without extensive or any modifications to the pre-built openpilot that is used. Docker is used to just make it portable, but also easy to cleanup. Docker Compose is used to make sure  the `/dev/shm` size is correct.
+Just a single shell script that runs an X11 server, and tmux commands to control the replay executable.  There is `faketime` to make it run reliably without modifications to the pre-built openpilot that is in the image. Docker is used to just make it portable, but also easy to cleanup. Docker-Compose is used to make sure  the `/dev/shm` size is correct.
 
 ## Future
 
