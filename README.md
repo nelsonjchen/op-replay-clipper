@@ -8,7 +8,7 @@ https://user-images.githubusercontent.com/5363/188810452-47a479c4-fa9a-4037-9592
 
 Unfortunately, the requirements are quite high.
 
-You will need a decent computer, either your own or one that is rented for a few minutes such as one on DigitalOcean, to run this tool.
+You will need a decent computer, either your own or one that is rented for a few minutes such as one on [DigitalOcean][do], to run this tool.
 
 * 8 vCPUs/hyperthreads
 * A working Docker-Compose setup. Docker for Windows will work.
