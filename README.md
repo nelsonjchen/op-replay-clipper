@@ -31,7 +31,7 @@ The heavy CPU requirement is due to a number of factors:
 * Reliable H.265 hardware decoding is not always available. The high quality forward video is only captured in H.265 and could only be decoded at 0.7 speed on a Ryzen 2800 and at half speed reliabily for the purposes of capture.
 * Reliable OpenGL rendering is not always available. Software OpenGL rendering is used instead to guarantee compatibility.
 * Capturing the UI can be quite intensive due to all the software and non-hardware-accelerated rendering and decoding.
-* Capturing the UI must be done with everything not mismatching by speed. Otherwise, you get weird rendering issues like the planner's line lagging and not matching the forward video such as in the case of the forward video not decoding fast enough. A generous margin is used to ensure that the UI is captured at the same speed as the forward video.
+* Capturing the UI must be done with everything not mismatching by speed. Otherwise, you get weird rendering issues like the planner's line lagging and not matching the forward video such as in the case of the forward video not decoding fast enough. A generous margin of extra performance is used to ensure that the UI is captured at the same speed as the forward video in case of unexpected system jitters.
 
 Even with the higher CPU requirements, it is not enough to run the tooling at full speed on the CPU. Some measures have been done to make clip recording possible.
 
