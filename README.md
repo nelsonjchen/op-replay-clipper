@@ -15,7 +15,7 @@ You will need an appropiate computer, either your own or one that is rented for 
 * Intel or AMD processor.
   * Emulation of Intel on Apple Silicon with Docker for Mac is too slow to handle the requirements.
 * 10 GB of disk space.
-* 300MB/s disk speed.
+* 100MB/s disk speed.
   * Docker for Mac Intel users currently cannot use the clipper due to Docker's serious shared filesystem CPU overhead.
   * Docker for Windows users need to clone the repository to the Linux filesystem to meet the requirement.
 * A GPU is **not** needed and is also unused in the tool.
