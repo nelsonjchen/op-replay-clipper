@@ -234,7 +234,7 @@ RENDER_E2E_LONG=$_arg_e2e_long
 JWT_AUTH=$_arg_jwt_token
 VIDEO_CWD=$_arg_video_cwd
 VIDEO_RAW_OUTPUT=$VIDEO_CWD/clip.mkv
-VIDEO_OUTPUT=$VIDEO_CWD/$OUTPUT_FILE
+VIDEO_OUTPUT=$VIDEO_CWD/$_arg_output
 # Target an appropiate bitrate of filesize of 8MB for the video length
 TARGET_MB=$_arg_target_mb
 # Subtract a quarter of a megabyte to give some leeway for uploader limits
