@@ -8,6 +8,7 @@
 # ARG_OPTIONAL_BOOLEAN([e2e-long],[e],[Turn on or off e2e long],[off])
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
 # ARG_OPTIONAL_SINGLE([video-cwd],[c],[video working and output directory],[/shared])
+# ARG_OPTIONAL_SINGLE([output],[o],[output clip name],[clip.mp4])
 # ARG_POSITIONAL_SINGLE([route_id],[comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) ])
 # ARG_HELP([See README at https://github.com/nelsonjchen/op-replay-clipper/])
 # ARGBASH_GO()
@@ -29,7 +30,7 @@ die()
 
 begins_with_short_option()
 {
-	local first_option all_short_options='slmejch'
+	local first_option all_short_options='slmejcoh'
 	first_option="${1:0:1}"
 	test "$all_short_options" = "${all_short_options/$first_option/}" && return 1 || return 0
 }
@@ -43,12 +44,13 @@ _arg_target_mb="8"
 _arg_e2e_long="off"
 _arg_jwt_token=
 _arg_video_cwd="/shared"
+_arg_output="clip.mp4"
 
 
 print_help()
 {
 	printf '%s\n' "See README at https://github.com/nelsonjchen/op-replay-clipper/"
-	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-e|--(no-)e2e-long] [-j|--jwt-token <arg>] [-c|--video-cwd <arg>] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-e|--(no-)e2e-long] [-j|--jwt-token <arg>] [-c|--video-cwd <arg>] [-o|--output <arg>] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
@@ -56,6 +58,7 @@ print_help()
 	printf '\t%s\n' "-e, --e2e-long, --no-e2e-long: Turn on or off e2e long (off by default)"
 	printf '\t%s\n' "-j, --jwt-token: JWT Auth token to use (get token from https://jwt.comma.ai) (no default)"
 	printf '\t%s\n' "-c, --video-cwd: video working and output directory (default: '/shared')"
+	printf '\t%s\n' "-o, --output: output clip name (default: 'clip.mp4')"
 	printf '\t%s\n' "-h, --help: Prints help"
 }
 
@@ -133,6 +136,17 @@ parse_commandline()
 				;;
 			-c*)
 				_arg_video_cwd="${_key##-c}"
+				;;
+			-o|--output)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_output="$2"
+				shift
+				;;
+			--output=*)
+				_arg_output="${_key##--output=}"
+				;;
+			-o*)
+				_arg_output="${_key##-o}"
 				;;
 			-h|--help)
 				print_help
@@ -220,7 +234,7 @@ RENDER_E2E_LONG=$_arg_e2e_long
 JWT_AUTH=$_arg_jwt_token
 VIDEO_CWD=$_arg_video_cwd
 VIDEO_RAW_OUTPUT=$VIDEO_CWD/clip.mkv
-VIDEO_OUTPUT=$VIDEO_CWD/clip.mp4
+VIDEO_OUTPUT=$VIDEO_CWD/$OUTPUT_FILE
 # Target an appropiate bitrate of filesize of 8MB for the video length
 TARGET_MB=$_arg_target_mb
 # Subtract a quarter of a megabyte to give some leeway for uploader limits

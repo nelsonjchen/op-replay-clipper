@@ -155,6 +155,13 @@ The clip files are stored in the `shared` folder. You can retrieve them by:
 
 You can absolutely do multiple clips! Just make sure to save the existing `clip.mp4` before kicking off the next run with the `docker-compose` command from [Steps](#steps) as any existing `clip.mp4` in `shared` will be overwritten on each run.
 
+Alternatively, you can also append a `-o` argument to the `docker-compose` command to specify a different output file name. For example:
+
+```
+docker-compose run --rm clipper /workspace/clip.sh "071ba9916a1da2fa|2022-09-04--11-15-52" -s 100 -o clip.mp4
+```
+
+
 ### Teardown
 
 #### 🪟 Docker for Windows
@@ -193,6 +200,8 @@ Common options that may be of interest:
     * Discord Free w/ Video Preview: 8MB
     * Discord Nitro w/ Video Preview: 50MB
     * Modern Discord Nitro + Desktop Max: 500MB
+* You can change the output clip's name with the `-o` argument. e.g. `-o some_clip.mp4`
+  * This is useful if you want to do multiple clips and not overwrite an existing clip in the `shared` folder.
 * Usage of `e2e_long` or "🌮 End-to-end longitudinal (extremely alpha) 🌮"'s is not reflected correctly from the route data. Add `--e2e-long` to turn on that rendering mode with the yellow path in place of the green path. In "🌮 End-to-end longitudinal (extremely alpha) 🌮" mode, the rendered path will be  colored according to longitudinal desires, not latitiude. For example, future braking will be more red.
 
 ## Architecture
