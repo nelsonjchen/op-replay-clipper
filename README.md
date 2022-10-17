@@ -204,6 +204,14 @@ Common options that may be of interest:
   * This is useful if you want to do multiple clips and not overwrite an existing clip in the `shared` folder.
 * Usage of `e2e_long` or "🌮 End-to-end longitudinal (extremely alpha) 🌮"'s is not reflected correctly from the route data. Add `--e2e-long` to turn on that rendering mode with the yellow path in place of the green path. In "🌮 End-to-end longitudinal (extremely alpha) 🌮" mode, the rendered path will be  colored according to longitudinal desires, not latitiude. For example, future braking will be more red.
 
+## Bad or Too Slow Computer
+
+Here's the result you get when you run the clipper on a computer that's too slow or doesn't meet the requirements after all the performance "modifiers". Nothing lines up and it's slow.
+
+From https://discord.com/channels/469524606043160576/1030241716818681897/1030341590201413664
+
+https://user-images.githubusercontent.com/5363/196210351-acc0b235-f87b-4dbc-8b2a-67ca842e52ac.mp4
+
 ## Architecture
 
 Just a single shell script that runs an X11 server, and tmux commands to control the replay executable.  There is `faketime` to make it run reliably without modifications to the pre-built openpilot that is in the image. Docker is used to just make it portable, but also easy to cleanup. Docker-Compose is used to make sure  the `/dev/shm` size is correct.
