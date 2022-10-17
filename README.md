@@ -52,8 +52,8 @@ You can set up your own machine or rent a temporary server. There are many onlin
 ### Time Estimates
 
 * Setup
-  * Machine Setup: 20 minutes
-  * DigitalOcean Droplet/Server Rental: 3-10 minutes
+  * 🌊 DigitalOcean Droplet/Server Rental: 3-10 minutes
+  * 🪟/🔨 Machine Setup: 20 minutes
   * For all setup options, if you've alreadys setup some of the resources beforehand such as having a DigitalOcean account, already have Docker or WSL2 running and so on, you will not need to repeat those steps.
 * Initial Download/Building: About 1-5 minutes. This part may be download intensive and depend on your internet connection. This may be cached as well.
 * [Per Clip](#steps): About 3 minutes to capture a 30 second frame with the UI and compress the 30 second clip to 7.8MB.
