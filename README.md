@@ -46,8 +46,8 @@ You can set up your own machine or rent a temporary server. There are many onlin
 
 ### The Way Or The Path
 
-* For most people, [DigitalOcean][do] is probably the easiest, cleanest, most hygenic way, but you will need to create an account and pay for the resources. The cost is really cheap though as long as you remember to delete the droplet after you are done ([Teardown](#teardown)). The cost is based on how long the server is running and after you destroy the server, no more cost is accrued. Recording a 30 second clip this way will probably cost less than 6-17 cents from the setup and processing time on DigitalOcean. Just remember to [destroy](#teardown) the server when you're done to stop accruing costs.
-* Machine Setup such as Docker for Windows or "DIY" is the way to go if you want to use your own computer and it has the power to do it. If you have some pre-existing expertise and resources, this is the way to go.
+* For most people, [🌊 DigitalOcean][do] is probably the easiest, cleanest, most hygenic way, but you will need to create an account and pay for the resources. The cost is really cheap though as long as you remember to delete the droplet after you are done ([Teardown](#teardown)). The cost is based on how long the server is running and after you destroy the server, no more cost is accrued. Recording a 30 second clip this way will probably cost less than 6-17 cents from the setup and processing time on DigitalOcean. Just remember to [destroy](#teardown) the server when you're done to stop accruing costs.
+* Machine Setup such as 🪟 Docker for Windows or 🔨 "DIY" is the way to go if you want to use your own computer and it has the power to do it. If you have some pre-existing expertise and resources, this is the way to go.
 
 ### Time Estimates
 
