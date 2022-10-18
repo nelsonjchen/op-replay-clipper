@@ -13,7 +13,7 @@ You will need an appropiate computer, either your own or one that is rented for 
 * 8 vCPUs/hyperthreads
 * A working Docker-Compose setup. Docker for Windows will work.
 * Intel or AMD processor.
-  * Emulation of Intel on Apple Silicon with Docker for Mac is too slow to handle the requirements.
+  * Emulation of Intel on Apple Silicon with Docker for Mac is [too slow](#bad-or-too-slow-computer) to handle the requirements.
 * 10 GB of disk space.
 * 100MB/s disk speed.
   * Docker for Mac Intel users currently cannot use the clipper due to Docker's serious shared filesystem CPU overhead.
@@ -64,6 +64,7 @@ You can set up your own machine or rent a temporary server. There are many onlin
 1. Install Ubuntu for WSL2: https://ubuntu.com/tutorials/install-ubuntu-on-wsl2-on-windows-10
 2. Install Docker for Windows: https://docs.docker.com/desktop/install/windows-install/
 3. Open up the Ubuntu terminal and clone this repository: `git clone https://github.com/nelsonjchen/op-replay-clipper/`
+   * For performance reasons, make sure you clone to the Linux filesystem. The default working directory of your home directory in Ubuntu when you open up Ubuntu is adequate.
 4. Change folders to `cd op-replay-clipper`
 5. Continue to [Steps](#steps).
 
