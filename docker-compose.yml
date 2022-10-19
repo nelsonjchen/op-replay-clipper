@@ -23,7 +23,7 @@ services:
     environment:
       - DISPLAY=:0
       - SCALE=1
-    cpuset: 0-7
+    cpuset: 0-3
     mem_limit: 3g
     volumes:
       - ./shared:/shared
