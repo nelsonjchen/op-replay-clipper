@@ -2,22 +2,29 @@
 
 Capture short 30 seconds clips of Openpilot routes with the Openpilot UI included, with the route and seconds marker branded into the clip. No openpilot development environment setup required. Just some computing resources.
 
+A manual left turn and then activating OP:
+
 https://user-images.githubusercontent.com/5363/188810452-47a479c4-fa9a-4037-9592-c6a47f2e1bb1.mp4
+
+
+"🌮 End-to-end longitudinal (extremely alpha) 🌮" (`e2e_long`) Rendering Mode with the `--e2e-long` option:
+
+https://user-images.githubusercontent.com/5363/196816467-39a147ed-885c-4f90-89d4-cc1ff852b8f0.mp4
 
 ## Requirements
 
-Unfortunately, the requirements are quite high.
+The requirements are a bit high.
 
 You will need an appropiate computer, either your own or one that is rented for a few minutes such as one on [DigitalOcean][do], to run this tool.
 
 * 8 vCPUs/hyperthreads
-* A working Docker-Compose setup. Docker for Windows will work.
+  * 4vCPUs/hyperthreads with `--slow-cpu` flag that renders slower to maintain stability
+* A working Docker-Compose setup. Docker for Windows or Docker for Mac will work.
 * Intel or AMD processor.
-  * Emulation of Intel on Apple Silicon with Docker for Mac is [too slow](#bad-or-too-slow-computer) to handle the requirements.
+  * Emulation of Intel on Apple Silicon with Docker for Mac is [too slow](#bad-or-too-slow-computer) to handle the requirements. Please use DigitalOcean or an suitable Intel or AMD machine.
 * 10 GB of disk space.
 * 100MB/s disk speed.
-  * Docker for Mac Intel users currently cannot use the clipper due to Docker's serious shared filesystem CPU overhead.
-  * Docker for Windows users need to clone the repository to the Linux filesystem to meet the requirement.
+  * Docker for Windows users should clone the repository to the Linux filesystem to meet the requirement.
 * A GPU is **not** needed and is also unused in the tool.
 
 There are other notes too regarding the data you want to render:
@@ -35,7 +42,7 @@ The heavy CPU requirement is due to a number of factors:
 
 Even with the higher CPU requirements, it is not enough to run the tooling at full speed on the CPU. Some measures have been done to make clip recording possible.
 
-* Relevant processes are speedhack'd with `faketime` to run at half speed.
+* Relevant processes are speedhack'd with `faketime` to run at half speed by default or quarter speed with the `--slow-cpu` flag.
 * Capture is done in real time but undercranked to simulate full speed.
 
 ## Usage
@@ -112,6 +119,8 @@ You may need to `chmod` the `shared` folder to be writable by the internal Docke
 5. Get a JWT Token from https://jwt.comma.ai. This token will last for a year. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Copy and save the whole thing. This token allows access to routes your Comma connect account has access to. **Keep this token private, do not share it with anyone.**
    * Alternatively, if the route to be rendered is "Public", you can skip this step. Omit the `-j <JWT_TOKEN>` argument from the next step.
 6. Construct and run the `docker-compose` command to run with the working directory set to this repository on your machine.
+   * Add the `--slow-cpu` flag if you are running on a slow CPU. This will reduce the speed of the rendering to maintain stability.
+   * Add the `--e2e-long` flag if you want to render for demonstrating "🌮 End-to-end longitudinal (extremely alpha) 🌮" mode. This will result in a yellow path that changes color according to openpilot's desired longitudinal control. Unfortunately, this current can not be automatically set from replay data.
    1. Fill this template in a text editor, copy it back out once it's filled, and run it.
 
       ```
