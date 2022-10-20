@@ -21,7 +21,7 @@ You will need an appropiate computer, either your own or one that is rented for 
   * 4vCPUs/hyperthreads with `--slow-cpu` flag that renders slower to maintain stability
 * A working Docker-Compose setup. Docker for Windows or Docker for Mac will work.
 * Intel or AMD processor.
-  * Emulation of Intel on Apple Silicon with Docker for Mac is [too slow](#bad-or-too-slow-computer) to handle the requirements. Please use DigitalOcean or an suitable Intel or AMD machine.
+  * Emulation of Intel on Apple Silicon with Docker for Mac is [too slow](#bad-or-too-slow-computer) to handle the requirements. Please use DigitalOcean or a suitable Intel or AMD machine.
 * 10 GB of disk space.
 * 100MB/s disk speed.
   * Docker for Windows users should clone the repository to the Linux filesystem to meet the requirement.
