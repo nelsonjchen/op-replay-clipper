@@ -1,6 +1,6 @@
 # 📽 Openpilot Replay Clipper
 
-Capture short 30 seconds clips of Openpilot routes with the Openpilot UI included, with the route and seconds marker branded into the clip. No openpilot development environment setup required. Just some computing resources.
+Capture short ~30 seconds clips of Openpilot routes with the Openpilot UI included, with the route and seconds marker branded into the clip. No openpilot development environment setup required. Just some computing resources.
 
 A manual left turn and then activating OP:
 
