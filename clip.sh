@@ -227,8 +227,8 @@ cleanup
 
 STARTING_SEC=$_arg_start_seconds
 # Sometimes it takes a bit of time for openpilot drawing to settle in.
-# Calculate optimal smear seconds as starting seconds mod 60 plus 5 seconds.
-SMEAR_AMOUNT=$((($STARTING_SEC % 60) + 5))
+# Calculate optimal smear seconds as starting seconds mod 60 plus 30 seconds.
+SMEAR_AMOUNT=$((($STARTING_SEC % 60) + 30))
 SMEARED_STARTING_SEC=$(($STARTING_SEC - $SMEAR_AMOUNT))
 # SMEARED_STARTING_SEC must be greater than 0
 if [ $SMEARED_STARTING_SEC -lt 0 ]; then
