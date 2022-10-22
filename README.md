@@ -11,7 +11,7 @@ https://user-images.githubusercontent.com/5363/188810452-47a479c4-fa9a-4037-9592
 
 https://user-images.githubusercontent.com/5363/196816467-39a147ed-885c-4f90-89d4-cc1ff852b8f0.mp4
 
-*Note*: The above was a bug report, end-to-end longitudinal will and has been changing.
+*Note*: The above was a bug report and may not reflect the current state of end-to-end longitudinal support. End-to-end longitudinal will be and has been changing.
 
 ## Requirements
 
