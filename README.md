@@ -87,6 +87,7 @@ Note: Pay attention to [Teardown](#teardown). You need to delete this droplet af
 2. Visit https://marketplace.digitalocean.com/apps/docker and click the `Create Docker Droplet` button on the right.
 3. At the droplet creation screen, choose any option with 8 CPUs. Note the prices. They charge by the second by the way. **Remember to destroy the droplet!**
    * <img width="1273" alt="Screen Shot 2022-10-11 at 9 23 42 PM" src="https://user-images.githubusercontent.com/5363/195249619-53828bb6-6c9d-4169-9757-ac11d41a2495.png">
+   * If you cannot choose an option with 8 CPUs, go for the 4 CPUs option. Just add `--slow-cpu` after `clip.sh` in the docker-compose command.
 4. Go through all the options below. Nothing needs to be selected other than the minimum. Any region is fine. Password doesn't matter so anything that satisfies it is fine. No optional options need to be checked.
 5. Once you press `Create Droplet` at the bottom of the Create Droplets screen, click on the droplet you created. Wait for it to be created. You may need to refresh the page once in a while. It'll take about a minute or two.
 6. Once it is up and running, click on the Console link on the right.
