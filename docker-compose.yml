@@ -2,7 +2,7 @@ version: "2.4"
 
 services:
   clipper:
-    image: ghcr.io/nelsonjchen/op-replay-clipper:master
+    image: ghcr.io/nelsonjchen/op-replay-clipper:pin
     pull_policy: always
     shm_size: '1gb'
     tty: true
