@@ -77,6 +77,12 @@ You can set up your own machine or rent a temporary server. There are many onlin
 4. Change folders to `cd op-replay-clipper`
 5. Continue to [Steps](#steps).
 
+#### 🔨 DIY (Misc, I already have Docker, I already run Docker on Linux, I have my own setup, Advanced)
+
+If you are knowledgeable about Docker, Linux, Docker-Compose and whatnot, I'm sure you can figure it out. Just clone this repo down and go through the [Steps](#steps).
+
+You may need to `chmod` the `shared` folder to be writable by the internal Docker user of the image. Just do `777`, it's all temporary anyway.
+
 #### 🌊 DigitalOcean Droplet/VPS
 
 DigitalOcean calls their servers Droplets. The guide will use the term Droplet for simplicity.
@@ -98,12 +104,6 @@ Note: Pay attention to [Teardown](#teardown). You need to delete this droplet af
 9. Run `cd op-replay-clipper`
 10. Run `chmod -R 777 shared`
 11. Continue to [Steps](#steps).
-
-#### 🔨 DIY (Misc, I already have Docker, I already run Docker on Linux, I have my own setup, Advanced)
-
-If you are knowledgeable about Docker, Linux, Docker-Compose and whatnot, I'm sure you can figure it out. Just clone this repo down and go through the [Steps](#steps).
-
-You may need to `chmod` the `shared` folder to be writable by the internal Docker user of the image. Just do `777`, it's all temporary anyway.
 
 ### Steps
 
@@ -152,6 +152,10 @@ The clip files are stored in the `shared` folder. You can retrieve them by:
 
 1. Run `explorer.exe shared` and copy or do whatever you want with `clip.mp4`
 
+##### 🔨 DIY
+
+1. It's in the `shared` folder and named `clip.mp4`.
+
 ##### 🌊 DigitalOcean
 
 1. Run `curl icanhazip.com` and note the IP address
@@ -159,10 +163,6 @@ The clip files are stored in the `shared` folder. You can retrieve them by:
 3. Go to `http://<ip address>:8080/` and download `clip.mp4`.
    * <img width="994" alt="Screen Shot 2022-10-11 at 9 52 53 PM" src="https://user-images.githubusercontent.com/5363/195253322-da9d380e-6bb7-4e38-b2f9-a573974831ab.png">
 4. Stop the web server by pressing `Ctrl+C`.
-
-##### 🔨 DIY
-
-1. It's in the `shared` folder and named `clip.mp4`.
 
 ### Multiple Clips
 
