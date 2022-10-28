@@ -33,7 +33,7 @@ There are other notes too regarding the data you want to render:
 
 * The UI replayed is comma.ai's latest stock UI; routes from forks that differ alot from stock may not render correctly. Your experience may vary.
 * The desired route to be rendered must have been able to upload to Comma.ai servers and must be accessible.
-* You are advised to upload all files of the route to Comma.ai servers before attempting to render a route. If you do not upload all files, the replay will be slow, jerky, and the video quality will be greatly degraded.
+* **You are advised to upload all files of the route to Comma.ai servers before attempting to render a route. If you do not upload all files, the replay will be slow, jerky, and the video quality will be greatly degraded.**
 
 The heavy CPU requirement is due to a number of factors:
 
@@ -48,6 +48,17 @@ Even with the higher CPU requirements, it is not enough to run the tooling at fu
 * Capture is done in real time but undercranked to simulate full speed.
 
 ## Usage
+
+### Pre-Setup
+
+Ensure your drive's files are fully uploaded on https://my.comma.ai. Click `Files` and select the option to upload all files (`Upload ## files`). Make sure it says "`uploaded`".
+
+* Drive is not yet fully uploaded:
+  * <img width="347" alt="Screen Shot 2022-09-06 at 11 55 39 PM" src="https://user-images.githubusercontent.com/5363/188815682-6694c2f8-1d77-468e-9152-75a709477c9a.png">
+* Drive is fully uploaded:
+  * <img width="316" alt="Screen Shot 2022-09-07 at 12 27 26 AM" src="https://user-images.githubusercontent.com/5363/188816174-51045496-4614-4050-b911-c4abb987c5fe.png">
+* Note: Driver camera is not required to be enabled for recording or uploading for this. It's easier to just hit that "Upload all" button though.
+* Note: If you do not upload all the files, the replay will be slow, jerky, and the video quality will be greatly degraded.
 
 ### Setup
 
@@ -108,20 +119,13 @@ Note: Pay attention to [Teardown](#teardown). You need to delete this droplet af
 ### Steps
 
 1. Find the drive you wish to take a clip from on https://my.comma.ai.
-2. Ensure your drive's files are fully uploaded on https://my.comma.ai. Click `Files` and select the option to upload all files (`Upload ## files`).
-   * Not yet uploaded:
-     * <img width="347" alt="Screen Shot 2022-09-06 at 11 55 39 PM" src="https://user-images.githubusercontent.com/5363/188815682-6694c2f8-1d77-468e-9152-75a709477c9a.png">
-   * Uploaded:
-     * <img width="316" alt="Screen Shot 2022-09-07 at 12 27 26 AM" src="https://user-images.githubusercontent.com/5363/188816174-51045496-4614-4050-b911-c4abb987c5fe.png">
-   * Note: Driver camera is not required to be enabled for recording or uploading for this. It's easier to just hit that "Upload all" button though.
-   * Note: If you do not upload the files, the replay will be slow, jerky, and the video quality will be greatly degraded.
-3. Find the starting seconds. The drive's timeline will have a widget below your cursor that's "segment number, local time". Segments are made every minute. So scrub it, and do a little mental arithmetic to get the starting second. I usually do "60 * segment number + offset" as my calculation.
+2. Find the starting seconds. The drive's timeline will have a widget below your cursor that's "segment number, local time". Segments are made every minute. So scrub it, and do a little mental arithmetic to get the starting second. I usually do "60 * segment number + offset" as my calculation.
    * <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
-4. Get the route ID from `More Info`. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52`. Note the omission of the `--1`. That's the segment identifier that is not needed.
+3. Get the route ID from `More Info`. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52`. Note the omission of the `--1`. That's the segment identifier that is not needed.
    * <img width="336" alt="image" src="https://user-images.githubusercontent.com/5363/188817040-5341e1af-2176-47ad-87f3-ba0a3d88a32a.png">
-5. Get a JWT Token from https://jwt.comma.ai. This token will last for a year. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Copy and save the whole thing. This token allows access to routes your Comma connect account has access to. **Keep this token private, do not share it with anyone.**
+4. Get a JWT Token from https://jwt.comma.ai. This token will last for a year. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Copy and save the whole thing. This token allows access to routes your Comma connect account has access to. **Keep this token private, do not share it with anyone.**
    * Alternatively, if the route to be rendered is "Public", you can skip this step. Omit the `-j <JWT_TOKEN>` argument from the next step.
-6. Construct and run the `docker-compose` command to run with the working directory set to this repository on your machine.
+5. Construct and run the `docker-compose` command to run with the working directory set to this repository on your machine.
    * Add the `--slow-cpu` flag if you are running on a slow CPU. This will reduce the speed of the rendering to maintain stability.
    * Add the `--e2e-long` flag if you want to render for demonstrating "🌮 End-to-end longitudinal (extremely alpha) 🌮" mode. This will result in a yellow path that changes color according to openpilot's desired longitudinal control. Unfortunately, this current can not be automatically set from replay data.
    1. Fill this template in a text editor, copy it back out once it's filled, and run it.
@@ -137,7 +141,7 @@ Note: Pay attention to [Teardown](#teardown). You need to delete this droplet af
         docker-compose run --rm clipper /workspace/clip.sh -j eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzNDU2Nzg5LCJuYW1lIjoiSm9zZXBoIn0.OpOSSw7e485LOP5PrzScxHb7SR6sAOMRckfFwi4rp7o "071ba9916a1da2fa|2022-09-04--11-15-52" -s 180
         ```
 
-7. Wait 3 minutes (more if it's the first time), and a few files will appear in the `shared` folder.
+6. Wait 3 minutes (more if it's the first time), and a few files will appear in the `shared` folder.
    * `clip.mkv` - 1GB+ Uncompressed video clip in RGB
    * `clip.mp4` - ~7.8MB file of the clip for uploading with Discord Free. It is encoded for maximum compatibility.
    * The rest are intermediaries such as logs/databases from doing a two-pass encoding to target a 7.8MB file size. They are irrelevant.
