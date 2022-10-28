@@ -76,7 +76,7 @@ You can set up your own machine or rent a temporary server. There are many onlin
   * 🌊 DigitalOcean Droplet/Server Rental: 3-10 minutes
   * For all setup options, if you've already setup some of the resources beforehand such as having a DigitalOcean account, already have Docker or WSL2 running and so on, you will not need to repeat those steps.
 * Initial Download/Building: About 1-5 minutes. This part may be download intensive and depend on your internet connection. This may be cached as well.
-* [Per Clip](#steps): About 3 minutes to capture a 30 second frame with the UI and compress the 30 second clip to 7.8MB.
+* [Per Clip](#steps): About 6 minutes to capture a 30 second frame with the UI and compress the 30 second clip to 7.8MB.
 * [Teardown and Cleanup](#teardown): 1 minute
 
 #### 🪟 Docker for Windows
@@ -211,7 +211,7 @@ Run the script with `-h` to get a usage text to help with more options.
 Common options that may be of interest:
 
 * You can change the length from 30 seconds to anything with the `-l` argument. e.g. `-l 60` for a minute
-  * Be aware that increasing the clip length proportionally doubles the time it takes to record. 60 seconds takes 2 minutes to record. 5 minutes will take 10 minutes! 10, 20!
+  * Be aware that increasing the clip length proportionally doubles the time it takes to record. 60 seconds takes 4 minutes to record. 5 minutes will take 20 minutes! 10, 40!
 * You can change the target file size for the clip with `-m` for the size in MB. e.g. `-m 50` to target 50MB
   * For reference, here are some common target file sizes
     * Discord Free w/ Video Preview: 8MB
