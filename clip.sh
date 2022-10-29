@@ -7,7 +7,7 @@
 # ARG_OPTIONAL_SINGLE([target-mb],[m],[Target converted file size in MB],[8])
 # ARG_OPTIONAL_BOOLEAN([e2e-long],[e],[Turn on or off e2e long],[off])
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
-# ARG_OPTIONAL_SINGLE([smear-amount],[],[Amount of seconds to smear the clip start by before recording starts],[5])
+# ARG_OPTIONAL_SINGLE([smear-amount],[],[Amount of seconds to smear the clip start by before recording starts],[10])
 # ARG_OPTIONAL_BOOLEAN([slow-cpu],[],[Turn on or off slower CPU mode at 0.2x for ~4 core CPUs],[off])
 # ARG_OPTIONAL_SINGLE([video-cwd],[c],[video working and output directory],[/shared])
 # ARG_OPTIONAL_SINGLE([output],[o],[output clip name],[clip.mp4])
@@ -45,7 +45,7 @@ _arg_length_seconds="30"
 _arg_target_mb="8"
 _arg_e2e_long="off"
 _arg_jwt_token=
-_arg_smear_amount="5"
+_arg_smear_amount="10"
 _arg_slow_cpu="off"
 _arg_video_cwd="/shared"
 _arg_output="clip.mp4"
