@@ -267,12 +267,6 @@ if [ "$_arg_slow_cpu" = "on" ]; then
 		RECORD_FRAMERATE=4
 fi
 
-# Starting seconds must be greater than 30
-if [ "$STARTING_SEC" -lt $SMEAR_AMOUNT ]; then
-    echo "Starting seconds must be greater than $SMEAR_AMOUNT"
-    exit 1
-fi
-
 pushd /home/batman/openpilot
 
 if [ ! -z "$JWT_AUTH" ]; then
