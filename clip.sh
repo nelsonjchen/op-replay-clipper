@@ -281,7 +281,7 @@ tmux new-window -n ui -t clipper: "faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./se
 
 # Pause replay and let it download the route
 tmux send-keys -t clipper:replay Space
-sleep 3
+sleep 6
 
 tmux send-keys -t clipper:replay Enter "$SMEARED_STARTING_SEC" Enter
 tmux send-keys -t clipper:replay Space
