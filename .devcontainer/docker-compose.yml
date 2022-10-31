@@ -1,7 +1,10 @@
 version: '2.4'
 services:
-  # Update this to the name of the service you want to work with in your docker-compose.yml file
   clipper:
+    pull_policy: missing
+
+  # Update this to the name of the service you want to work with in your docker-compose.yml file
+  dev:
     # If you want add a non-root user to your Dockerfile, you can use the "remoteUser"
     # property in devcontainer.json to cause VS Code its sub-processes (terminals, tasks,
     # debugging) to execute as the user. Uncomment the next line if you want the entire
@@ -32,8 +35,6 @@ services:
       - SYS_PTRACE
     security_opt:
       - seccomp:unconfined
-    environment:
-      - GOOGLE_APPLICATION_CREDENTIALS="/shared/service_account.json"
     # Overrides default command so things don't shut down after the process ends.
     command: /bin/sh -c "while sleep 1000; do :; done"
 
