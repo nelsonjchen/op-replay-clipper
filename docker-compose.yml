@@ -12,7 +12,19 @@ services:
     mem_limit: 3g
     volumes:
       - ./shared:/shared
-      - ./:/workspace
+      # - ./:/workspace
+  clipper_pin:
+    # Pre-partial widecam; for stable
+    image: ghcr.io/nelsonjchen/op-replay-clipper:pin
+    shm_size: '1gb'
+    tty: true
+    environment:
+      - DISPLAY=:0
+      - SCALE=1
+    mem_limit: 3g
+    volumes:
+      - ./shared:/shared
+      # - ./:/workspace
   dev:
     build:
       context: .
