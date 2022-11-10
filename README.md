@@ -2,7 +2,7 @@
 
 Capture short ~30 seconds clips of Openpilot routes with the Openpilot UI included, with the route and seconds marker branded into the clip. No openpilot development environment setup required. Just some computing resources.
 
-Useful for posting replays with the UI including paths and lane-lines in the [Openpilot Discord](https://discord.comma.ai).
+Useful for posting replays with the UI including path and lane-lines in the [comma.ai Discord's #openpilot-experience channel](https://discord.comma.ai) or anywhere else taking video.
 
 A manual left turn and then activating OP:
 
