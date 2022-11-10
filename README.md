@@ -250,6 +250,6 @@ Just a single shell script that runs an X11 server, and tmux commands to control
 
 ## Credits
 
-The real MVP is @deanlee for the replay tool in the openpilot project. It's capability is far beyond this script. This script is just a wrapper around the replay tool to make it easy to use.
+The real MVP is @deanlee for the replay tool in the openpilot project. The level of effort to develop the replay tool is far beyond this script. The script is just a wrapper around the replay tool to make it easy to use for clipping videos.
 
 https://github.com/commaai/openpilot/blame/master/tools/replay/main.cc
