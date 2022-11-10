@@ -246,3 +246,10 @@ https://user-images.githubusercontent.com/5363/196210351-acc0b235-f87b-4dbc-8b2a
 Just a single shell script that runs an X11 server, and tmux commands to control the replay executable.  There is `faketime` to make it run reliably without modifications to the pre-built openpilot that is in the image. Docker is used to just make it portable, but also easy to cleanup. Docker-Compose is used to make sure  the `/dev/shm` size is correct and to specify the use of already pre-built images for general use or backwards compatibility use.
 
 [do]: https://www.digitalocean.com/
+
+
+## Credits
+
+The real MVP is @deanlee for the replay tool in the openpilot project. It's capability is far beyond this script. This script is just a wrapper around the replay tool to make it easy to use.
+
+https://github.com/commaai/openpilot/blame/master/tools/replay/main.cc
