@@ -9,7 +9,7 @@ A manual left turn and then activating OP:
 https://user-images.githubusercontent.com/5363/188810452-47a479c4-fa9a-4037-9592-c6a47f2e1bb1.mp4
 
 
-"Experimental UI Mode" (`experimental`) Rendering Mode with the `--experimental` option:
+"Experimental Mode" (`experimental`) UI Rendering Mode with the `--experimental` option:
 
 https://user-images.githubusercontent.com/5363/196816467-39a147ed-885c-4f90-89d4-cc1ff852b8f0.mp4
 
