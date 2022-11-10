@@ -2,16 +2,18 @@
 
 Capture short ~30 seconds clips of Openpilot routes with the Openpilot UI included, with the route and seconds marker branded into the clip. No openpilot development environment setup required. Just some computing resources.
 
+Useful for posting replays with the UI including paths and lane-lines in the [Openpilot Discord](https://discord.comma.ai).
+
 A manual left turn and then activating OP:
 
 https://user-images.githubusercontent.com/5363/188810452-47a479c4-fa9a-4037-9592-c6a47f2e1bb1.mp4
 
 
-"🌮 End-to-end longitudinal (extremely alpha) 🌮" (`e2e_long`) Rendering Mode with the `--e2e-long` option:
+"Experimental UI Mode" (`experimental`) Rendering Mode with the `--experimental` option:
 
 https://user-images.githubusercontent.com/5363/196816467-39a147ed-885c-4f90-89d4-cc1ff852b8f0.mp4
 
-*Note*: The above was a bug report and may not reflect the current state of end-to-end longitudinal support. End-to-end longitudinal will be and has been changing.
+*Note*: The above clip was a bug report and may not reflect the current state of end-to-end longitudinal support. End-to-end longitudinal is under heavy development.
 
 ## Requirements
 
@@ -31,9 +33,9 @@ You will need an appropiate computer, either your own or one that is rented for 
 
 There are other notes too regarding the data you want to render:
 
-* The UI replayed is comma.ai's latest stock UI; routes from forks that differ alot from stock may not render correctly. Your experience may vary.
+* The UI replayed is comma.ai's latest stock UI; routes from forks that differ alot from stock may not render correctly. Your experience may vary. Please make sure to note these replays are from fork data and may not be representative of the stock behavior.
 * The desired route to be rendered must have been able to upload to Comma.ai servers and must be accessible.
-* **You are advised to upload all files of the route to Comma.ai servers before attempting to render a route. If you do not upload all files, the replay will be slow, jerky, and the video quality will be greatly degraded.**
+* **You are advised to upload all files of the route to Comma.ai servers before attempting to render a route. If you do not upload all files, the replay will not render past the starting UI.**
 
 The heavy CPU requirement is due to a number of factors:
 
@@ -44,7 +46,7 @@ The heavy CPU requirement is due to a number of factors:
 
 Even with the higher CPU requirements, it is not enough to run the tooling at full speed on the CPU. Some measures have been done to make clip recording possible.
 
-* Relevant processes are speedhack'd with `faketime` to run at half speed by default or quarter speed with the `--slow-cpu` flag.
+* Relevant processes are speedhack'd with `faketime` to run at 0.4x by default or 0.2x with the `--slow-cpu` flag.
 * Capture is done in real time but undercranked to simulate full speed.
 
 ## Usage
@@ -127,7 +129,7 @@ Note: Pay attention to [Teardown](#teardown). You need to delete this droplet af
    * Alternatively, if the route to be rendered is "Public", you can skip this step. Omit the `-j <JWT_TOKEN>` argument from the next step.
 5. Construct and run the `docker-compose` command to run with the working directory set to this repository on your machine.
    * Add the `--slow-cpu` flag if you are running on a slow CPU. This will reduce the speed of the rendering to maintain stability.
-   * Add the `--e2e-long` flag if you want to render for demonstrating "🌮 End-to-end longitudinal (extremely alpha) 🌮" mode. This will result in a yellow path that changes color according to openpilot's desired longitudinal control. Unfortunately, this current can not be automatically set from replay data.
+   * Add the `--experimental` flag if you want to render with the "Experimental mode" UI. At the moment, this will result in a yellow path that changes color according to openpilot's desired longitudinal control. Unfortunately, this current can not be automatically set from replay data.
    1. Fill this template in a text editor, copy it back out once it's filled, and run it.
 
       ```
@@ -178,6 +180,15 @@ Alternatively, you can also append a `-o` argument to the `docker-compose` comma
 docker-compose run --rm clipper /workspace/clip.sh "071ba9916a1da2fa|2022-09-04--11-15-52" -s 100 -o clip.mp4
 ```
 
+### Older Openpilot Versions (0.8.16 and older)
+
+* Drives from these older versions do not have a calibrated wide camera. Instead of `clipper` in the `docker-compose` command, use `clipper_pin` to render the video with an older version of the openpilot UI pinned that does not switch to and render the wide camera.
+
+### Development 
+
+Use the `dev` service in the `docker-compose.yml` file to run the `clip.sh` script in a development environment. This will allow you to make changes to the `clip.sh` script and see the changes reflected in the container.
+
+Additionally, a Devcontainer is provided for VSCode users. This will allow you to run the `clip.sh` script in a development environment with the same dependencies installed as the Docker container.
 
 ### Teardown
 
@@ -215,11 +226,12 @@ Common options that may be of interest:
 * You can change the target file size for the clip with `-m` for the size in MB. e.g. `-m 50` to target 50MB
   * For reference, here are some common target file sizes
     * Discord Free w/ Video Preview: 8MB
-    * Discord Nitro w/ Video Preview: 50MB
+    * Discord Nitro or Server Boost Level 2 w/ Video Preview: 50MB
+      * The comma.ai Discord has been boosted to Level 2, so you can upload 50MB files there.
     * Modern Discord Nitro + Desktop Max: 500MB
 * You can change the output clip's name with the `-o` argument. e.g. `-o some_clip.mp4`
   * This is useful if you want to do multiple clips and not overwrite an existing clip in the `shared` folder.
-* Usage of `e2e_long` or "🌮 End-to-end longitudinal (extremely alpha) 🌮"'s is not reflected correctly from the route data. Add `--e2e-long` to turn on that rendering mode with the yellow path in place of the green path. In "🌮 End-to-end longitudinal (extremely alpha) 🌮" mode, the rendered path will be  colored according to longitudinal desires, not latitiude. For example, future braking will be more red.
+* Usage of `--experimental` or "Experimental mode" is not reflected correctly from the route data. Add `--experimental` to turn on that rendering mode with the yellow path in place of the green path. In "Experimental mode", the rendered path will be colored according to longitudinal desires, not latitiude. For example, future braking will be more red.
 
 ## Bad or Too Slow Computer
 
@@ -231,6 +243,6 @@ https://user-images.githubusercontent.com/5363/196210351-acc0b235-f87b-4dbc-8b2a
 
 ## Architecture
 
-Just a single shell script that runs an X11 server, and tmux commands to control the replay executable.  There is `faketime` to make it run reliably without modifications to the pre-built openpilot that is in the image. Docker is used to just make it portable, but also easy to cleanup. Docker-Compose is used to make sure  the `/dev/shm` size is correct.
+Just a single shell script that runs an X11 server, and tmux commands to control the replay executable.  There is `faketime` to make it run reliably without modifications to the pre-built openpilot that is in the image. Docker is used to just make it portable, but also easy to cleanup. Docker-Compose is used to make sure  the `/dev/shm` size is correct and to specify the use of already pre-built images for general use or backwards compatibility use.
 
 [do]: https://www.digitalocean.com/
