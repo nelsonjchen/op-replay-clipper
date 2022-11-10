@@ -5,7 +5,7 @@
 # ARG_OPTIONAL_SINGLE([start-seconds],[s],[Seconds to start at],[60])
 # ARG_OPTIONAL_SINGLE([length-seconds],[l],[Clip length],[30])
 # ARG_OPTIONAL_SINGLE([target-mb],[m],[Target converted file size in MB],[8])
-# ARG_OPTIONAL_BOOLEAN([e2e-long],[e],[Turn on or off e2e long],[off])
+# ARG_OPTIONAL_BOOLEAN([experimental],[e],[Turn on or off experimental mode ui],[off])
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
 # ARG_OPTIONAL_SINGLE([smear-amount],[],[Amount of seconds to smear the clip start by before recording starts],[10])
 # ARG_OPTIONAL_BOOLEAN([slow-cpu],[],[Turn on or off slower CPU mode at 0.2x for ~4 core CPUs],[off])
@@ -43,7 +43,7 @@ _positionals=()
 _arg_start_seconds="60"
 _arg_length_seconds="30"
 _arg_target_mb="8"
-_arg_e2e_long="off"
+_arg_experimental="off"
 _arg_jwt_token=
 _arg_smear_amount="10"
 _arg_slow_cpu="off"
@@ -54,14 +54,14 @@ _arg_output="clip.mp4"
 print_help()
 {
 	printf '%s\n' "See README at https://github.com/nelsonjchen/op-replay-clipper/"
-	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-e|--(no-)e2e-long] [-j|--jwt-token <arg>] [--smear-amount <arg>] [--(no-)slow-cpu] [-c|--video-cwd <arg>] [-o|--output <arg>] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-e|--(no-)experimental] [-j|--jwt-token <arg>] [--smear-amount <arg>] [--(no-)slow-cpu] [-c|--video-cwd <arg>] [-o|--output <arg>] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
 	printf '\t%s\n' "-m, --target-mb: Target converted file size in MB (default: '8')"
-	printf '\t%s\n' "-e, --e2e-long, --no-e2e-long: Turn on or off e2e long (off by default)"
+	printf '\t%s\n' "-e, --experimental, --no-experimental: Turn on or off experimental mode ui (off by default)"
 	printf '\t%s\n' "-j, --jwt-token: JWT Auth token to use (get token from https://jwt.comma.ai) (no default)"
-	printf '\t%s\n' "--smear-amount: Amount of seconds to smear the clip start by before recording starts (default: '5')"
+	printf '\t%s\n' "--smear-amount: Amount of seconds to smear the clip start by before recording starts (default: '10')"
 	printf '\t%s\n' "--slow-cpu, --no-slow-cpu: Turn on or off slower CPU mode at 0.2x for ~4 core CPUs (off by default)"
 	printf '\t%s\n' "-c, --video-cwd: video working and output directory (default: '/shared')"
 	printf '\t%s\n' "-o, --output: output clip name (default: 'clip.mp4')"
@@ -109,12 +109,12 @@ parse_commandline()
 			-m*)
 				_arg_target_mb="${_key##-m}"
 				;;
-			-e|--no-e2e-long|--e2e-long)
-				_arg_e2e_long="on"
-				test "${1:0:5}" = "--no-" && _arg_e2e_long="off"
+			-e|--no-experimental|--experimental)
+				_arg_experimental="on"
+				test "${1:0:5}" = "--no-" && _arg_experimental="off"
 				;;
 			-e*)
-				_arg_e2e_long="on"
+				_arg_experimental="on"
 				_next="${_key##-e}"
 				if test -n "$_next" -a "$_next" != "$_key"
 				then
@@ -247,7 +247,7 @@ fi
 RECORDING_LENGTH=$_arg_length_seconds
 # Cleanup trailing segment count. Seconds is what matters
 ROUTE=$(echo "$_arg_route_id" | sed 's/--[0-9]$//')
-RENDER_E2E_LONG=$_arg_e2e_long
+RENDER_EXPERIMENTAL_MODE=$_arg_experimental
 JWT_AUTH=$_arg_jwt_token
 VIDEO_CWD=$_arg_video_cwd
 VIDEO_RAW_OUTPUT=$VIDEO_CWD/clip.mkv
@@ -295,11 +295,11 @@ overlay /tmp/overlay.txt &
 # Record with ffmpeg
 mkdir -p "$VIDEO_CWD"
 pushd "$VIDEO_CWD"
-# Render with e2e_long
-if [ "$RENDER_E2E_LONG" = "on" ]; then
-	echo -n "1" > ~/.comma/params/d/EndToEndLong
+# Render with experimental_mode
+if [ "$RENDER_EXPERIMENTAL_MODE" = "on" ]; then
+	echo -n "1" > ~/.comma/params/d/ExperimentalMode
 else
-	echo -n "0" > ~/.comma/params/d/EndToEndLong
+	echo -n "0" > ~/.comma/params/d/ExperimentalMode
 fi
 # Make sure the UI runs at full speed.
 nice -n 10 ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"
