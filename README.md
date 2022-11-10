@@ -1,6 +1,6 @@
 # 📽 Openpilot Replay Clipper
 
-Capture short ~30 seconds clips of Openpilot routes with the Openpilot UI included, with the route and seconds marker branded into the clip. No openpilot development environment setup required. Just some computing resources.
+Capture short ~30 seconds clips of [Openpilot][op] routes with the Openpilot UI included, with the route and seconds marker branded into the clip. No openpilot development environment setup required. Just some computing resources.
 
 Useful for posting replays with the UI including path and lane-lines in the [comma.ai Discord's #openpilot-experience channel](https://discord.comma.ai) or anywhere else taking video.
 
@@ -245,7 +245,6 @@ https://user-images.githubusercontent.com/5363/196210351-acc0b235-f87b-4dbc-8b2a
 
 Just a single shell script that runs an X11 server, and tmux commands to control the replay executable.  There is `faketime` to make it run reliably without modifications to the pre-built openpilot that is in the image. Docker is used to just make it portable, but also easy to cleanup. Docker-Compose is used to make sure  the `/dev/shm` size is correct and to specify the use of already pre-built images for general use or backwards compatibility use.
 
-[do]: https://www.digitalocean.com/
 
 
 ## Credits
@@ -253,3 +252,6 @@ Just a single shell script that runs an X11 server, and tmux commands to control
 The real MVP is @deanlee for the replay tool in the openpilot project. The level of effort to develop the replay tool is far beyond this script. The script is just a wrapper around the replay tool to make it easy to use for clipping videos.
 
 https://github.com/commaai/openpilot/blame/master/tools/replay/main.cc
+
+[do]: https://www.digitalocean.com/
+[op]: https://github.com/commaai/openpilot
