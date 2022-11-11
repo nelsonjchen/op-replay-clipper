@@ -1,6 +1,6 @@
 # 📽 Openpilot Replay Clipper
 
-Capture short ~30 seconds clips of [Openpilot][op] routes with the Openpilot UI included, with the route and seconds marker branded into the clip. No openpilot development environment setup required. Just some computing resources.
+Capture short ~30 seconds clips of [openpilot][op] routes with the openpilot UI included, with the route and seconds marker branded into the clip. No openpilot development environment setup required. Just some computing resources.
 
 Useful for posting replays with the UI including path and lane-lines in the [comma.ai Discord's #openpilot-experience channel](https://discord.comma.ai) or anywhere else taking video.
 
