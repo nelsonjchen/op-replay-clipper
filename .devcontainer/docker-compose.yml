@@ -1,8 +1,5 @@
 version: '2.4'
 services:
-  clipper:
-    pull_policy: missing
-
   # Update this to the name of the service you want to work with in your docker-compose.yml file
   dev:
     # If you want add a non-root user to your Dockerfile, you can use the "remoteUser"
@@ -37,4 +34,13 @@ services:
       - seccomp:unconfined
     # Overrides default command so things don't shut down after the process ends.
     command: /bin/sh -c "while sleep 1000; do :; done"
-
+    build:
+      context: .
+      target: clipper
+    ports:
+      - "5900:5900"
+    shm_size: '1gb'
+    tty: true
+    environment:
+      - DISPLAY=:0
+      - SCALE=1        
