@@ -35,7 +35,7 @@ services:
     # Overrides default command so things don't shut down after the process ends.
     command: /bin/sh -c "while sleep 1000; do :; done"
     build:
-      context: .
+      context: ../
       target: clipper
     ports:
       - "5900:5900"
