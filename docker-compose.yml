@@ -10,8 +10,9 @@ services:
       - DISPLAY=:0
       - SCALE=1
     mem_limit: 3g
+    working_dir: /workspace
     volumes:
-      - ./shared:/shared
+      - ./shared:/workspace/shared
       # - ./:/workspace
   clipper_pin:
     # Pre-partial widecam; for stable
@@ -22,8 +23,9 @@ services:
       - DISPLAY=:0
       - SCALE=1
     mem_limit: 3g
+    working_dir: /workspace
     volumes:
-      - ./shared:/shared
+      - ./shared:/workspace/shared
       # - ./:/workspace
   dev:
     build:
@@ -38,6 +40,7 @@ services:
       - SCALE=1
     # cpuset: 0-3
     mem_limit: 3g
+    working_dir: /workspace
     volumes:
-      - ./shared:/shared
+      - ./shared:/workspace/shared
       - ./:/workspace
