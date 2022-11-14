@@ -184,7 +184,7 @@ docker-compose run --rm clipper /workspace/clip.sh "071ba9916a1da2fa|2022-09-04-
 
 * Drives from these older versions do not have a calibrated wide camera. Instead of `clipper` in the `docker-compose` command, use `clipper_pin` to render the video with an older version of the openpilot UI pinned that does not switch to and render the wide camera.
 
-### Development 
+### Development
 
 Use the `dev` service in the `docker-compose.yml` file to run the `clip.sh` script in a development environment. This will allow you to make changes to the `clip.sh` script and see the changes reflected in the container.
 
@@ -231,6 +231,7 @@ Common options that may be of interest:
     * Modern Discord Nitro + Desktop Max: 500MB
 * You can change the output clip's name with the `-o` argument. e.g. `-o some_clip.mp4`
   * This is useful if you want to do multiple clips and not overwrite an existing clip in the `shared` folder.
+* You can use [ntfy.sh](https://ntfy.sh) to send a notification to yourself to your phone or desktop when rendering a clip is done. Pass in a topic with the `-n` argument and it will be called when the clip has finished rendering. Pick a unique topic as it is like a "password". See the [ntfy.sh](https://ntfy.sh) docs for more info and setup.
 * Usage of `--experimental` or "Experimental mode" is not reflected correctly from the route data. Add `--experimental` to turn on that rendering mode with the yellow path in place of the green path. In "Experimental mode", the rendered path will be colored according to longitudinal desires, not latitiude. For example, future braking will be more red.
 
 ## Bad or Too Slow Computer
