@@ -2,11 +2,16 @@
 // https://github.com/microsoft/vscode-dev-containers/tree/v0.245.0/containers/docker-existing-docker-compose
 // If you want to run as a non-root user in the container, see .devcontainer/docker-compose.yml.
 {
+	// Set requirements for codespaces usage.
+	"hostRequirements": {
+		"cpus": 8,
+		"memory": "4gb",
+		"storage": "16gb" 
+ },
 	"name": "Docker Compose",
 	// Update the 'dockerComposeFile' list if you have more compose files or use different names.
 	// The .devcontainer/docker-compose.yml file contains any overrides you need/want to make.
 	"dockerComposeFile": [
-		"../docker-compose.yml",
 		"docker-compose.yml"
 	],
 	// The 'service' property is the name of the service for the container that VS Code should
