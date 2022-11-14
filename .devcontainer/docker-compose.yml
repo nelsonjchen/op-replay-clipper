@@ -37,8 +37,6 @@ services:
     build:
       context: ../
       target: clipper
-    ports:
-      - "5900:5900"
     shm_size: '1gb'
     tty: true
     environment:
