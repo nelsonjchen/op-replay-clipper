@@ -22,18 +22,6 @@ RUN apt-get update && apt-get install -y \
 # Add overlay
 RUN git clone https://github.com/ftorkler/x11-overlay --depth 1 && make -C x11-overlay && cp x11-overlay/bin/overlay /usr/local/bin
 
-# Add Google Stuff
-# Downloading gcloud package
-RUN curl https://dl.google.com/dl/cloudsdk/release/google-cloud-sdk.tar.gz > /tmp/google-cloud-sdk.tar.gz
-
-# Installing the package
-RUN mkdir -p /usr/local/gcloud \
-  && tar -C /usr/local/gcloud -xvf /tmp/google-cloud-sdk.tar.gz \
-  && /usr/local/gcloud/google-cloud-sdk/install.sh
-
-# Adding the package path to local
-ENV PATH $PATH:/usr/local/gcloud/google-cloud-sdk/bin
-
 ARG USERNAME=robin
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
