@@ -329,5 +329,5 @@ ctrl_c
 
 # If _arg_ntfysh is defined, send a notification to a ntfy.sh topic
 if [ ! -z "$_arg_ntfysh" ]; then
-	curl -X POST -H "Title: Rendering Complete" -d "Finished rendering $VIDEO_OUTPUT" "https://ntfy.sh/$_arg_ntfysh"
+	curl -X POST -H "Title: Rendering Complete" -d "Finished rendering $ROUTE to $VIDEO_OUTPUT" "https://ntfy.sh/$_arg_ntfysh"
 fi
