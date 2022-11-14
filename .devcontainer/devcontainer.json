@@ -4,7 +4,7 @@
 {
 	// Set requirements for codespaces usage.
 	"hostRequirements": {
-		"cpus": 8,
+		"cpus": 4,
 		"memory": "4gb",
 		"storage": "16gb" 
  },
