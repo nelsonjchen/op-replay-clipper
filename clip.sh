@@ -8,6 +8,7 @@
 # ARG_OPTIONAL_BOOLEAN([experimental],[e],[Turn on or off experimental mode ui],[off])
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
 # ARG_OPTIONAL_SINGLE([smear-amount],[],[Amount of seconds to smear the clip start by before recording starts],[10])
+# ARG_OPTIONAL_SINGLE([ntfysh],[n],[ntfy.sh topic to post to when clip has completed rendering])
 # ARG_OPTIONAL_BOOLEAN([slow-cpu],[],[Turn on or off slower CPU mode at 0.2x for ~4 core CPUs],[off])
 # ARG_OPTIONAL_SINGLE([video-cwd],[c],[video working and output directory],[./shared])
 # ARG_OPTIONAL_SINGLE([output],[o],[output clip name],[clip.mp4])
@@ -32,7 +33,7 @@ die()
 
 begins_with_short_option()
 {
-	local first_option all_short_options='slmejcoh'
+	local first_option all_short_options='slmejncoh'
 	first_option="${1:0:1}"
 	test "$all_short_options" = "${all_short_options/$first_option/}" && return 1 || return 0
 }
@@ -46,6 +47,7 @@ _arg_target_mb="8"
 _arg_experimental="off"
 _arg_jwt_token=
 _arg_smear_amount="10"
+_arg_ntfysh=
 _arg_slow_cpu="off"
 _arg_video_cwd="./shared"
 _arg_output="clip.mp4"
@@ -54,7 +56,7 @@ _arg_output="clip.mp4"
 print_help()
 {
 	printf '%s\n' "See README at https://github.com/nelsonjchen/op-replay-clipper/"
-	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-e|--(no-)experimental] [-j|--jwt-token <arg>] [--smear-amount <arg>] [--(no-)slow-cpu] [-c|--video-cwd <arg>] [-o|--output <arg>] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-e|--(no-)experimental] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [--(no-)slow-cpu] [-c|--video-cwd <arg>] [-o|--output <arg>] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
@@ -62,6 +64,7 @@ print_help()
 	printf '\t%s\n' "-e, --experimental, --no-experimental: Turn on or off experimental mode ui (off by default)"
 	printf '\t%s\n' "-j, --jwt-token: JWT Auth token to use (get token from https://jwt.comma.ai) (no default)"
 	printf '\t%s\n' "--smear-amount: Amount of seconds to smear the clip start by before recording starts (default: '10')"
+	printf '\t%s\n' "-n, --ntfysh: ntfy.sh topic to post to when clip has completed rendering (no default)"
 	printf '\t%s\n' "--slow-cpu, --no-slow-cpu: Turn on or off slower CPU mode at 0.2x for ~4 core CPUs (off by default)"
 	printf '\t%s\n' "-c, --video-cwd: video working and output directory (default: './shared')"
 	printf '\t%s\n' "-o, --output: output clip name (default: 'clip.mp4')"
@@ -139,6 +142,17 @@ parse_commandline()
 				;;
 			--smear-amount=*)
 				_arg_smear_amount="${_key##--smear-amount=}"
+				;;
+			-n|--ntfysh)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_ntfysh="$2"
+				shift
+				;;
+			--ntfysh=*)
+				_arg_ntfysh="${_key##--ntfysh=}"
+				;;
+			-n*)
+				_arg_ntfysh="${_key##-n}"
 				;;
 			--no-slow-cpu|--slow-cpu)
 				_arg_slow_cpu="on"
@@ -312,3 +326,8 @@ ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yu
 ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 2 -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 
 ctrl_c
+
+# If _arg_ntfysh is defined, send a notification to a ntfy.sh topic
+if [ ! -z "$_arg_ntfysh" ]; then
+	curl -X POST -H "Title: Rendering Complete" -d "Finished rendering $VIDEO_OUTPUT" "https://ntfy.sh/$_arg_ntfysh"
+fi
