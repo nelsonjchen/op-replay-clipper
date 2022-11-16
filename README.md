@@ -46,7 +46,7 @@ The heavy CPU requirement is due to a number of factors:
 
 Even with the higher CPU requirements, it is not enough to run the tooling at full speed on the CPU. Some measures have been done to make clip recording possible.
 
-* Relevant processes are speedhack'd with `faketime` to run at 0.4x by default or 0.2x with the `--slow-cpu` flag.
+* Relevant processes are speedhack'd with `faketime` to run at 0.3x by default or 0.1x with the `--slow-cpu` flag.
 * Capture is done in real time but undercranked to simulate full speed.
 
 ## Usage
