@@ -4,7 +4,7 @@
 #
 # ARG_OPTIONAL_SINGLE([start-seconds],[s],[Seconds to start at],[60])
 # ARG_OPTIONAL_SINGLE([length-seconds],[l],[Clip length],[30])
-# ARG_OPTIONAL_SINGLE([target-mb],[m],[Target converted file size in MB],[8])
+# ARG_OPTIONAL_SINGLE([target-mb],[m],[Target converted file size in MB],[50])
 # ARG_OPTIONAL_BOOLEAN([experimental],[e],[Turn on or off experimental mode ui],[off])
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
 # ARG_OPTIONAL_SINGLE([smear-amount],[],[Amount of seconds to smear the clip start by before recording starts],[10])
@@ -43,7 +43,7 @@ _positionals=()
 # THE DEFAULTS INITIALIZATION - OPTIONALS
 _arg_start_seconds="60"
 _arg_length_seconds="30"
-_arg_target_mb="8"
+_arg_target_mb="50"
 _arg_experimental="off"
 _arg_jwt_token=
 _arg_smear_amount="10"
@@ -60,7 +60,7 @@ print_help()
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
-	printf '\t%s\n' "-m, --target-mb: Target converted file size in MB (default: '8')"
+	printf '\t%s\n' "-m, --target-mb: Target converted file size in MB (default: '50')"
 	printf '\t%s\n' "-e, --experimental, --no-experimental: Turn on or off experimental mode ui (off by default)"
 	printf '\t%s\n' "-j, --jwt-token: JWT Auth token to use (get token from https://jwt.comma.ai) (no default)"
 	printf '\t%s\n' "--smear-amount: Amount of seconds to smear the clip start by before recording starts (default: '10')"
