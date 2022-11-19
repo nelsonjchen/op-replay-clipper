@@ -272,6 +272,24 @@ TARGET_MB=$_arg_target_mb
 TARGET_BYTES=$((($TARGET_MB - 1) * 1024 * 1024 + 768 * 1024))
 TARGET_BITRATE=$(($TARGET_BYTES * 8 / $RECORDING_LENGTH))
 
+# URL Encode Route
+URL_ROUTE=$(echo "$ROUTE" | sed 's/|/%7C/g')
+
+# Get route info
+if [ -n "$JWT_AUTH" ]; then
+	ROUTE_INFO=$(curl --fail -H "Authorization: JWT $JWT_AUTH" https://api.commadotai.com/v1/route/$URL_ROUTE/)
+else 
+	ROUTE_INFO=$(curl -H \"Accept: application/json\" https://api.commadotai.com/v1/route/$URL_ROUTE/)
+fi
+
+ROUTE_INFO_GIT_REMOTE=$(echo "$ROUTE_INFO" | jq -r '.git_remote')
+ROUTE_INFO_GIT_BRANCH=$(echo "$ROUTE_INFO" | jq -r '.git_branch')
+ROUTE_INFO_GIT_COMMIT=$(echo "$ROUTE_INFO" | jq -r '.git_commit' | cut -c1-8)
+ROUTE_INFO_GIT_DIRTY=$(echo "$ROUTE_INFO" | jq -r '.git_dirty')
+
+# Get platform of route
+ROUTE_INFO_PLATFORM=$(echo "$ROUTE_INFO" | jq -r '.platform')
+
 # Render speed
 # RECORD_FRAMERATE = SPEEDHACK_AMOUNT * 20
 SPEEDHACK_AMOUNT=0.3
@@ -283,7 +301,7 @@ fi
 
 pushd /home/batman/openpilot
 
-if [ ! -z "$JWT_AUTH" ]; then
+if [ -n "$JWT_AUTH" ]; then
     mkdir -p "$HOME"/.comma/
     echo "{\"access_token\": \"$JWT_AUTH\"}" > "$HOME"/.comma/auth.json
 fi
@@ -305,7 +323,9 @@ tmux send-keys -t clipper:replay Space
 popd
 
 # Generate and start overlay
-echo "Route: $ROUTE , Starting Second: $STARTING_SEC, Clip Length: $RECORDING_LENGTH" > /tmp/overlay.txt
+echo "Route: $ROUTE , Starting Second: $STARTING_SEC, Clip Length: $RECORDING_LENGTH, \
+$ROUTE_INFO_GIT_REMOTE, $ROUTE_INFO_GIT_BRANCH, $ROUTE_INFO_GIT_COMMIT, Dirty: \
+$ROUTE_INFO_GIT_DIRTY, $ROUTE_INFO_PLATFORM" > /tmp/overlay.txt
 overlay /tmp/overlay.txt &
 
 # Record with ffmpeg

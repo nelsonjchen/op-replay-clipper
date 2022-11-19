@@ -5,6 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     htop \
     vim \
+    jq \
     tigervnc-standalone-server \
     ffmpeg \
     faketime \
