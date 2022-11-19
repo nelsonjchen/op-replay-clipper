@@ -9,7 +9,7 @@
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
 # ARG_OPTIONAL_SINGLE([smear-amount],[],[Amount of seconds to smear the clip start by before recording starts],[10])
 # ARG_OPTIONAL_SINGLE([ntfysh],[n],[ntfy.sh topic to post to when clip has completed rendering])
-# ARG_OPTIONAL_BOOLEAN([slow-cpu],[],[Turn on or off slower CPU mode at 0.2x for ~4 core CPUs],[off])
+# ARG_OPTIONAL_BOOLEAN([slow-cpu],[],[Turn on or off slower CPU mode at 0.1x for ~1 core CPUs],[off])
 # ARG_OPTIONAL_SINGLE([video-cwd],[c],[video working and output directory],[./shared])
 # ARG_OPTIONAL_SINGLE([output],[o],[output clip name],[clip.mp4])
 # ARG_POSITIONAL_SINGLE([route_id],[comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) ])
@@ -65,7 +65,7 @@ print_help()
 	printf '\t%s\n' "-j, --jwt-token: JWT Auth token to use (get token from https://jwt.comma.ai) (no default)"
 	printf '\t%s\n' "--smear-amount: Amount of seconds to smear the clip start by before recording starts (default: '10')"
 	printf '\t%s\n' "-n, --ntfysh: ntfy.sh topic to post to when clip has completed rendering (no default)"
-	printf '\t%s\n' "--slow-cpu, --no-slow-cpu: Turn on or off slower CPU mode at 0.2x for ~4 core CPUs (off by default)"
+	printf '\t%s\n' "--slow-cpu, --no-slow-cpu: Turn on or off slower CPU mode at 0.1x for ~1 core CPUs (off by default)"
 	printf '\t%s\n' "-c, --video-cwd: video working and output directory (default: './shared')"
 	printf '\t%s\n' "-o, --output: output clip name (default: 'clip.mp4')"
 	printf '\t%s\n' "-h, --help: Prints help"
