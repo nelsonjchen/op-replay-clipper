@@ -22,4 +22,6 @@
   --length-seconds 60 \
   `# Visit and allow notifications from https://ntfy.sh/ntfy_topic_of_your_choice` \
   `# so you know when its done and get a nice notification` \
-  --ntfysh ntfy_topic_of_your_choice
+  --ntfysh ntfy_topic_of_your_choice \
+  `# Change the output clip file name here` \
+  --output clip.mp4 
