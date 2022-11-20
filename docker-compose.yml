@@ -14,9 +14,9 @@ services:
     volumes:
       - ./shared:/workspace/shared
       # - ./:/workspace
-  clipper_pin:
-    # Pre-partial widecam; for stable
-    image: ghcr.io/nelsonjchen/op-replay-clipper:pin
+  clipper_pin_090:
+    # Pre-partial widecam; for stable 0.9.0
+    image: ghcr.io/nelsonjchen/op-replay-clipper:pin-0.9.0
     shm_size: '1gb'
     tty: true
     environment:
