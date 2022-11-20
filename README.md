@@ -39,7 +39,7 @@ We will be using [🐙 GitHub Codespaces][ghcs].
 
 #### Setup 🐙 GitHub Codespaces
 
-1. Just click this button and launch a codespace in US West region.
+1. Right click on this button below, select `Open in New Tab`, and launch a codespace in US West region.
 
    <a href="https://github.com/codespaces/new?hide_repo_select=true&ref=master&repo=532830402&machine=standardLinux32gb&devcontainer_path=.devcontainer%2Fdevcontainer.json&location=WestUs2" target="_blank">![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)</a>
 
