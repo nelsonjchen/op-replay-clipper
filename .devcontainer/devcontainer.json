@@ -6,7 +6,7 @@
 	"hostRequirements": {
 		"cpus": 4,
 		"memory": "4gb",
-		"storage": "16gb" 
+		"storage": "16gb"
  },
 	"name": "Docker Compose",
 	// Update the 'dockerComposeFile' list if you have more compose files or use different names.
@@ -20,7 +20,6 @@
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				"vadimcn.vscode-lldb",
 				"ms-vsliveshare.vsliveshare",
 				"timonwong.shellcheck",
 				"GitHub.copilot"
