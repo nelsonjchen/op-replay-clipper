@@ -11,7 +11,7 @@
 # ARG_OPTIONAL_SINGLE([ntfysh],[n],[ntfy.sh topic to post to when clip has completed rendering])
 # ARG_OPTIONAL_BOOLEAN([slow-cpu],[],[Turn on or off slower CPU mode at 0.1x for ~1 core CPUs],[off])
 # ARG_OPTIONAL_SINGLE([video-cwd],[c],[video working and output directory],[./shared])
-# ARG_OPTIONAL_SINGLE([vnc],[],[VNC Port for debugging, -1 will disable],[-1])
+# ARG_OPTIONAL_SINGLE([vnc],[],[VNC Port for debugging, -1 will disable],[0])
 # ARG_OPTIONAL_SINGLE([output],[o],[output clip name],[clip.mp4])
 # ARG_POSITIONAL_SINGLE([route_id],[comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) ])
 # ARG_HELP([See README at https://github.com/nelsonjchen/op-replay-clipper/])
@@ -51,7 +51,7 @@ _arg_smear_amount="10"
 _arg_ntfysh=
 _arg_slow_cpu="off"
 _arg_video_cwd="./shared"
-_arg_vnc="-1"
+_arg_vnc="0"
 _arg_output="clip.mp4"
 
 
@@ -69,7 +69,7 @@ print_help()
 	printf '\t%s\n' "-n, --ntfysh: ntfy.sh topic to post to when clip has completed rendering (no default)"
 	printf '\t%s\n' "--slow-cpu, --no-slow-cpu: Turn on or off slower CPU mode at 0.1x for ~1 core CPUs (off by default)"
 	printf '\t%s\n' "-c, --video-cwd: video working and output directory (default: './shared')"
-	printf '\t%s\n' "--vnc: VNC Port for debugging, -1 will disable (default: '-1')"
+	printf '\t%s\n' "--vnc: VNC Port for debugging, -1 will disable (default: '0')"
 	printf '\t%s\n' "-o, --output: output clip name (default: 'clip.mp4')"
 	printf '\t%s\n' "-h, --help: Prints help"
 }
