@@ -35,7 +35,7 @@ We will be using [🐙 GitHub Codespaces][ghcs].
 
 - Setup
   - 🐙 GitHub Codespaces: 1 minute
-- [Per Clip](#steps): About 5 minutes to capture a 30 second frame with the UI and compress the 30 second clip to 7.8MB.
+- [Per Clip](#steps): About 5 minutes to capture a 30 second frame with the UI and compress the 30 second clip to ~50MB.
 
 #### Setup 🐙 GitHub Codespaces
 
