@@ -11,6 +11,7 @@
 # ARG_OPTIONAL_SINGLE([ntfysh],[n],[ntfy.sh topic to post to when clip has completed rendering])
 # ARG_OPTIONAL_BOOLEAN([slow-cpu],[],[Turn on or off slower CPU mode at 0.1x for ~1 core CPUs],[off])
 # ARG_OPTIONAL_SINGLE([video-cwd],[c],[video working and output directory],[./shared])
+# ARG_OPTIONAL_SINGLE([vnc],[],[VNC Port for debugging, -1 will disable],[0])
 # ARG_OPTIONAL_SINGLE([output],[o],[output clip name],[clip.mp4])
 # ARG_POSITIONAL_SINGLE([route_id],[comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) ])
 # ARG_HELP([See README at https://github.com/nelsonjchen/op-replay-clipper/])
@@ -50,13 +51,14 @@ _arg_smear_amount="10"
 _arg_ntfysh=
 _arg_slow_cpu="off"
 _arg_video_cwd="./shared"
+_arg_vnc="0"
 _arg_output="clip.mp4"
 
 
 print_help()
 {
 	printf '%s\n' "See README at https://github.com/nelsonjchen/op-replay-clipper/"
-	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-e|--(no-)experimental] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [--(no-)slow-cpu] [-c|--video-cwd <arg>] [-o|--output <arg>] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-e|--(no-)experimental] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [--(no-)slow-cpu] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
@@ -67,6 +69,7 @@ print_help()
 	printf '\t%s\n' "-n, --ntfysh: ntfy.sh topic to post to when clip has completed rendering (no default)"
 	printf '\t%s\n' "--slow-cpu, --no-slow-cpu: Turn on or off slower CPU mode at 0.1x for ~1 core CPUs (off by default)"
 	printf '\t%s\n' "-c, --video-cwd: video working and output directory (default: './shared')"
+	printf '\t%s\n' "--vnc: VNC Port for debugging, -1 will disable (default: '0')"
 	printf '\t%s\n' "-o, --output: output clip name (default: 'clip.mp4')"
 	printf '\t%s\n' "-h, --help: Prints help"
 }
@@ -169,6 +172,14 @@ parse_commandline()
 			-c*)
 				_arg_video_cwd="${_key##-c}"
 				;;
+			--vnc)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_vnc="$2"
+				shift
+				;;
+			--vnc=*)
+				_arg_vnc="${_key##--vnc=}"
+				;;
 			-o|--output)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
 				_arg_output="$2"
@@ -231,6 +242,7 @@ assign_positional_args 1 "${_positionals[@]}"
 # [ <-- needed because of Argbash
 # ] <-- needed because of Argbash
 
+
 set -ex
 
 # Cleanup processes for easy fast testing.
@@ -271,6 +283,7 @@ TARGET_MB=$_arg_target_mb
 # Subtract a quarter of a megabyte to give some leeway for uploader limits
 TARGET_BYTES=$((($TARGET_MB - 1) * 1024 * 1024 + 768 * 1024))
 TARGET_BITRATE=$(($TARGET_BYTES * 8 / $RECORDING_LENGTH))
+VNC_PORT=$_arg_vnc
 
 # URL Encode Route
 URL_ROUTE=$(echo "$ROUTE" | sed 's/|/%7C/g')
@@ -307,7 +320,7 @@ if [ -n "$JWT_AUTH" ]; then
 fi
 
 # Start processes
-tmux new-session -d -s clipper -n x11 "Xtigervnc :0 -geometry 1920x1080 -SecurityTypes None"
+tmux new-session -d -s clipper -n x11 "Xtigervnc :0 -geometry 1920x1080 -SecurityTypes None -rfbport $VNC_PORT"
 tmux new-window -n replay -t clipper: "TERM=xterm-256color faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./tools/replay/replay --ecam -s \"$SMEARED_STARTING_SEC\" \"$ROUTE\""
 tmux new-window -n ui -t clipper: "faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./selfdrive/ui/ui"
 
