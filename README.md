@@ -62,10 +62,11 @@ There are options but these are the basic steps.
 7. Wait 3 minutes, and the script should complete.
    - Sample: ![nelsonjchen-refactored-sniffle-wrr5p5v636j9 github dev_](https://user-images.githubusercontent.com/5363/202887303-72b7b772-7d39-4a15-ab33-43dca030f019.png)
 8. If you want to capture more clips, edit `./scratch_run.sh` accordingly and change the output name.
-9. After it completes, run `python3 -m http.server` in the Terminal to start a local web server. VSCode should prompt you to open the link in your browser. Click the `Open in Browser` link and browse to the `shared` folder
+9. After it completes, run `python3 -m http.server` in the Terminal to start a web server. VSCode should prompt you to open the link in your browser. Click the `Open in Browser` link and browse to the `shared` folder
    - Sample: <img width="1288" alt="Screenshot 2022-11-19 at 9 35 34 PM" src="https://user-images.githubusercontent.com/5363/202887379-bbc39fd4-be0d-4688-927c-e0f63bff758c.png">
    - Shared Folder: <img width="526" alt="image" src="https://user-images.githubusercontent.com/5363/202887400-f19c2980-2cd1-4504-8153-751158bec61f.png">
 10. Right click and download `clip.mp4` (or any files you've generated) to your computer. You can share or upload this file wherever you want.
+11. If you want to make more clips, press `Ctrl-C` to exit the web server, continue to edit and run `./scratch_run.sh`, and re-run the command to start a web server.
 11. Cleanup is easy. Just close the browser tabs. The GitHub Codespace will automatically stop after 30 minutes of inactivity and will automatically be completely deleted after 30 days of idle by default. If you wish, you can stop and delete the codespaces earlier than the default times here: https://github.com/codespaces .
 
 ## Self running
