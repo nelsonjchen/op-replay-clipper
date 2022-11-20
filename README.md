@@ -2,7 +2,7 @@
 
 Capture short clips of [openpilot][op] routes with the openpilot UI included, with the route and seconds marker branded into the clip. Useful for posting replay clips with the UI including path and lane-lines in the [comma.ai Discord's #openpilot-experience channel](https://discord.comma.ai) or anywhere else that takes video.
 
-No pre-existing openpilot development environment setup required. Just [GitHub Codespaces][ghcs], which gives you 30 free hours of a 4 CPU machine free every month with only a few clicks and clean up is easy and automated. [Alternatively, you can also run this setup on your own machine, but it's quite a bit more complicated.](#self-running)
+No pre-existing openpilot development environment setup of any sort is required. Just [GitHub Codespaces][ghcs] which is available to anyone with a free GitHub account and will give you 30 free hours of a 4 CPU machine every month with only a few clicks. Cleanup is automated too. [Alternatively, you can also run this setup on your own machine, but it's quite a bit more complicated but can grant you more power.](#self-running)
 
 https://user-images.githubusercontent.com/5363/202886008-82cfbf02-d19a-4482-ab7a-59f96c802dd1.mp4
 
@@ -12,7 +12,7 @@ https://user-images.githubusercontent.com/5363/202887339-97c69dc1-8a4a-4248-a1bc
 
 - The UI replayed is comma.ai's latest stock UI on their master branch; routes from forks that differ alot from stock may not render correctly. Your experience may and will vary. Please make sure to note these replays are from fork data and may not be representative of the stock behavior. [The comma team really does not like it if you ask them to debug fork code as "it just takes too much time to be sidetracked by hidden and unclear changes"](https://discord.com/channels/469524606043160576/616456819027607567/1042263657851142194).
 - Older routes may not replay correctly or at all on the latest UI in the master branch.
-- **You are advised to upload all files of the route to Comma.ai servers before attempting to render a route. If you do not upload all files, the replay will not render past the starting UI.**
+- **You are advised to upload all files of the route to Comma Connect servers before attempting to render a route. If you do not upload all files, the replay will not render past the starting UI.**
 
 ## Usage
 
@@ -50,22 +50,23 @@ We will be using [🐙 GitHub Codespaces][ghcs].
 There are options but these are the basic steps.
 
 1. Find the route you wish to take a clip from on https://my.comma.ai.
-2. Find the starting seconds value. The route's timeline will have a widget below your cursor that's "segment number, local time". Segments are made every minute. So scrub it, and do a little mental arithmetic to get the starting second. I usually do "60 \* segment number + offset" as my calculation. Edit the starting second in the `scratch_run.sh` file to this value.
-   - <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
+2. Find the starting seconds value. The route's timeline will have a widget below your cursor that's "segment number, local time". Segments are made every minute. So scrub it, and do a little mental arithmetic to get the starting second. I usually do "60 \* segment number + offset" as my mental calculation. Edit the starting second in the `scratch_run.sh` file to this value.
+   - Sample: <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
    - In this example, the starting second would be at least 6 \* 30 = 180 seconds.
-3. Get the route ID from `More Info`. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52`. Note the omission of the `--1`. That's the segment identifier that is not needed. You can leave it in but it'll have no effect. Edit the route ID in the `scratch_run.sh` file to this value.
+3. Get the route ID from `More Info`. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52`. Edit the route ID in the `scratch_run.sh` file to this value.
    - <img width="336" alt="image" src="https://user-images.githubusercontent.com/5363/188817040-5341e1af-2176-47ad-87f3-ba0a3d88a32a.png">
-4. Get a JWT Token from https://jwt.comma.ai. This token will last for a year. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Copy and save the whole thing. This token allows access to routes your Comma connect account has access to. **Keep this token private, do not share it with anyone.** Edit the JWT token in the `scratch_run.sh` file to this value.
-5. Change the clip length value in `scratch_run.sh` to the number of seconds you want to capture.
+4. Get a JWT Token from https://jwt.comma.ai. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Edit the JWT token in the `scratch_run.sh` file to this value. **Keep this token private, do not share it with anyone as it will grant access to your comma connect account for a year.**
+5. Change the clip length value in `scratch_run.sh` to the number of seconds you want to capture. Longer lengths take proportionally longer to capture.
 6. Run the script with `./scratch_run.sh` in the Terminal.
-   * Sample: <img width="1072" alt="image" src="https://user-images.githubusercontent.com/5363/202886850-cf4e392f-f40f-423c-bbae-2b5917f74971.png">
+   - Sample: <img width="1072" alt="image" src="https://user-images.githubusercontent.com/5363/202886850-cf4e392f-f40f-423c-bbae-2b5917f74971.png">
 7. Wait 3 minutes, and the script should complete.
-   * Sample: ![nelsonjchen-refactored-sniffle-wrr5p5v636j9 github dev_](https://user-images.githubusercontent.com/5363/202887303-72b7b772-7d39-4a15-ab33-43dca030f019.png)
-8. After it completes, run `python3 -m http.server` in the Terminal to start a local web server. VSCode should prompt you to open the link in your browser. Click the `Open in Browser` link and browse to the `shared` folder
-   * Sample: <img width="1288" alt="Screenshot 2022-11-19 at 9 35 34 PM" src="https://user-images.githubusercontent.com/5363/202887379-bbc39fd4-be0d-4688-927c-e0f63bff758c.png">
-   * Shared Folder: <img width="526" alt="image" src="https://user-images.githubusercontent.com/5363/202887400-f19c2980-2cd1-4504-8153-751158bec61f.png">
-9. Right click and download `clip.mp4` to your computer.
-10. Cleanup is easy. Just close the browser tab. The codespace will stop after 30 minutes of inactivity and will be deleted after 30 days by default.
+   - Sample: ![nelsonjchen-refactored-sniffle-wrr5p5v636j9 github dev_](https://user-images.githubusercontent.com/5363/202887303-72b7b772-7d39-4a15-ab33-43dca030f019.png)
+8. If you want to capture more clips, edit `./scratch_run.sh` accordingly and change the output name.
+9. After it completes, run `python3 -m http.server` in the Terminal to start a local web server. VSCode should prompt you to open the link in your browser. Click the `Open in Browser` link and browse to the `shared` folder
+   - Sample: <img width="1288" alt="Screenshot 2022-11-19 at 9 35 34 PM" src="https://user-images.githubusercontent.com/5363/202887379-bbc39fd4-be0d-4688-927c-e0f63bff758c.png">
+   - Shared Folder: <img width="526" alt="image" src="https://user-images.githubusercontent.com/5363/202887400-f19c2980-2cd1-4504-8153-751158bec61f.png">
+10. Right click and download `clip.mp4` (or any files you've generated) to your computer. You can share or upload this file wherever you want.
+11. Cleanup is easy. Just close the browser tabs. The GitHub Codespace will automatically stop after 30 minutes of inactivity and will automatically be completely deleted after 30 days of idle by default. 
 
 ## Self running
 
@@ -133,7 +134,6 @@ You may want to prune images. Up to you, DIYer!
 Use the `dev` service in the `docker-compose.yml` file to run the `clip.sh` script in a development environment. This will allow you to make changes to the `clip.sh` script and see the changes reflected in the container.
 
 Additionally, a Devcontainer is provided for VSCode users. This will allow you to run the `clip.sh` script in a development environment with the same dependencies installed as the Docker container.
-
 
 ## Bad or Too Slow Computer
 
