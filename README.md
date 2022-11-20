@@ -1,15 +1,15 @@
 # 📽 Openpilot Replay Clipper
 
-Capture short ~30 seconds clips of [openpilot][op] routes with the openpilot UI included, with the route and seconds marker branded into the clip. No openpilot development environment setup required. Just some computing resources.
+Capture short clips of [openpilot][op] routes with the openpilot UI included, with the route and seconds marker branded into the clip. No pre-existing openpilot development environment setup required. Just some computing resources either you provide or [GitHub Codespaces][ghcs], which gives you 30 free hours of a 4 CPU machine free every month.
 
-Useful for posting replays with the UI including path and lane-lines in the [comma.ai Discord's #openpilot-experience channel](https://discord.comma.ai) or anywhere else taking video.
+Useful for posting replay clips with the UI including path and lane-lines in the [comma.ai Discord's #openpilot-experience channel](https://discord.comma.ai) or anywhere else that takes video.
 
 A manual left turn and then activating OP:
 
 https://user-images.githubusercontent.com/5363/188810452-47a479c4-fa9a-4037-9592-c6a47f2e1bb1.mp4
 
 
-"Experimental Mode" (`experimental`) UI Rendering Mode with the `--experimental` option:
+"Experimental Mode" (`experimental`) UI Rendering Mode with the `--experimental` option for 0.9.0 routes:
 
 https://user-images.githubusercontent.com/5363/196816467-39a147ed-885c-4f90-89d4-cc1ff852b8f0.mp4
 
@@ -17,15 +17,15 @@ https://user-images.githubusercontent.com/5363/196816467-39a147ed-885c-4f90-89d4
 
 ## Requirements
 
-The requirements are a bit high.
+The requirements may be a bit high. 
 
-You will need an appropiate computer, either your own or one that is rented for a few minutes such as one on [DigitalOcean][do], to run this tool.
+You will need an appropiate computer, either your own or one that is temporary for a few minutes such as one on [GitHub Codespaces][ghcs], to run this tool.
 
-* 8 vCPUs/hyperthreads
-  * 4vCPUs/hyperthreads with `--slow-cpu` flag that renders slower to maintain stability
+* 4 vCPUs/hyperthreads
+  * 2vCPUs/hyperthreads with `--slow-cpu` flag that renders slower to maintain stability
 * A working Docker-Compose setup. Docker for Windows or Docker for Mac will work.
 * Intel or AMD processor.
-  * Emulation of Intel on Apple Silicon with Docker for Mac is [too slow](#bad-or-too-slow-computer) to handle the requirements. Please use DigitalOcean or a suitable Intel or AMD machine.
+  * Emulation of Intel on Apple Silicon with Docker for Mac is [too slow](#bad-or-too-slow-computer) to handle the requirements. Please use a suitable Intel or AMD machine.
 * 10 GB of disk space.
 * 100MB/s disk speed.
   * Docker for Windows users should clone the repository to the Linux filesystem to meet the requirement.
@@ -33,18 +33,18 @@ You will need an appropiate computer, either your own or one that is rented for 
 
 There are other notes too regarding the data you want to render:
 
-* The UI replayed is comma.ai's latest stock UI; routes from forks that differ alot from stock may not render correctly. Your experience may vary. Please make sure to note these replays are from fork data and may not be representative of the stock behavior.
-* The desired route to be rendered must have been able to upload to Comma.ai servers and must be accessible.
+* The UI replayed is comma.ai's latest stock UI; routes from forks that differ alot from stock may not render correctly. Your experience may vary. Please make sure to note these replays are from fork data and may not be representative of the stock behavior. As a side note, [the comma team really does not like it if you ask them to debug fork code as "it just takes too much time to be sidetracked by hidden and unclear changes"](https://discord.com/channels/469524606043160576/616456819027607567/1042263657851142194).
+* The desired route to be rendered must have been fully able to upload to Comma.ai servers and must be accessible.
 * **You are advised to upload all files of the route to Comma.ai servers before attempting to render a route. If you do not upload all files, the replay will not render past the starting UI.**
 
-The heavy CPU requirement is due to a number of factors:
+The CPU requirement is due to a number of factors:
 
-* Reliable H.265 hardware decoding is not always available. The high quality forward video is only captured in H.265 and could only be decoded at 0.7 speed on a Ryzen 2800 and at half speed reliabily for the purposes of capture.
+* Reliable H.265 hardware decoding is not always available. The high quality forward video is only captured in H.265 and could only be decoded at 0.7 speed on a Ryzen 2800 and at half speed reliabily for the purposes of capture. And there are also two video streams: telescope and wide!
 * Reliable OpenGL rendering is not always available. Software OpenGL rendering is used instead to guarantee compatibility.
 * Capturing the UI can be quite intensive due to all the software and non-hardware-accelerated rendering and decoding.
 * Capturing the UI must be done with everything not mismatching by speed. Otherwise, you get weird rendering issues like [the planner's line lagging and not matching the forward video such as in the case of the forward video not decoding fast enough](#bad-or-too-slow-computer). A generous margin of extra performance is used to ensure that the UI is captured at the same speed as the forward video in case of unexpected system jitters.
 
-Even with the higher CPU requirements, it is not enough to run the tooling at full speed on the CPU. Some measures have been done to make clip recording possible.
+Even with these CPU requirements, it was not enough to run the tooling at full speed on the CPU. Some measures have been done to make clip recording possible.
 
 * Relevant processes are speedhack'd with `faketime` to run at 0.3x by default or 0.1x with the `--slow-cpu` flag.
 * Capture is done in real time but undercranked to simulate full speed.
@@ -64,22 +64,30 @@ Ensure your drive's files are fully uploaded on https://my.comma.ai. Click `File
 
 ### Setup
 
-You can set up your own machine or rent a temporary server. There are many online server vendors out there but [DigitalOcean][do] was chosen for the guide due to its relative ease of use, accessibility, and affordable pricing.
+You can set up your own machine or use [GitHub Codespaces][ghcs]. There are many online server vendors out there but [GitHub Codespaces][ghcs] was chosen for the guide due to its relative ease of use, accessibility, generous free usage, and no-risk of surprise charges.
 
-### The Way Or The Path
+#### The Way Or The Path
 
+* [🐙 GitHub Codespaces][ghcs] is probably the easiest, cleanest, most hygenic way.
 * Machine Setup such as 🪟 Docker for Windows or 🔨 "DIY" is the way to go if you want to use your own computer and it has the power to do it. If you have some pre-existing expertise and resources, this is the way to go.
-* For most people, [🌊 DigitalOcean][do] is probably the easiest, cleanest, most hygenic way, but you will need to create an account and pay for the resources. The cost is really cheap though as long as you remember to delete the droplet after you are done ([Teardown](#teardown)). The cost is based on how long the server is running and after you destroy the server, no more cost is accrued. Recording a 30 second clip this way will probably cost less than 6-17 cents from the setup and processing time on DigitalOcean. Just remember to [destroy](#teardown) the server when you're done to stop accruing costs.
 
-### Time Estimates
+#### Time Estimates
 
 * Setup
+  * 🐙 GitHub Codespaces: 1 minute
   * 🪟/🔨 Machine Setup: 20 minutes
-  * 🌊 DigitalOcean Droplet/Server Rental: 3-10 minutes
   * For all setup options, if you've already setup some of the resources beforehand such as having a DigitalOcean account, already have Docker or WSL2 running and so on, you will not need to repeat those steps.
-* Initial Download/Building: About 1-5 minutes. This part may be download intensive and depend on your internet connection. This may be cached as well.
+* Initial Download/Building
+  * 🐙 GitHub Codespaces: If you launch the codespace outside of the US West region, it will take about 6 minutes to setup. Launch the codespace in US West whenever possible as it is pre-built and ready to go immediately.
+  * 🪟/🔨 Machine Setup: About 1-5 minutes. This part may be download intensive and depend on your internet connection. This may be cached as well. 
 * [Per Clip](#steps): About 6 minutes to capture a 30 second frame with the UI and compress the 30 second clip to 7.8MB.
 * [Teardown and Cleanup](#teardown): 1 minute
+
+#### 🐙 GitHub Codespaces
+
+1. Just click this button and launch a codespace in US West region.
+ 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=master&repo=532830402&machine=standardLinux32gb&devcontainer_path=.devcontainer%2Fdevcontainer.json&location=WestUs2)
 
 #### 🪟 Docker for Windows
 
@@ -96,34 +104,15 @@ If you are knowledgeable about Docker, Linux, Docker-Compose and whatnot, I'm su
 
 You may need to `chmod` the `shared` folder to be writable by the internal Docker user of the image. Just do `777`, it's all temporary anyway.
 
-#### 🌊 DigitalOcean Droplet/VPS
 
-DigitalOcean calls their servers Droplets. The guide will use the term Droplet for simplicity.
-
-Note: Pay attention to [Teardown](#teardown). You need to delete this droplet after you are done or otherwise you may be billed a lot. If at anytime you want to abort, go to [Teardown](#teardown) and destroy the droplet.
-
-1. Sign up for a DigitalOcean account and put in payment information and whatnot.
-2. Visit https://marketplace.digitalocean.com/apps/docker and click the `Create Docker Droplet` button on the right.
-3. At the droplet creation screen, choose any option with 8 CPUs. Note the prices. They charge by the second by the way. **Remember to destroy the droplet!**
-   * <img width="1273" alt="Screen Shot 2022-10-11 at 9 23 42 PM" src="https://user-images.githubusercontent.com/5363/195249619-53828bb6-6c9d-4169-9757-ac11d41a2495.png">
-   * If you cannot choose an option with 8 CPUs, go for the 4 CPUs option. Just add `--slow-cpu` after `clip.sh` in the docker-compose command.
-4. Go through all the options below. Nothing needs to be selected other than the minimum. Any region is fine. Password doesn't matter so anything that satisfies it is fine. No optional options need to be checked.
-5. Once you press `Create Droplet` at the bottom of the Create Droplets screen, click on the droplet you created. Wait for it to be created. You may need to refresh the page once in a while. It'll take about a minute or two.
-6. Once it is up and running, click on the Console link on the right.
-   * <img width="1234" alt="Screen Shot 2022-10-11 at 9 11 42 PM" src="https://user-images.githubusercontent.com/5363/195248204-e20be940-05be-4dcb-b808-172e7f491102.png">
-7. You'll get a window popup and a shell like this:
-   * <img width="1146" alt="Screen Shot 2022-10-11 at 9 13 28 PM" src="https://user-images.githubusercontent.com/5363/195248431-54841a6f-271b-4835-9d44-a5ce4cfefb1f.png">
-8. Run `git clone https://github.com/nelsonjchen/op-replay-clipper/`
-9. Run `cd op-replay-clipper`
-10. Run `chmod -R 777 shared`
-11. Continue to [Steps](#steps).
 
 ### Steps
 
 1. Find the drive you wish to take a clip from on https://my.comma.ai.
 2. Find the starting seconds. The drive's timeline will have a widget below your cursor that's "segment number, local time". Segments are made every minute. So scrub it, and do a little mental arithmetic to get the starting second. I usually do "60 * segment number + offset" as my calculation.
    * <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
-3. Get the route ID from `More Info`. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52`. Note the omission of the `--1`. That's the segment identifier that is not needed.
+   * In this example, the starting second would be at least 6 * 30 = 180 seconds.
+3. Get the route ID from `More Info`. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52`. Note the omission of the `--1`. That's the segment identifier that is not needed. You can leave it in but it'll have no effect.
    * <img width="336" alt="image" src="https://user-images.githubusercontent.com/5363/188817040-5341e1af-2176-47ad-87f3-ba0a3d88a32a.png">
 4. Get a JWT Token from https://jwt.comma.ai. This token will last for a year. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Copy and save the whole thing. This token allows access to routes your Comma connect account has access to. **Keep this token private, do not share it with anyone.**
    * Alternatively, if the route to be rendered is "Public", you can skip this step. Omit the `-j <JWT_TOKEN>` argument from the next step.
@@ -180,9 +169,9 @@ Alternatively, you can also append a `-o` argument to the `docker-compose` comma
 docker-compose run --rm clipper /workspace/clip.sh "071ba9916a1da2fa|2022-09-04--11-15-52" -s 100 -o clip.mp4
 ```
 
-### Older Openpilot Versions (0.8.16 and older)
+### Openpilot 0.9.0
 
-* Drives from these older versions do not have a calibrated wide camera. Instead of `clipper` in the `docker-compose` command, use `clipper_pin` to render the video with an older version of the openpilot UI pinned that does not switch to and render the wide camera.
+* This specific version requires use of the `clipper_pin_090` version as newer UIs read from a variable that is not present. Replace `clipper` in any docker-compose command with `clipper_pin_090`.
 
 ### Development
 
@@ -198,18 +187,9 @@ Docker for Windows has a terrible memory or handle leak issue. Quit it from the 
 
 While Docker for Windows is running, you may also want to click Clean Up while inside it if you want to regain some disk space.
 
-#### 🌊 DigitalOcean
+#### 🐙 GitHub Codespaces
 
-This is extremely important if you don't want to be overcharged.
-
-1. Go back to the droplet view screen in DigitalOcean
-   * <img width="1243" alt="Screen Shot 2022-10-11 at 9 18 59 PM" src="https://user-images.githubusercontent.com/5363/195249068-7e748e7a-539e-43c3-97bd-fc9508bd91b7.png">
-2. Click on Destroy Droplet and follow the dialog to destroy the droplet.
-   * <img width="1235" alt="Screen Shot 2022-10-11 at 9 19 38 PM" src="https://user-images.githubusercontent.com/5363/195249143-59d40d50-b094-49b9-9d77-cd8febdd3027.png">
-3. Follow the dialog to destroy the droplet
-   * <img width="634" alt="Screen Shot 2022-10-12 at 10 16 06 AM" src="https://user-images.githubusercontent.com/5363/195406895-e621b141-9ef3-4520-b1e6-73a80fc0300b.png">
-4. Hopefuly you don't have any OP clipper related droplets running. If so, great!
-   * <img width="1265" alt="Screen Shot 2022-10-11 at 9 20 45 PM" src="https://user-images.githubusercontent.com/5363/195249252-a28f2265-e99c-4e2a-b67f-f3cdd0cb1f87.png">
+Visit https://github.com/codespaces and delete the codespace. If you forget, it'll be auto-cleaned up in 30 days. 
 
 #### 🔨 DIY
 
@@ -256,3 +236,4 @@ https://github.com/commaai/openpilot/blame/master/tools/replay/main.cc
 
 [do]: https://www.digitalocean.com/
 [op]: https://github.com/commaai/openpilot
+[ghcs]: https://github.com/features/codespaces
