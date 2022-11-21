@@ -29,21 +29,24 @@ Ensure your route's files are fully uploaded on https://my.comma.ai. Click `File
 
 ### Setup
 
-We will be using [🐙 GitHub Codespaces][ghcs].
+We will be using [GitHub Codespaces][ghcs].
 
 #### Time Estimates
 
-- Setup
-  - 🐙 GitHub Codespaces: 1 minute
+- Setup: 1 minute
 - [Per Clip](#steps): About 5 minutes to capture a 30 second frame with the UI and compress the 30 second clip to ~50MB.
 
-#### Setup 🐙 GitHub Codespaces
+#### Setup GitHub Codespaces
 
 1. Right click on this button below, select `Open in New Tab`, and launch a codespace in US West region.
 
    <a href="https://github.com/codespaces/new?hide_repo_select=true&ref=master&repo=532830402&machine=standardLinux32gb&devcontainer_path=.devcontainer%2Fdevcontainer.json&location=WestUs2" target="_blank">![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)</a>
+   
+   ![image](https://user-images.githubusercontent.com/5363/202962338-d4301937-19c3-410a-af5b-e7ba3a7060fb.png)
 
 2. In the left sidebar, open [scratch_run.sh](./scratch_run.sh). You will be editing this file and running it to run the script to generate a clip.
+
+   ![image](https://user-images.githubusercontent.com/5363/202962401-d8d2a398-e737-4750-a1bb-f7867f316ce5.png)
 
 ### Steps
 
