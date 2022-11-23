@@ -8,7 +8,7 @@
 # Edit this file with your route id and other parameters you would like.
 # You can find more parameters by running `./clip.sh --help` in the Terminal.
 # Run this file to run clip.sh with the parameters by running `./scratch_run.sh` in the Terminal.
-# Terminal not shown in Codespaces? Click the three bars on the top left corner and select Terminal.
+# Terminal not shown in Codespaces? Click the three bars on the top left corner and select View -> Terminal.
 
 /bin/bash clip.sh \
   `# Get the route / segment id from https://connect.comma.ai and put it below` \
