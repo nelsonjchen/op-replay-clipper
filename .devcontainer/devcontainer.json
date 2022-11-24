@@ -21,8 +21,7 @@
 		"vscode": {
 			"extensions": [
 				"ms-vsliveshare.vsliveshare",
-				"timonwong.shellcheck",
-				"GitHub.copilot"
+				"timonwong.shellcheck"
 			]
 		}
 	},
