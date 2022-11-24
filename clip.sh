@@ -272,7 +272,7 @@ if [ $SMEARED_STARTING_SEC -lt 0 ]; then
 fi
 RECORDING_LENGTH=$_arg_length_seconds
 # Cleanup trailing segment count. Seconds is what matters
-ROUTE=$(echo "$_arg_route_id" | sed 's/--[0-9]$//')
+ROUTE=$(echo "$_arg_route_id" | sed -E 's/--[0-9]+$//g')
 RENDER_EXPERIMENTAL_MODE=$_arg_experimental
 JWT_AUTH=$_arg_jwt_token
 VIDEO_CWD=$_arg_video_cwd
