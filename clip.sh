@@ -292,7 +292,7 @@ URL_ROUTE=$(echo "$ROUTE" | sed 's/|/%7C/g')
 if [ -n "$JWT_AUTH" ]; then
 	ROUTE_INFO=$(curl --fail -H "Authorization: JWT $JWT_AUTH" https://api.commadotai.com/v1/route/$URL_ROUTE/)
 else 
-	ROUTE_INFO=$(curl -H \"Accept: application/json\" https://api.commadotai.com/v1/route/$URL_ROUTE/)
+	ROUTE_INFO=$(curl --fail https://api.commadotai.com/v1/route/$URL_ROUTE/)
 fi
 
 ROUTE_INFO_GIT_REMOTE=$(echo "$ROUTE_INFO" | jq -r '.git_remote')
