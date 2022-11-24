@@ -121,6 +121,14 @@ If you are knowledgeable about Docker, Linux, Docker-Compose and whatnot, I'm su
 
 You may need to `chmod` the `shared` folder to be writable by the internal Docker user of the image. Just do `777`, it's all temporary anyway.
 
+### Self Running Usage.
+
+It's recommended you open the repository as a Dev Container in VS Code:
+
+https://code.visualstudio.com/docs/devcontainers/containers#_quick-start-open-an-existing-folder-in-a-container
+
+From there on, follow the [Steps as normally used with GitHub Codespaces](#steps). 
+
 ### Self Running Teardown
 
 ### Teardown
@@ -138,8 +146,6 @@ You may want to prune images. Up to you, DIYer!
 ### Self Running Development
 
 Use the `dev` service in the `docker-compose.yml` file to run the `clip.sh` script in a development environment. This will allow you to make changes to the `clip.sh` script and see the changes reflected in the container.
-
-Additionally, a Devcontainer is provided for VSCode users. This will allow you to run the `clip.sh` script in a development environment with the same dependencies installed as the Docker container.
 
 ## Bad or Too Slow Computer
 
