@@ -15,7 +15,7 @@
   "fffffsomedongleidzzzzz|2022-11-11--20-20-49" \
   `# Get a token from https://jwt.comma.ai` \
   --jwt-token "replace_this_with_that_token" \
-  `# Segment IDs start from 0. e.g. fe18f736cb0d7813|2022-11-11--20-20-49-1 has a segment id of 1` \
+  `# Segment IDs start from 0. e.g. fe18f736cb0d7813|2022-11-11--20-20-49--1 has a segment id of 1` \
   `# Multiply the segment number by 60 and add an offset if you want.` \
   --start-seconds 60 \
   `# It's the length of a clip. Keep it short. Or long, if you want.` \
