@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     libxrandr-dev \
     libxft-dev \
     libfreetype-dev \
+    atomicparsley \
     # For Debugging X stuff
     mesa-utils
 
