@@ -28,6 +28,7 @@ Ensure your route's files are fully uploaded on https://my.comma.ai. Click `File
   - <img width="316" alt="Screen Shot 2022-09-07 at 12 27 26 AM" src="https://user-images.githubusercontent.com/5363/188816174-51045496-4614-4050-b911-c4abb987c5fe.png">
 - The driver or interior camera is not required to be enabled for recording or uploading for this. It's easier to just hit that "Upload all" button though. Unfortunately there's no only upload all wide camera, forward camera, and logs button.
 - Note: If you do not upload all the forward camera files, the replay will not progress past the starting UI.
+- It is possible to upload only a portion to of the route and still render a clip, but it's not recommended if you are new to this clipper. You can find those instructions [in Advanced Tips > Partial Uploads.](#partial-upload). 
 
 ### Setup
 
@@ -147,13 +148,25 @@ You may want to prune images. Up to you, DIYer!
 
 Use the `dev` service in the `docker-compose.yml` file to run the `clip.sh` script in a development environment. This will allow you to make changes to the `clip.sh` script and see the changes reflected in the container.
 
-## Bad or Too Slow Computer
+### Bad or Too Slow Computer
 
 Here's the result you get when you run the clipper on a computer that's too slow or doesn't meet the requirements after all the performance "modifiers". Nothing lines up and it's slow.
 
 From https://discord.com/channels/469524606043160576/1030241716818681897/1030341590201413664
 
 https://user-images.githubusercontent.com/5363/196210351-acc0b235-f87b-4dbc-8b2a-67ca842e52ac.mp4
+
+## Advanced Tips
+
+### Partial Upload
+
+It is possible to upload only a small portion of a long route for the clipper with Comma Connect's GUI.
+
+You are recommended to select a minute before, and a minute after the incident you want to clip. This will give a buffer before and after the incident to provide a margin for the clipper to render with.
+
+The video below shows how to do this with Comma Connect's GUI.
+
+https://user-images.githubusercontent.com/5363/204060281-ed1c2376-498a-45f8-a8ac-481fda7ee800.mov
 
 ## Architecture
 
