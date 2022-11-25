@@ -168,6 +168,12 @@ The video below shows how to do this with Comma Connect's GUI.
 
 https://user-images.githubusercontent.com/5363/204060281-ed1c2376-498a-45f8-a8ac-481fda7ee800.mov
 
+### Metadata
+
+In addition to the burned-in text atop the clip, you can view that metadata in a copy-pastable format by opening the clip with VLC and going to `Window > Media Information`.
+
+![Media Information](https://user-images.githubusercontent.com/5363/204060653-fcd0f01c-a03f-4430-9488-ea66fc61fbaa.png)
+
 ## Architecture
 
 Just a single shell script that runs an X11 server, and tmux commands to control the replay executable. There is `faketime` to make it run reliably without modifications to the pre-built openpilot that is in the image. Docker is used to just make it portable, but also easy to cleanup. Docker-Compose is used to make sure the `/dev/shm` size is correct and to specify the use of already pre-built images for general use or backwards compatibility use.
