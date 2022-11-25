@@ -336,9 +336,10 @@ tmux send-keys -t clipper:replay Space
 popd
 
 # Generate and start overlay
-echo "Route: $ROUTE , Starting Second: $STARTING_SEC, Clip Length: $RECORDING_LENGTH, \
+CLIP_DESC="Route: $ROUTE , Starting Second: $STARTING_SEC, Clip Length: $RECORDING_LENGTH, \
 $ROUTE_INFO_GIT_REMOTE, $ROUTE_INFO_GIT_BRANCH, $ROUTE_INFO_GIT_COMMIT, Dirty: \
-$ROUTE_INFO_GIT_DIRTY, $ROUTE_INFO_PLATFORM" > /tmp/overlay.txt
+$ROUTE_INFO_GIT_DIRTY, $ROUTE_INFO_PLATFORM" 
+echo "$CLIP_DESC" > /tmp/overlay.txt
 overlay /tmp/overlay.txt &
 
 # Record with ffmpeg
@@ -358,9 +359,14 @@ cleanup
 ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 1 -an -f MP4 /dev/null
 ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 2 -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 
+# Set mp4 metadata
+AtomicParsley "$VIDEO_OUTPUT" --title "Route: $ROUTE, Starting Sec: $STARTING_SEC" --description "$CLIP_DESC" --overWrite
+
 ctrl_c
 
+RENDER_COMPLETE_MESSAGE="Finished rendering $ROUTE to $VIDEO_OUTPUT."
 # If _arg_ntfysh is defined, send a notification to a ntfy.sh topic
 if [ ! -z "$_arg_ntfysh" ]; then
-	curl -X POST -H "Title: Rendering Complete" -d "Finished rendering $ROUTE to $VIDEO_OUTPUT" "https://ntfy.sh/$_arg_ntfysh"
+	curl -X POST -H "Title: Rendering Complete" -d "$RENDER_COMPLETE_MESSAGE" "https://ntfy.sh/$_arg_ntfysh"
 fi
+echo "$RENDER_COMPLETE_MESSAGE" "Please remember to include the segment id if posting for comma to look at!"
