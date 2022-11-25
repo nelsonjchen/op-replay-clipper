@@ -3,14 +3,16 @@ FROM ghcr.io/commaai/openpilot-prebuilt:latest AS base
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
+    # The usual dev stuff
     htop \
     vim \
-    jq \
+    jq \    
+    shellcheck \
+    # For Replay
     tigervnc-standalone-server \
     ffmpeg \
     faketime \
     tmux \
-    shellcheck \
     # for overlay
     libx11-dev \
     libxfixes-dev \
