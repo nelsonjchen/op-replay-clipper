@@ -336,7 +336,7 @@ tmux send-keys -t clipper:replay Space
 popd
 
 # Generate and start overlay
-CLIP_DESC="Route: $ROUTE , Starting Second: $STARTING_SEC, Clip Length: $RECORDING_LENGTH, \
+CLIP_DESC="Route: $ROUTE, Starting Second: $STARTING_SEC, Clip Length: $RECORDING_LENGTH, \
 $ROUTE_INFO_GIT_REMOTE, $ROUTE_INFO_GIT_BRANCH, $ROUTE_INFO_GIT_COMMIT, Dirty: \
 $ROUTE_INFO_GIT_DIRTY, $ROUTE_INFO_PLATFORM" 
 echo "$CLIP_DESC" > /tmp/overlay.txt
