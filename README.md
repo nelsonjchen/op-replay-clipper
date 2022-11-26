@@ -73,7 +73,7 @@ There are options but these are the basic steps.
    - Shared Folder: <img width="526" alt="image" src="https://user-images.githubusercontent.com/5363/202887400-f19c2980-2cd1-4504-8153-751158bec61f.png">
 10. Right click and download `clip.mp4` (or any files you've generated) to your computer. You can share or upload this file wherever you want.
 11. If you want to make more clips, press `Ctrl-C` to exit the web server, continue to edit and run `./scratch_run.sh`, and re-run the command to start a web server.
-11. Cleanup is easy. Just close the browser tabs. The GitHub Codespace will automatically stop after 30 minutes of inactivity and will automatically be completely deleted after 30 days of idle by default. If you wish, you can stop and delete the codespaces earlier than the default times here: https://github.com/codespaces. It is also possible to restart a pre-existing codespace and continue where you left off if it wasn't deleted.
+12. Cleanup is easy. Just close the browser tabs. The GitHub Codespace will automatically stop after 30 minutes of inactivity and will automatically be completely deleted after 30 days of idle by default. If you wish, you can stop and delete the codespaces earlier than the default times here: https://github.com/codespaces. It is also possible to restart a pre-existing codespace and continue where you left off if it wasn't deleted.
 
 ## Self running
 
