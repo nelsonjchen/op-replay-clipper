@@ -66,7 +66,7 @@ There are options but these are the basic steps.
 6. Run the script with `./scratch_run.sh` in the Terminal.
    - Sample: <img width="1072" alt="image" src="https://user-images.githubusercontent.com/5363/202886850-cf4e392f-f40f-423c-bbae-2b5917f74971.png">
 7. Wait 3 minutes, and the script should complete.
-   - Sample: ![nelsonjchen-refactored-sniffle-wrr5p5v636j9 github dev_](https://user-images.githubusercontent.com/5363/202887303-72b7b772-7d39-4a15-ab33-43dca030f019.png)
+   - Sample: <img width="1511" alt="Screenshot 2022-11-27 at 2 32 19 PM" src="https://user-images.githubusercontent.com/5363/204163251-638257ee-df14-440a-a8f0-3e26e4aae80e.png">
 8. If you want to capture more clips, edit `./scratch_run.sh` accordingly and change the output name.
 9. After it completes, run `python3 -m http.server` in the Terminal to start a web server. VSCode should prompt you to open the link in your browser. Click the `Open in Browser` link and browse to the `shared` folder
    - Sample: <img width="1288" alt="Screenshot 2022-11-19 at 9 35 34 PM" src="https://user-images.githubusercontent.com/5363/202887379-bbc39fd4-be0d-4688-927c-e0f63bff758c.png">
