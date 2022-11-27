@@ -21,7 +21,8 @@
 		"vscode": {
 			"extensions": [
 				"ms-vsliveshare.vsliveshare",
-				"timonwong.shellcheck"
+				"timonwong.shellcheck",
+				"ritwickdey.LiveServer"
 			]
 		}
 	},
