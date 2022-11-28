@@ -1,10 +1,18 @@
 # 📽 Openpilot Replay Clipper
 
-Capture short clips of [openpilot][op] routes with the openpilot UI included, with the route and seconds marker branded into the clip. Useful for posting replay clips with the UI including path and lane-lines in the [comma.ai Discord's #openpilot-experience channel](https://discord.comma.ai) or anywhere else that takes video.
+Capture and develop short clips of [openpilot][op] routes with the openpilot UI included, with the route and seconds marker branded into the clip. Useful for posting replay clips with the UI including path and lane-lines in the [comma.ai Discord's #openpilot-experience channel](https://discord.comma.ai) or anywhere else that takes video.
 
-No pre-existing openpilot development environment setup of any sort is required nor does any software need to be installed on your computer. Just [GitHub Codespaces][ghcs] which is available to anyone with a free GitHub account and a web browser which will give you 30 free hours of a 4 CPU machine every month with only a few clicks and a spending limit already pre-set to $0/mo with no risk of charging you anything. Cleanup is automated too. You can go from nothing to rendering a clip within two minutes.
+* You don't need an existing openpilot development environment setup!
+* You don't need to install anything on your computer!
+* You just need a free GitHub account.
+* The free GitHub account will give you 30 free hours of a 4 CPU machine every month.
+* It's preset with a spending limit of $0/mo. There is no risk of charging you anything.
+* Setup is fast. You can go from nothing to rendering and developing a clip within two minutes.
+* Cleanup is easy, you just close the browser tab. 
 
-[Alternatively, you can also run this setup on your own machine, but it's quite a bit more complicated but can grant you more power.](#self-running)
+[Alternatively, you can also run this setup on your own machine. It is quite a bit more complicated but can grant you more power if you desire.](#self-running)
+
+## Samples
 
 https://user-images.githubusercontent.com/5363/202886008-82cfbf02-d19a-4482-ab7a-59f96c802dd1.mp4
 
