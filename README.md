@@ -28,7 +28,7 @@ Ensure your route's files are fully uploaded on https://my.comma.ai. Click `File
   - <img width="316" alt="Screen Shot 2022-09-07 at 12 27 26 AM" src="https://user-images.githubusercontent.com/5363/188816174-51045496-4614-4050-b911-c4abb987c5fe.png">
 - The driver or interior camera is not required to be enabled for recording or uploading for this. It's easier to just hit that "Upload all" button though. Unfortunately there's no only upload all wide camera, forward camera, and logs button.
 - Note: If you do not upload all the forward camera files, the replay will not progress past the starting UI.
-- It is possible to upload only a portion to of the route and still render a clip, but it's not recommended if you are new to this clipper. You can find those instructions [in Advanced Tips > Partial Uploads.](#partial-upload). 
+- It is possible to upload only a portion to of the route and still render a clip, but it's not recommended if you are new to this clipper. You can find those instructions [in Advanced Tips > Partial Uploads.](#partial-upload).
 
 ### Setup
 
@@ -44,7 +44,7 @@ We will be using [GitHub Codespaces][ghcs].
 1. Right click on this button below, select `Open in New Tab`, and launch a codespace in US West region. It'll be fully loaded when icons appear in the left sidebar for files.
 
    <a href="https://github.com/codespaces/new?hide_repo_select=true&ref=master&repo=532830402&machine=standardLinux32gb&devcontainer_path=.devcontainer%2Fdevcontainer.json&location=WestUs2" target="_blank">![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)</a>
-   
+
    ![image](https://user-images.githubusercontent.com/5363/202962338-d4301937-19c3-410a-af5b-e7ba3a7060fb.png)
 
 2. In the left sidebar, open [scratch_run.sh](./scratch_run.sh). You will be editing this file and running it to run the script to generate a clip.
@@ -53,9 +53,9 @@ We will be using [GitHub Codespaces][ghcs].
 
 ### Steps
 
-There are options but these are the basic steps.
+There are options but these are the basic steps. Note, the screenshots below may vary in themes and UI, but the layout is generally the same.
 
-1. Find the route you wish to take a clip from on https://my.comma.ai.
+1. Find the route you wish to take a clip from from Comma Connect at https://connect.comma.ai.
 2. Find the starting seconds value. The route's timeline will have a widget below your cursor that's "segment number, local time". Segments are made every minute. So scrub it, and do a little mental arithmetic to get the starting second. I usually do "60 \* segment number + offset" as my mental calculation. Edit the starting second in the `scratch_run.sh` file to this value.
    - Sample: <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
    - In this example, the starting second would be at least 6 \* 30 = 180 seconds.
@@ -68,11 +68,13 @@ There are options but these are the basic steps.
 7. Wait 3 minutes, and the script should complete.
    - Sample: <img width="1511" alt="Screenshot 2022-11-27 at 2 32 19 PM" src="https://user-images.githubusercontent.com/5363/204163251-638257ee-df14-440a-a8f0-3e26e4aae80e.png">
 8. If you want to capture more clips, edit `./scratch_run.sh` accordingly and change the output name.
-9. After it completes, run `python3 -m http.server` in the Terminal to start a web server. VSCode should prompt you to open the link in your browser. Click the `Open in Browser` link and browse to the `shared` folder
-   - Sample: <img width="1288" alt="Screenshot 2022-11-19 at 9 35 34 PM" src="https://user-images.githubusercontent.com/5363/202887379-bbc39fd4-be0d-4688-927c-e0f63bff758c.png">
-   - Shared Folder: <img width="526" alt="image" src="https://user-images.githubusercontent.com/5363/202887400-f19c2980-2cd1-4504-8153-751158bec61f.png">
+9. After it completes, click "Go Live" in the bottom right corner to start a web server and open the web server in a new tab. Browse to the `shared` folder
+   - Clicking Go Live:
+      - <img width="1186" alt="Screenshot 2022-11-27 at 4 25 19 PM" src="https://user-images.githubusercontent.com/5363/204168299-79346fa7-45c7-4b03-b6b5-ff793af2a05e.png">
+   - Web Server View Sample
+      - <img width="1510" alt="Screenshot 2022-11-27 at 4 26 43 PM" src="https://user-images.githubusercontent.com/5363/204168325-4682c223-39d8-45f6-8065-ce3f2cd02bff.png">
 10. Right click and download `clip.mp4` (or any files you've generated) to your computer. You can share or upload this file wherever you want.
-11. If you want to make more clips, press `Ctrl-C` to exit the web server, continue to edit and run `./scratch_run.sh`, and re-run the command to start a web server.
+11. If you want to make more clips, continue to edit and run `./scratch_run.sh`, and refresh the web server's tab.
 12. Cleanup is easy. Just close the browser tabs. The GitHub Codespace will automatically stop after 30 minutes of inactivity and will automatically be completely deleted after 30 days of idle by default. If you wish, you can stop and delete the codespaces earlier than the default times here: https://github.com/codespaces. It is also possible to restart a pre-existing codespace and continue where you left off if it wasn't deleted.
 
 ## Self running
@@ -128,7 +130,7 @@ It's recommended you open the repository as a Dev Container in VS Code:
 
 https://code.visualstudio.com/docs/devcontainers/containers#_quick-start-open-an-existing-folder-in-a-container
 
-From there on, follow the [Steps as normally used with GitHub Codespaces](#steps). 
+From there on, follow the [Steps as normally used with GitHub Codespaces](#steps).
 
 ### Self Running Teardown
 
