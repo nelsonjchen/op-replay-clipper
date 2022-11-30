@@ -4,6 +4,7 @@ Capture and develop short clips of [openpilot][op] routes with the openpilot UI 
 
 Give this project a test with [GitHub Codespaces](https://github.com/codespaces) if you haven't already!
 
+* Prior GitHub Codespaces experience is not needed! 
 * You don't need an existing openpilot development environment setup!
 * You don't need to install anything on your computer!
 * You just need a free GitHub account.
