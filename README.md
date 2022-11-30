@@ -2,6 +2,8 @@
 
 Capture and develop short clips of [openpilot][op] routes with the openpilot UI included, with the route and seconds marker branded into the clip. Useful for posting replay clips with the UI including path and lane-lines in the [comma.ai Discord's #openpilot-experience channel](https://discord.comma.ai) or anywhere else that takes video.
 
+Give this project a test with [GitHub Codespaces](https://github.com/codespaces) if you haven't already!
+
 * You don't need an existing openpilot development environment setup!
 * You don't need to install anything on your computer!
 * You just need a free GitHub account.
