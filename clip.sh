@@ -273,6 +273,9 @@ fi
 RECORDING_LENGTH=$_arg_length_seconds
 # Cleanup trailing segment count. Seconds is what matters
 ROUTE=$(echo "$_arg_route_id" | sed -E 's/--[0-9]+$//g')
+# Segment ID is the floor of the starting seconds divided by 60
+SEGMENT_NUM=$(($STARTING_SEC / 60))
+SEGMENT_ID="$ROUTE--$SEGMENT_NUM"
 RENDER_EXPERIMENTAL_MODE=$_arg_experimental
 JWT_AUTH=$_arg_jwt_token
 VIDEO_CWD=$_arg_video_cwd
@@ -291,7 +294,7 @@ URL_ROUTE=$(echo "$ROUTE" | sed 's/|/%7C/g')
 # Get route info
 if [ -n "$JWT_AUTH" ]; then
 	ROUTE_INFO=$(curl --fail -H "Authorization: JWT $JWT_AUTH" https://api.commadotai.com/v1/route/$URL_ROUTE/)
-else 
+else
 	ROUTE_INFO=$(curl --fail https://api.commadotai.com/v1/route/$URL_ROUTE/)
 fi
 
@@ -336,9 +339,9 @@ tmux send-keys -t clipper:replay Space
 popd
 
 # Generate and start overlay
-CLIP_DESC="Route: $ROUTE, Starting Second: $STARTING_SEC, Clip Length: $RECORDING_LENGTH, \
+CLIP_DESC="Segment ID: $SEGMENT_ID, Starting Second: $STARTING_SEC, Clip Length: $RECORDING_LENGTH, \
 $ROUTE_INFO_GIT_REMOTE, $ROUTE_INFO_GIT_BRANCH, $ROUTE_INFO_GIT_COMMIT, Dirty: \
-$ROUTE_INFO_GIT_DIRTY, $ROUTE_INFO_PLATFORM" 
+$ROUTE_INFO_GIT_DIRTY, $ROUTE_INFO_PLATFORM"
 echo "$CLIP_DESC" > /tmp/overlay.txt
 overlay /tmp/overlay.txt &
 
@@ -360,16 +363,16 @@ ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yu
 ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 2 -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 
 # Set mp4 metadata
-AtomicParsley "$VIDEO_OUTPUT" --title "Route: $ROUTE, Starting Sec: $STARTING_SEC" \
+AtomicParsley "$VIDEO_OUTPUT" --title "Segment ID: $SEGMENT_ID, Starting Sec: $STARTING_SEC" \
 --description "$CLIP_DESC" \
 --encodedBy "https://github.com/nelsonjchen/op-replay-clipper, $(git describe --all --long)" \
  --overWrite
 
 ctrl_c
 
-RENDER_COMPLETE_MESSAGE="Finished rendering $ROUTE to $VIDEO_OUTPUT."
+RENDER_COMPLETE_MESSAGE="Finished rendering $SEGMENT_ID to $VIDEO_OUTPUT."
 # If _arg_ntfysh is defined, send a notification to a ntfy.sh topic
 if [ ! -z "$_arg_ntfysh" ]; then
 	curl -X POST -H "Title: Rendering Complete" -d "$RENDER_COMPLETE_MESSAGE" "https://ntfy.sh/$_arg_ntfysh"
 fi
-echo "$RENDER_COMPLETE_MESSAGE" "Please remember to include the segment id if posting for comma to look at!"
+echo -e "$RENDER_COMPLETE_MESSAGE\n" "Please remember to include the segment ID if posting for comma to look at!\n" "\`$SEGMENT_ID\`"
