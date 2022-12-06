@@ -2,6 +2,8 @@
 
 Capture and develop short clips of [openpilot][op] routes with the openpilot UI included, with the route and seconds marker branded into the clip. Useful for posting replay clips with the UI including path and lane-lines in the [comma.ai Discord's #openpilot-experience channel](https://discord.comma.ai) or anywhere else that takes video.
 
+Show the bad and the good of openpilot!
+
 Give this project a test with [GitHub Codespaces](https://github.com/codespaces) if you haven't already!
 
 * Prior GitHub Codespaces experience is not needed! 
@@ -17,9 +19,18 @@ Give this project a test with [GitHub Codespaces](https://github.com/codespaces)
 
 ## Samples
 
+Demonstration of speed or longitudinal behavior of openpilot with model-based longitudinal is nearly impossible or hard without this clipper.
+
 https://user-images.githubusercontent.com/5363/202886008-82cfbf02-d19a-4482-ab7a-59f96c802dd1.mp4
 
+openpilot can't do on-ramps and probably never will with my car, but this is a nice demo:
+
 https://user-images.githubusercontent.com/5363/202887339-97c69dc1-8a4a-4248-a1bc-fd8599bbb5b5.mp4
+
+This is a video of a bug report where openpilot's laternal handling lost the lane:
+
+https://user-images.githubusercontent.com/5363/205901777-53fd18f9-2ab5-400b-92f5-45daf3a34fbd.mp4
+
 
 ## Limitations
 
