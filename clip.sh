@@ -13,6 +13,7 @@
 # ARG_OPTIONAL_SINGLE([video-cwd],[c],[video working and output directory],[./shared])
 # ARG_OPTIONAL_SINGLE([vnc],[],[VNC Port for debugging, -1 will disable],[0])
 # ARG_OPTIONAL_SINGLE([output],[o],[output clip name],[clip.mp4])
+# ARG_OPTIONAL_BOOLEAN([metric],[],[Use metric system in the ui],[off])
 # ARG_POSITIONAL_SINGLE([route_id],[comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) ])
 # ARG_HELP([See README at https://github.com/nelsonjchen/op-replay-clipper/])
 # ARGBASH_GO()
@@ -53,6 +54,7 @@ _arg_slow_cpu="off"
 _arg_video_cwd="./shared"
 _arg_vnc="0"
 _arg_output="clip.mp4"
+_arg_metric="off"
 
 
 print_help()
@@ -71,6 +73,7 @@ print_help()
 	printf '\t%s\n' "-c, --video-cwd: video working and output directory (default: './shared')"
 	printf '\t%s\n' "--vnc: VNC Port for debugging, -1 will disable (default: '0')"
 	printf '\t%s\n' "-o, --output: output clip name (default: 'clip.mp4')"
+	printf '\t%s\n' "--metric, --no-metric: Turn on or off metric system in the ui (off by default)"
 	printf '\t%s\n' "-h, --help: Prints help"
 }
 
@@ -188,6 +191,10 @@ parse_commandline()
 			--output=*)
 				_arg_output="${_key##--output=}"
 				;;
+			--no-metric|--metric)
+				_arg_metric="on"
+				test "${1:0:5}" = "--no-" && _arg_metric="off"
+				;;
 			-o*)
 				_arg_output="${_key##-o}"
 				;;
@@ -277,6 +284,7 @@ ROUTE=$(echo "$_arg_route_id" | sed -E 's/--[0-9]+$//g')
 SEGMENT_NUM=$(($STARTING_SEC / 60))
 SEGMENT_ID="$ROUTE--$SEGMENT_NUM"
 RENDER_EXPERIMENTAL_MODE=$_arg_experimental
+RENDER_METRIC_SYSTEM=$_arg_metric
 JWT_AUTH=$_arg_jwt_token
 VIDEO_CWD=$_arg_video_cwd
 VIDEO_RAW_OUTPUT=clip_raw.mkv
@@ -353,6 +361,12 @@ if [ "$RENDER_EXPERIMENTAL_MODE" = "on" ]; then
 	echo -n "1" > ~/.comma/params/d/ExperimentalMode
 else
 	echo -n "0" > ~/.comma/params/d/ExperimentalMode
+fi
+# Use metric system in the ui
+if [ "$RENDER_METRIC_SYSTEM" = "on" ]; then
+	echo -n "1" > ~/.comma/params/d/IsMetric
+else
+	echo -n "0" > ~/.comma/params/d/IsMetric
 fi
 # Make sure the UI runs at full speed.
 pwd
