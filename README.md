@@ -19,7 +19,7 @@ Give this project a test with [GitHub Codespaces](https://github.com/codespaces)
 
 ## Samples
 
-Demonstration of speed or longitudinal behavior of openpilot with model-based longitudinal is nearly impossible or hard without this clipper.
+Demonstration of speed or longitudinal behavior of openpilot with model-based longitudinal is nearly impossible or hard without this clipper:
 
 https://user-images.githubusercontent.com/5363/202886008-82cfbf02-d19a-4482-ab7a-59f96c802dd1.mp4
 
