@@ -2,7 +2,7 @@
 
 Capture and develop short clips of [openpilot][op] routes with the openpilot UI included, with the route and seconds marker branded into the clip. Useful for posting replay clips with the UI including path and lane-lines in the [comma.ai Discord's #openpilot-experience channel](https://discord.comma.ai) or anywhere else that takes video.
 
-Show the bad and the good of openpilot! Very useful for [making outstanding bug reports](https://github.com/commaai/openpilot/wiki/FAQ#how-do-i-report-a-bug)!
+Show the bad and the good of openpilot! Very useful for [making outstanding bug reports](https://github.com/commaai/openpilot/wiki/FAQ#how-do-i-report-a-bug) or [posting UI video in interesting situations on Twitter](https://twitter.com/yassineyousfi_/status/1590473942439198720)!
 
 Give this project a test with [GitHub Codespaces](https://github.com/codespaces) if you haven't already!
 
