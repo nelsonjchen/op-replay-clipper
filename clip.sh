@@ -351,7 +351,7 @@ CLIP_DESC="Segment ID: $SEGMENT_ID, Starting Second: $STARTING_SEC, Clip Length:
 $ROUTE_INFO_GIT_REMOTE, $ROUTE_INFO_GIT_BRANCH, $ROUTE_INFO_GIT_COMMIT, Dirty: \
 $ROUTE_INFO_GIT_DIRTY, $ROUTE_INFO_PLATFORM"
 echo "$CLIP_DESC" > /tmp/overlay.txt
-overlay /tmp/overlay.txt &
+overlay -o N -e 10 /tmp/overlay.txt &
 
 # Record with ffmpeg
 mkdir -p "$VIDEO_CWD"
