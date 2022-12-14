@@ -27,7 +27,7 @@ openpilot can't do on-ramps and probably never will with my car, but this is a n
 
 https://user-images.githubusercontent.com/5363/202887339-97c69dc1-8a4a-4248-a1bc-fd8599bbb5b5.mp4
 
-This is a video of a bug report where openpilot's laternal handling lost the lane:
+This is a video of a bug report where openpilot's lateral handling lost the lane:
 
 https://user-images.githubusercontent.com/5363/205901777-53fd18f9-2ab5-400b-92f5-45daf3a34fbd.mp4
 
