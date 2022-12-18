@@ -196,7 +196,7 @@ https://user-images.githubusercontent.com/5363/204060281-ed1c2376-498a-45f8-a8ac
 
 ### Metadata
 
-In addition to the burned-in text atop the clip, you can view that metadata in a copy-pastable format by opening the clip with VLC and going to `Window > Media Information`.
+In addition to the burned-in text atop the clip, you can view that metadata in a copy-pastable format by opening the clip with VLC and going to `Window > Media Information`. Unfortunately, this seems to be wiped by Discord and other hosts.
 
 ![Media Information](https://user-images.githubusercontent.com/5363/204060653-fcd0f01c-a03f-4430-9488-ea66fc61fbaa.png)
 
