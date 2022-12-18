@@ -1,6 +1,6 @@
 # 📽 Openpilot Replay Clipper
 
-Capture and develop short clips of [openpilot][op] routes with the openpilot UI included, with the route and seconds marker branded into the clip. Useful for posting replay clips with the UI including path and lane-lines in the [comma.ai Discord's #openpilot-experience channel](https://discord.comma.ai) or anywhere else that takes video.
+Capture and develop short clips of [openpilot][op] with the openpilot UI (path, lane lines, modes, etc.) included, with the segment ID and seconds marker branded into the clip. Useful for posting clips in the [comma.ai Discord's #openpilot-experience channel](https://discord.comma.ai) or anywhere else that takes video.
 
 Show the bad and the good of openpilot! Very useful for [making outstanding bug reports](https://github.com/commaai/openpilot/wiki/FAQ#how-do-i-report-a-bug) or [posting UI video in interesting situations on Twitter](https://twitter.com/yassineyousfi_/status/1590473942439198720)!
 
@@ -42,7 +42,7 @@ https://user-images.githubusercontent.com/5363/205901777-53fd18f9-2ab5-400b-92f5
 
 ### Pre-Setup
 
-Ensure your route's files are fully uploaded on https://my.comma.ai. Click `Files` when viewing a route and select the option to upload all files (`Upload ## files`). Make sure it says "`uploaded`".
+Ensure your openpilot route's files are fully uploaded on https://connect.comma.ai/. Click `Files` when viewing a route and select the option to upload all files (`Upload ## files`). Make sure it says "`uploaded`".
 
 - This route is not yet fully uploaded:
   - <img width="347" alt="Screen Shot 2022-09-06 at 11 55 39 PM" src="https://user-images.githubusercontent.com/5363/188815682-6694c2f8-1d77-468e-9152-75a709477c9a.png">
@@ -77,11 +77,12 @@ We will be using [GitHub Codespaces][ghcs].
 
 There are options but these are the basic steps. Note, the screenshots below may vary in themes and UI, but the layout is generally the same.
 
-1. Find the route you wish to take a clip from from Comma Connect at https://connect.comma.ai.
-2. Find the starting seconds value. The route's timeline will have a widget below your cursor that's "segment number, local time". Segments are made every minute. So scrub it, and do a little mental arithmetic to get the starting second. I usually do "60 \* segment number + offset" as my mental calculation. Edit the starting second in the `scratch_run.sh` file to this value.
+1. Find the openpilot route you wish to take a clip from in Comma Connect at https://connect.comma.ai.
+2. Find the starting seconds value. The route's timeline will have a widget below your cursor that's "segment number, local time". Segments are made every minute and start from 0. So scrub it, and do a little mental arithmetic to get the starting second. I usually do "60 \* segment number + offset" as my mental calculation. Edit the starting second in the `scratch_run.sh` file to this value.
    - Sample: <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
    - In this example, the starting second would be at least 6 \* 30 = 180 seconds.
-3. Get the route ID from `More Info`. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52`. Edit the route ID in the `scratch_run.sh` file to this value. Make sure to remove the segment ID portion: `--#`.
+   - Don't stress on this, if this is your first time, just wing it. You'll get it.
+3. Get any segment ID of the route from `More Info`. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52--1`. Edit the route ID in the `scratch_run.sh` file to this value. 
    - <img width="336" alt="image" src="https://user-images.githubusercontent.com/5363/188817040-5341e1af-2176-47ad-87f3-ba0a3d88a32a.png">
 4. Get a JWT Token from https://jwt.comma.ai. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Edit the JWT token in the `scratch_run.sh` file to this value. **Keep this token private, do not share it with anyone as it will grant access to your comma connect account for a year.**
 5. Change the clip length value in `scratch_run.sh` to the number of seconds you want to capture. Longer lengths take proportionally longer to capture.
@@ -97,7 +98,9 @@ There are options but these are the basic steps. Note, the screenshots below may
       - <img width="1510" alt="Screenshot 2022-11-27 at 4 26 43 PM" src="https://user-images.githubusercontent.com/5363/204168325-4682c223-39d8-45f6-8065-ce3f2cd02bff.png">
 10. Right click and download `clip.mp4` (or any files you've generated) to your computer. You can share or upload this file wherever you want.
 11. If you want to make more clips, continue to edit and run `./scratch_run.sh`, and refresh the web server's tab.
-12. Cleanup is easy. Just close the browser tabs. The GitHub Codespace will automatically stop after 30 minutes of inactivity and will automatically be completely deleted after 30 days of idle by default. If you wish, you can stop and delete the codespaces earlier than the default times here: https://github.com/codespaces. It is also possible to restart a pre-existing codespace and continue where you left off if it wasn't deleted.
+12. Cleanup is easy. Just close the browser tabs. The GitHub Codespace will automatically stop after 30 minutes of inactivity and will automatically be completely deleted after 30 days of idle by default. 
+  - If you wish, you can stop and delete the codespaces earlier than the default times here: https://github.com/codespaces.
+  - It is also possible to restart a pre-existing codespace and continue where you left off if it wasn't deleted.  
 
 ## Self running
 
