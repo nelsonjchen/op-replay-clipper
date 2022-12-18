@@ -90,15 +90,14 @@ There are options but these are the basic steps. Note, the screenshots below may
    - Sample: <img width="1072" alt="image" src="https://user-images.githubusercontent.com/5363/202886850-cf4e392f-f40f-423c-bbae-2b5917f74971.png">
 7. Wait 3 minutes, and the script should complete.
    - Sample: <img width="1511" alt="Screenshot 2022-11-27 at 2 32 19 PM" src="https://user-images.githubusercontent.com/5363/204163251-638257ee-df14-440a-a8f0-3e26e4aae80e.png">
-8. If you want to capture more clips, edit `./scratch_run.sh` accordingly and change the output name.
-9. After it completes, click "Go Live" in the bottom right corner to start a web server and open the web server in a new tab. Browse to the `shared` folder
+8. After it completes, click "Go Live" in the bottom right corner to start a web server and open the web server in a new tab. Browse to the `shared` folder
    - Clicking Go Live:
       - <img width="1186" alt="Screenshot 2022-11-27 at 4 25 19 PM" src="https://user-images.githubusercontent.com/5363/204168299-79346fa7-45c7-4b03-b6b5-ff793af2a05e.png">
    - Web Server View Sample
       - <img width="1510" alt="Screenshot 2022-11-27 at 4 26 43 PM" src="https://user-images.githubusercontent.com/5363/204168325-4682c223-39d8-45f6-8065-ce3f2cd02bff.png">
-10. Right click and download `clip.mp4` (or any files you've generated) to your computer. You can share or upload this file wherever you want.
-11. If you want to make more clips, continue to edit and run `./scratch_run.sh`, and refresh the web server's tab.
-12. Cleanup is easy. Just close the browser tabs. The GitHub Codespace will automatically stop after 30 minutes of inactivity and will automatically be completely deleted after 30 days of idle by default. 
+9. Right click and download `clip.mp4` (or any files you've generated) to your computer. You can share or upload this file wherever you want.
+10. If you want to make more clips, continue to edit and run `./scratch_run.sh`, and refresh the web server's tab.
+11. Cleanup is easy. Just close the browser tabs. The GitHub Codespace will automatically stop after 30 minutes of inactivity and will automatically be completely deleted after 30 days of idle by default. 
   - If you wish, you can stop and delete the codespaces earlier than the default times here: https://github.com/codespaces.
   - It is also possible to restart a pre-existing codespace and continue where you left off if it wasn't deleted.  
 
