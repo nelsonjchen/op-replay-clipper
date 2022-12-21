@@ -20,7 +20,7 @@
   --start-seconds 60 \
   `# It's the length of a clip. Keep it short. Or long, if you want.` \
   `# Longer clips take proportionally longer to render.` \
-  --length-seconds 60 \
+  --length-seconds 30 \
   `# https://ntfy.sh can be used to provide desktop notifications when a rendering is complete.` \
   `# Pick a unique topic name of your choice, and replace "ntfy_topic_of_your_choice" below with it` \
   `# Then, visit and allow desktop notifications from https://ntfy.sh/ntfy_topic_of_your_choice` \
