@@ -13,6 +13,7 @@ Give this project a test with [GitHub Codespaces](https://github.com/codespaces)
 * The free GitHub account will give you 30 free hours of a 4 CPU machine every month.
 * It's preset with a spending limit of $0/mo. There is no risk of charging you anything.
 * Setup is fast. You can go from nothing to rendering and developing a clip within two minutes.
+* You don't need a comma prime or lite subscription.
 * Cleanup is easy, you just close the browser tab and/or delete it from https://github.com/codespaces if you wish. 
 
 [Alternatively, you can also run this setup on your own machine. It is quite a bit more complicated but can grant you more power if you desire.](#self-running)
