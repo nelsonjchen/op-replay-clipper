@@ -6,7 +6,7 @@ Show the bad and the good of openpilot! Very useful for [making outstanding bug 
 
 Give this project a test with [GitHub Codespaces](https://github.com/codespaces) if you haven't already!
 
-* Prior GitHub Codespaces experience is not needed! 
+* Prior GitHub Codespaces experience is not needed!
 * You don't need an existing openpilot development environment setup!
 * You don't need to install anything on your computer!
 * You just need a free GitHub account.
@@ -14,7 +14,7 @@ Give this project a test with [GitHub Codespaces](https://github.com/codespaces)
 * It's preset with a spending limit of $0/mo. There is no risk of charging you anything.
 * Setup is fast. You can go from nothing to rendering and developing a clip within two minutes.
 * You don't need a comma prime or lite subscription.
-* Cleanup is easy, you just close the browser tab and/or delete it from https://github.com/codespaces if you wish. 
+* Cleanup is easy, you just close the browser tab and/or delete it from https://github.com/codespaces if you wish.
 
 [Alternatively, you can also run this setup on your own machine. It is quite a bit more complicated but can grant you more power if you desire.](#self-running)
 
@@ -37,7 +37,7 @@ https://user-images.githubusercontent.com/5363/205901777-53fd18f9-2ab5-400b-92f5
 
 - The UI replayed is comma.ai's latest stock UI on their master branch; routes from forks that differ alot from stock may not render correctly. Your experience may and will vary. Please make sure to note these replays are from fork data and may not be representative of the stock behavior. [The comma team really does not like it if you ask them to debug fork code as "it just takes too much time to be sidetracked by hidden and unclear changes"](https://discord.com/channels/469524606043160576/616456819027607567/1042263657851142194).
 - Older routes may not replay correctly or at all on the latest UI in the master branch.
-- I strongly recommend you work on this from a desktop, laptop, or at least a tablet. 
+- I strongly recommend you work on this from a desktop, laptop, or at least a tablet.
 - **You are advised to upload all files of the route to Comma Connect servers before attempting to render a route. If you do not upload all files, the replay will not render past the starting UI.**
 
 ## Usage
@@ -84,7 +84,7 @@ There are options but these are the basic steps. Note, the screenshots below may
    - Sample: <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
    - In this example, the starting second would be at least 6 \* 30 = 180 seconds.
    - Don't stress on this, if this is your first time, just wing it. You'll get it.
-3. Get any segment ID of the route from `More Info`. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52--1`. Edit the route ID in the `scratch_run.sh` file to this value. 
+3. Get any segment ID of the route from `More Info`. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52--1`. Edit the route ID in the `scratch_run.sh` file to this value.
    - <img width="336" alt="image" src="https://user-images.githubusercontent.com/5363/188817040-5341e1af-2176-47ad-87f3-ba0a3d88a32a.png">
 4. Get a JWT Token from https://jwt.comma.ai. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Edit the JWT token in the `scratch_run.sh` file to this value. **Keep this token private, do not share it with anyone as it will grant access to your comma connect account for a year.**
 5. Change the clip length value in `scratch_run.sh` to the number of seconds you want to capture. Longer lengths take proportionally longer to capture.
@@ -99,9 +99,9 @@ There are options but these are the basic steps. Note, the screenshots below may
       - <img width="1510" alt="Screenshot 2022-11-27 at 4 26 43 PM" src="https://user-images.githubusercontent.com/5363/204168325-4682c223-39d8-45f6-8065-ce3f2cd02bff.png">
 9. Right click and download `clip.mp4` (or any files you've generated) to your computer. You can share or upload this file wherever you want.
 10. If you want to make more clips, continue to edit and run `./scratch_run.sh`, and refresh the web server's tab.
-11. Cleanup is easy. Just close the browser tabs. The GitHub Codespace will automatically stop after 30 minutes of inactivity and will automatically be completely deleted after 30 days of idle by default. 
+11. Cleanup is easy. Just close the browser tabs. The GitHub Codespace will automatically stop after 30 minutes of inactivity and will automatically be completely deleted after 30 days of idle by default.
   - If you wish, you can stop and delete the codespaces earlier than the default times here: https://github.com/codespaces.
-  - It is also possible to restart a pre-existing codespace and continue where you left off if it wasn't deleted.  
+  - It is also possible to restart a pre-existing codespace and continue where you left off if it wasn't deleted.
 
 ## Self running
 
@@ -158,6 +158,8 @@ https://code.visualstudio.com/docs/devcontainers/containers#_quick-start-open-an
 
 From there on, follow the [Steps as normally used with GitHub Codespaces](#steps).
 
+You may want to "Rebuild Container without Cache" to update to a newer Openpilot UI periodically.
+
 ### Self Running Teardown
 
 ### Teardown
@@ -174,7 +176,7 @@ You may want to prune images. Up to you, DIYer!
 
 ### Self Running Development
 
-Use the `dev` service in the `docker-compose.yml` file to run the `clip.sh` script in a development environment. This will allow you to make changes to the `clip.sh` script and see the changes reflected in the container.
+Best to use the Dev Container.
 
 ### Bad or Too Slow Computer
 
