@@ -38,7 +38,18 @@ services:
       context: ../
       target: clipper
     shm_size: '1gb'
+    # Want to run this in a GPU container? Uncomment the next lines
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
     tty: true
     environment:
       - DISPLAY=:0
       - SCALE=1
+      # Only applicable if you want to run this in a GPU container, but harmless otherwise
+      - NVIDIA_DRIVER_CAPABILITIES=all
+
