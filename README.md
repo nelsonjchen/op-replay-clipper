@@ -16,7 +16,7 @@ Give this project a test with [GitHub Codespaces](https://github.com/codespaces)
 * You don't need a comma prime or lite subscription.
 * Cleanup is easy, you just close the browser tab and/or delete it from https://github.com/codespaces if you wish.
 
-[Alternatively, you can also run this setup on your own machine. It is quite a bit more complicated but can grant you more power if you desire.](#self-running)
+[Alternatively, you can also run this setup on your own machine. It is quite a bit more complicated but can grant you more power and speed via more CPU or use of a GPU if you desire.](#self-running)
 
 ## Samples
 
@@ -162,17 +162,23 @@ You may want to "Rebuild Container without Cache" to update to a newer Openpilot
 
 #### GPU Acceleration
 
-Currently only tested with NVIDIA GPUs and on WSL2. Setup in other environments may be possible. In general, if you can run
-`nvidia-smi` and see your GPU, you should be able to run this tool with GPU acceleration.
+Currently only tested with NVIDIA GPUs and on WSL2 in Windows 11. Setup in other environments may be possible, but untested.
 
-See `.devcontainer/docker-compose.yml` for some lines to uncomment when running this tool inside VSCode's Devcontainers. You
-will likely need to rebuild the container after uncommenting. Once rebuilt, check `nvidia-smi` to see if your GPU is detected
-inside. If it is, you should be able to run the tool with a higher `--speedhack-ratio` value.
+See `.devcontainer/docker-compose.yml` for some lines to uncomment when running this tool inside VSCode's Dev Container. You
+will need to "Rebuild Container" from the command palette after uncommenting to enable the GPU. Run `nvidia-smi` inside the Dev Container and see your GPU and
+you should be able to run this tool with GPU acceleration.
+
+Once rebuilt, run `nvidia-smi` inside the Dev Container to see if your GPU is detected inside.
+
+If it is, you should be able to run the tool with a higher `--speedhack-ratio` value (1.0 to 2.0).
+
+It is possible to outstrip the download speed of the forward video from comma! For the first run, you may want to pass in a 20+ second `--download-wait` or `-w` value to give the replay tool time to download the forward video before the tool starts capturing.
 
 Things that are accelerated by passing in a GPU:
 
-* UI rendering
-* replay's decoding of the forward video if Nvidia GPU is used
+* (Auto) UI rendering occurs in hardware and not CPU.
+* (Nvidia-only/Auto) `replay`'s decoding of the forward video if a NVIDIA GPU is provided and CUDA is available.
+* (Nvidia-only/Manual) Optionally, on NVIDIA GPUs, you can also pass into `clip.sh` the option `--nv-direct-encoding` to encode the captured video directly to a H.264 MP4 via the GPU. Video quality is lower, but it is *quick*.
 
 ### Self Running Teardown
 
