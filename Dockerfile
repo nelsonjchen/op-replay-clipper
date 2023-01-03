@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y \
     # The usual dev stuff
     htop \
     vim \
-    jq \    
+    jq \
     shellcheck \
     # For Replay
     tigervnc-standalone-server \
@@ -21,7 +21,9 @@ RUN apt-get update && apt-get install -y \
     libfreetype-dev \
     atomicparsley \
     # For Debugging X stuff
-    mesa-utils
+    mesa-utils \
+    # For script calcuation
+    bc
 
 # Add overlay
 RUN git clone https://github.com/ftorkler/x11-overlay --depth 1 && make -C x11-overlay && cp x11-overlay/bin/overlay /usr/local/bin
