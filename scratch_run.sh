@@ -28,5 +28,8 @@
   --ntfysh ntfy_topic_of_your_choice \
   `# Much of the world like a superior systems of measurement. Uncomment-ize the next line to render in metric.` \
   `# --metric` \
+  `# For the first time, it's important to wait a few seconds for the video and logs to download and cache for rendering` \
+  `# For a re-render, you can remove this wait by un-commentizing the next line ` \
+  `# --download-wait 0` \
   `# Change the output clip file name here. Any existing files will be overwritten.` \
-  --output clip.mp4 
+  --output clip.mp4
