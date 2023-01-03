@@ -165,14 +165,11 @@ You may want to "Rebuild Container without Cache" to update to a newer Openpilot
 Currently only tested with NVIDIA GPUs and on WSL2 in Windows 11. Setup in other environments may be possible, but untested.
 
 See `.devcontainer/docker-compose.yml` for some lines to uncomment when running this tool inside VSCode's Dev Container. You
-will need to "Rebuild Container" from the command palette after uncommenting to enable the GPU. Run `nvidia-smi` inside the Dev Container and see your GPU and
-you should be able to run this tool with GPU acceleration.
+will need to "Rebuild Container" from the command palette after uncommenting to enable the GPU. Run `nvidia-smi` inside the Dev Container. If you see your GPU, you should be able to run this tool with GPU acceleration.
 
-Once rebuilt, run `nvidia-smi` inside the Dev Container to see if your GPU is detected inside.
+You should be able to run the tool with a higher `--speedhack-ratio` value (1.0 to 2.0).
 
-If it is, you should be able to run the tool with a higher `--speedhack-ratio` value (1.0 to 2.0).
-
-It is possible to outstrip the download speed of the forward video from comma! For the first run, you may want to pass in a 20+ second `--download-wait` or `-w` value to give the replay tool time to download the forward video before the tool starts capturing.
+It is now possible to outstrip the download speed of the forward video from comma! For the first run, you may want to pass in a 20+ second `--download-wait` or `-w` value to give the replay tool time to download the forward video before the tool starts capturing.
 
 Things that are accelerated by passing in a GPU:
 
