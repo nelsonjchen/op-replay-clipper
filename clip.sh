@@ -9,7 +9,7 @@
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
 # ARG_OPTIONAL_SINGLE([smear-amount],[],[Amount of seconds to smear the clip start by before recording starts],[10])
 # ARG_OPTIONAL_SINGLE([ntfysh],[n],[ntfy.sh topic to post to when clip has completed rendering])
-# ARG_OPTIONAL_BOOLEAN([slow-cpu],[],[Turn on or off slower CPU mode at 0.1x for ~1 core CPUs],[off])
+# ARG_OPTIONAL_SINGLE([speedhack-ratio],[r],[speedhack ratio for stable, non-jittery rendering],[0.3])
 # ARG_OPTIONAL_SINGLE([video-cwd],[c],[video working and output directory],[./shared])
 # ARG_OPTIONAL_SINGLE([vnc],[],[VNC Port for debugging, -1 will disable],[0])
 # ARG_OPTIONAL_SINGLE([output],[o],[output clip name],[clip.mp4])
@@ -35,7 +35,7 @@ die()
 
 begins_with_short_option()
 {
-	local first_option all_short_options='slmejncoh'
+	local first_option all_short_options='slmejnrcoh'
 	first_option="${1:0:1}"
 	test "$all_short_options" = "${all_short_options/$first_option/}" && return 1 || return 0
 }
@@ -50,7 +50,7 @@ _arg_experimental="off"
 _arg_jwt_token=
 _arg_smear_amount="10"
 _arg_ntfysh=
-_arg_slow_cpu="off"
+_arg_speedhack_ratio="0.3"
 _arg_video_cwd="./shared"
 _arg_vnc="0"
 _arg_output="clip.mp4"
@@ -60,7 +60,7 @@ _arg_metric="off"
 print_help()
 {
 	printf '%s\n' "See README at https://github.com/nelsonjchen/op-replay-clipper/"
-	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-e|--(no-)experimental] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [--(no-)slow-cpu] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-e|--(no-)experimental] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
@@ -69,11 +69,11 @@ print_help()
 	printf '\t%s\n' "-j, --jwt-token: JWT Auth token to use (get token from https://jwt.comma.ai) (no default)"
 	printf '\t%s\n' "--smear-amount: Amount of seconds to smear the clip start by before recording starts (default: '10')"
 	printf '\t%s\n' "-n, --ntfysh: ntfy.sh topic to post to when clip has completed rendering (no default)"
-	printf '\t%s\n' "--slow-cpu, --no-slow-cpu: Turn on or off slower CPU mode at 0.1x for ~1 core CPUs (off by default)"
+	printf '\t%s\n' "-r, --speedhack-ratio: speedhack ratio for stable, non-jittery rendering (default: '0.3')"
 	printf '\t%s\n' "-c, --video-cwd: video working and output directory (default: './shared')"
 	printf '\t%s\n' "--vnc: VNC Port for debugging, -1 will disable (default: '0')"
 	printf '\t%s\n' "-o, --output: output clip name (default: 'clip.mp4')"
-	printf '\t%s\n' "--metric, --no-metric: Turn on or off metric system in the ui (off by default)"
+	printf '\t%s\n' "--metric, --no-metric: Use metric system in the ui (off by default)"
 	printf '\t%s\n' "-h, --help: Prints help"
 }
 
@@ -160,9 +160,16 @@ parse_commandline()
 			-n*)
 				_arg_ntfysh="${_key##-n}"
 				;;
-			--no-slow-cpu|--slow-cpu)
-				_arg_slow_cpu="on"
-				test "${1:0:5}" = "--no-" && _arg_slow_cpu="off"
+			-r|--speedhack-ratio)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_speedhack_ratio="$2"
+				shift
+				;;
+			--speedhack-ratio=*)
+				_arg_speedhack_ratio="${_key##--speedhack-ratio=}"
+				;;
+			-r*)
+				_arg_speedhack_ratio="${_key##-r}"
 				;;
 			-c|--video-cwd)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
@@ -191,12 +198,12 @@ parse_commandline()
 			--output=*)
 				_arg_output="${_key##--output=}"
 				;;
+			-o*)
+				_arg_output="${_key##-o}"
+				;;
 			--no-metric|--metric)
 				_arg_metric="on"
 				test "${1:0:5}" = "--no-" && _arg_metric="off"
-				;;
-			-o*)
-				_arg_output="${_key##-o}"
 				;;
 			-h|--help)
 				print_help
@@ -316,12 +323,8 @@ ROUTE_INFO_PLATFORM=$(echo "$ROUTE_INFO" | jq -r '.platform')
 
 # Render speed
 # RECORD_FRAMERATE = SPEEDHACK_AMOUNT * 20
-SPEEDHACK_AMOUNT=0.3
-RECORD_FRAMERATE=6
-if [ "$_arg_slow_cpu" = "on" ]; then
-		SPEEDHACK_AMOUNT=0.1
-		RECORD_FRAMERATE=2
-fi
+SPEEDHACK_AMOUNT=$_arg_speedhack_ratio
+RECORD_FRAMERATE=$(echo "($SPEEDHACK_AMOUNT * 20)/1" | bc)
 
 pushd /home/batman/openpilot
 

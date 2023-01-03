@@ -112,14 +112,14 @@ Maybe you want to run this on your own computer, like if you want to generate ma
 The requirements may be a bit high.
 
 - 4 vCPUs/hyperthreads
-  - 2vCPUs/hyperthreads with `--slow-cpu` flag that renders slower to maintain stability
+  - 2vCPUs/hyperthreads with a lower `--speedhack-ratio` value that renders slower to maintain stability
 - A working Docker-Compose setup. Docker for Windows or Docker for Mac will work.
 - Intel or AMD processor.
   - Emulation of Intel on Apple Silicon with Docker for Mac is [too slow](#bad-or-too-slow-computer) to handle the requirements. Please use a suitable Intel or AMD machine.
-- 10 GB of disk space.
+- 10 GB of disk space. More needed if you're rendering longer clips as intermediates are quite raw.
 - 100MB/s disk speed.
   - Docker for Windows users should clone the repository to the Linux filesystem to meet the requirement.
-- A GPU is **not** needed and is also unused in the tool.
+- A GPU is **not** needed. However, one could be used to accelerate the rendering process.
 
 The CPU requirement is due to a number of factors:
 
@@ -130,7 +130,7 @@ The CPU requirement is due to a number of factors:
 
 Even with these CPU requirements, it was not enough to run the tooling at full speed on the CPU. Some measures have been done to make clip recording possible.
 
-- Relevant processes are speedhack'd with `faketime` to run at 0.3x by default or 0.1x with the `--slow-cpu` flag.
+- Relevant processes are speedhack'd with `faketime` to run at 0.3x by default.
 - Capture is done in real time but undercranked to simulate full speed.
 
 ### Self running setup
@@ -159,6 +159,20 @@ https://code.visualstudio.com/docs/devcontainers/containers#_quick-start-open-an
 From there on, follow the [Steps as normally used with GitHub Codespaces](#steps).
 
 You may want to "Rebuild Container without Cache" to update to a newer Openpilot UI periodically.
+
+#### GPU Acceleration
+
+Currently only tested with NVIDIA GPUs and on WSL2. Setup in other environments may be possible. In general, if you can run
+`nvidia-smi` and see your GPU, you should be able to run this tool with GPU acceleration.
+
+See `.devcontainer/docker-compose.yml` for some lines to uncomment when running this tool inside VSCode's Devcontainers. You
+will likely need to rebuild the container after uncommenting. Once rebuilt, check `nvidia-smi` to see if your GPU is detected
+inside. If it is, you should be able to run the tool with a higher `--speedhack-ratio` value.
+
+Things that are accelerated by passing in a GPU:
+
+* UI rendering
+* replay's decoding of the forward video if Nvidia GPU is used
 
 ### Self Running Teardown
 
