@@ -14,6 +14,7 @@
 # ARG_OPTIONAL_SINGLE([vnc],[],[VNC Port for debugging, -1 will disable],[0])
 # ARG_OPTIONAL_SINGLE([output],[o],[output clip name],[clip.mp4])
 # ARG_OPTIONAL_BOOLEAN([metric],[],[Use metric system in the ui],[off])
+# ARG_OPTIONAL_BOOLEAN([nv-direct-encoding],[],[Use an available Nvidia GPU to directly encode grabbed video],[off])
 # ARG_POSITIONAL_SINGLE([route_id],[comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) ])
 # ARG_HELP([See README at https://github.com/nelsonjchen/op-replay-clipper/])
 # ARGBASH_GO()
@@ -55,12 +56,13 @@ _arg_video_cwd="./shared"
 _arg_vnc="0"
 _arg_output="clip.mp4"
 _arg_metric="off"
+_arg_nv_direct_encoding="off"
 
 
 print_help()
 {
 	printf '%s\n' "See README at https://github.com/nelsonjchen/op-replay-clipper/"
-	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-j|--jwt-token <arg>] [-w|--download-wait <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-j|--jwt-token <arg>] [-w|--download-wait <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [--(no-)nv-direct-encoding] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
@@ -74,6 +76,7 @@ print_help()
 	printf '\t%s\n' "--vnc: VNC Port for debugging, -1 will disable (default: '0')"
 	printf '\t%s\n' "-o, --output: output clip name (default: 'clip.mp4')"
 	printf '\t%s\n' "--metric, --no-metric: Use metric system in the ui (off by default)"
+	printf '\t%s\n' "--nv-direct-encoding, --no-nv-direct-encoding: Use an available Nvidia GPU to directly encode grabbed video (off by default)"
 	printf '\t%s\n' "-h, --help: Prints help"
 }
 
@@ -204,6 +207,10 @@ parse_commandline()
 				_arg_metric="on"
 				test "${1:0:5}" = "--no-" && _arg_metric="off"
 				;;
+			--no-nv-direct-encoding|--nv-direct-encoding)
+				_arg_nv_direct_encoding="on"
+				test "${1:0:5}" = "--no-" && _arg_nv_direct_encoding="off"
+				;;
 			-h|--help)
 				print_help
 				exit 0
@@ -256,7 +263,6 @@ assign_positional_args 1 "${_positionals[@]}"
 # ] <-- needed because of Argbash
 
 
-
 set -ex
 
 # Cleanup processes for easy fast testing.
@@ -292,6 +298,7 @@ ROUTE=$(echo "$_arg_route_id" | sed -E 's/--[0-9]+$//g')
 SEGMENT_NUM=$(($STARTING_SEC / 60))
 SEGMENT_ID="$ROUTE--$SEGMENT_NUM"
 RENDER_METRIC_SYSTEM=$_arg_metric
+NVIDIA_DIRECT_ENCODING=$_arg_nv_direct_encoding
 JWT_AUTH=$_arg_jwt_token
 VIDEO_CWD=$_arg_video_cwd
 VIDEO_RAW_OUTPUT=clip_raw.mkv
@@ -367,11 +374,17 @@ else
 fi
 # Make sure the UI runs at full speed.
 pwd
-nice -n 10 ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"
-# The setup is no longer needed. Just transcode now.
-cleanup
-ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 1 -an -f MP4 /dev/null
-ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 2 -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
+
+if [ "$NVIDIA_DIRECT_ENCODING" = "on" ]; then
+	# Directly encode with nvidia hardware
+	nice -n 10 ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec h264_nvenc -preset llhq -rc vbr_hq -cq 0 -b:v "$TARGET_BITRATE" -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080" -y -t "$RECORDING_LENGTH" "$VIDEO_OUTPUT"
+else
+	nice -n 10 ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"
+	# The setup is no longer needed. Just transcode now.
+	cleanup
+	ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 1 -an -f MP4 /dev/null
+	ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 2 -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
+fi
 
 # Set mp4 metadata
 AtomicParsley "$VIDEO_OUTPUT" --title "Segment ID: $SEGMENT_ID, Starting Sec: $STARTING_SEC" \
