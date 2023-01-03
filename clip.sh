@@ -5,7 +5,6 @@
 # ARG_OPTIONAL_SINGLE([start-seconds],[s],[Seconds to start at],[60])
 # ARG_OPTIONAL_SINGLE([length-seconds],[l],[Clip length],[30])
 # ARG_OPTIONAL_SINGLE([target-mb],[m],[Target converted file size in MB],[50])
-# ARG_OPTIONAL_BOOLEAN([experimental],[e],[Turn on or off experimental mode ui],[off])
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
 # ARG_OPTIONAL_SINGLE([download-wait],[w],[Amount of seconds to wait on initial start for the initial download to occur],[18])
 # ARG_OPTIONAL_SINGLE([smear-amount],[],[Amount of seconds to smear the clip start by before recording starts],[10])
@@ -36,7 +35,7 @@ die()
 
 begins_with_short_option()
 {
-	local first_option all_short_options='slmejwnrcoh'
+	local first_option all_short_options='slmjwnrcoh'
 	first_option="${1:0:1}"
 	test "$all_short_options" = "${all_short_options/$first_option/}" && return 1 || return 0
 }
@@ -47,7 +46,6 @@ _positionals=()
 _arg_start_seconds="60"
 _arg_length_seconds="30"
 _arg_target_mb="50"
-_arg_experimental="off"
 _arg_jwt_token=
 _arg_download_wait="18"
 _arg_smear_amount="10"
@@ -62,12 +60,11 @@ _arg_metric="off"
 print_help()
 {
 	printf '%s\n' "See README at https://github.com/nelsonjchen/op-replay-clipper/"
-	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-e|--(no-)experimental] [-j|--jwt-token <arg>] [-w|--download-wait <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-j|--jwt-token <arg>] [-w|--download-wait <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
 	printf '\t%s\n' "-m, --target-mb: Target converted file size in MB (default: '50')"
-	printf '\t%s\n' "-e, --experimental, --no-experimental: Turn on or off experimental mode ui (off by default)"
 	printf '\t%s\n' "-j, --jwt-token: JWT Auth token to use (get token from https://jwt.comma.ai) (no default)"
 	printf '\t%s\n' "-w, --download-wait: Amount of seconds to wait on initial start for the initial download to occur (default: '18')"
 	printf '\t%s\n' "--smear-amount: Amount of seconds to smear the clip start by before recording starts (default: '10')"
@@ -120,18 +117,6 @@ parse_commandline()
 				;;
 			-m*)
 				_arg_target_mb="${_key##-m}"
-				;;
-			-e|--no-experimental|--experimental)
-				_arg_experimental="on"
-				test "${1:0:5}" = "--no-" && _arg_experimental="off"
-				;;
-			-e*)
-				_arg_experimental="on"
-				_next="${_key##-e}"
-				if test -n "$_next" -a "$_next" != "$_key"
-				then
-					{ begins_with_short_option "$_next" && shift && set -- "-e" "-${_next}" "$@"; } || die "The short option '$_key' can't be decomposed to ${_key:0:2} and -${_key:2}, because ${_key:0:2} doesn't accept value and '-${_key:2:1}' doesn't correspond to a short option."
-				fi
 				;;
 			-j|--jwt-token)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
@@ -375,12 +360,6 @@ overlay -o N -e 10 /tmp/overlay.txt &
 # Record with ffmpeg
 mkdir -p "$VIDEO_CWD"
 pushd "$VIDEO_CWD"
-# Render with experimental_mode
-if [ "$RENDER_EXPERIMENTAL_MODE" = "on" ]; then
-	echo -n "1" > ~/.comma/params/d/ExperimentalMode
-else
-	echo -n "0" > ~/.comma/params/d/ExperimentalMode
-fi
 # Use metric system in the ui
 if [ "$RENDER_METRIC_SYSTEM" = "on" ]; then
 	echo -n "1" > ~/.comma/params/d/IsMetric
