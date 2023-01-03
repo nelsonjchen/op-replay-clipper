@@ -291,7 +291,6 @@ ROUTE=$(echo "$_arg_route_id" | sed -E 's/--[0-9]+$//g')
 # Segment ID is the floor of the starting seconds divided by 60
 SEGMENT_NUM=$(($STARTING_SEC / 60))
 SEGMENT_ID="$ROUTE--$SEGMENT_NUM"
-RENDER_EXPERIMENTAL_MODE=$_arg_experimental
 RENDER_METRIC_SYSTEM=$_arg_metric
 JWT_AUTH=$_arg_jwt_token
 VIDEO_CWD=$_arg_video_cwd
