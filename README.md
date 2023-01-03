@@ -169,7 +169,7 @@ will need to "Rebuild Container" from the command palette after uncommenting to 
 
 You should be able to run the tool with a higher `--speedhack-ratio` value (1.0 to 2.0).
 
-It is now possible to outstrip the download speed of the forward video from comma! For the first run, you may want to pass in a 20+ second `--download-wait` or `-w` value to give the replay tool time to download the forward video before the tool starts capturing.
+It is now possible to outstrip the download speed of the forward video from comma! For the first run, you may want to pass in a 20+ second `--download-wait` argument to give the replay tool time to download the forward video before the tool starts capturing.
 
 Things that are accelerated by passing in a GPU:
 
