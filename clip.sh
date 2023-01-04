@@ -6,7 +6,6 @@
 # ARG_OPTIONAL_SINGLE([length-seconds],[l],[Clip length],[30])
 # ARG_OPTIONAL_SINGLE([target-mb],[m],[Target converted file size in MB],[50])
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
-# ARG_OPTIONAL_SINGLE([download-wait],[w],[Amount of seconds to wait on initial start for the initial download to occur],[18])
 # ARG_OPTIONAL_SINGLE([smear-amount],[],[Amount of seconds to smear the clip start by before recording starts],[10])
 # ARG_OPTIONAL_SINGLE([ntfysh],[n],[ntfy.sh topic to post to when clip has completed rendering])
 # ARG_OPTIONAL_SINGLE([speedhack-ratio],[r],[speedhack ratio for stable, non-jittery rendering],[0.3])
@@ -36,7 +35,7 @@ die()
 
 begins_with_short_option()
 {
-	local first_option all_short_options='slmjwnrcoh'
+	local first_option all_short_options='slmjnrcoh'
 	first_option="${1:0:1}"
 	test "$all_short_options" = "${all_short_options/$first_option/}" && return 1 || return 0
 }
@@ -48,7 +47,6 @@ _arg_start_seconds="60"
 _arg_length_seconds="30"
 _arg_target_mb="50"
 _arg_jwt_token=
-_arg_download_wait="18"
 _arg_smear_amount="10"
 _arg_ntfysh=
 _arg_speedhack_ratio="0.3"
@@ -62,13 +60,12 @@ _arg_nv_direct_encoding="off"
 print_help()
 {
 	printf '%s\n' "See README at https://github.com/nelsonjchen/op-replay-clipper/"
-	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-j|--jwt-token <arg>] [-w|--download-wait <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [--(no-)nv-direct-encoding] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [--(no-)nv-direct-encoding] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
 	printf '\t%s\n' "-m, --target-mb: Target converted file size in MB (default: '50')"
 	printf '\t%s\n' "-j, --jwt-token: JWT Auth token to use (get token from https://jwt.comma.ai) (no default)"
-	printf '\t%s\n' "-w, --download-wait: Amount of seconds to wait on initial start for the initial download to occur (default: '18')"
 	printf '\t%s\n' "--smear-amount: Amount of seconds to smear the clip start by before recording starts (default: '10')"
 	printf '\t%s\n' "-n, --ntfysh: ntfy.sh topic to post to when clip has completed rendering (no default)"
 	printf '\t%s\n' "-r, --speedhack-ratio: speedhack ratio for stable, non-jittery rendering (default: '0.3')"
@@ -131,17 +128,6 @@ parse_commandline()
 				;;
 			-j*)
 				_arg_jwt_token="${_key##-j}"
-				;;
-			-w|--download-wait)
-				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
-				_arg_download_wait="$2"
-				shift
-				;;
-			--download-wait=*)
-				_arg_download_wait="${_key##--download-wait=}"
-				;;
-			-w*)
-				_arg_download_wait="${_key##-w}"
 				;;
 			--smear-amount)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
@@ -290,7 +276,6 @@ SMEARED_STARTING_SEC=$(($STARTING_SEC - $SMEAR_AMOUNT))
 if [ $SMEARED_STARTING_SEC -lt 0 ]; then
 		SMEARED_STARTING_SEC=0
 fi
-DOWNLOAD_WAIT=$_arg_download_wait
 RECORDING_LENGTH=$_arg_length_seconds
 # Cleanup trailing segment count. Seconds is what matters
 ROUTE=$(echo "$_arg_route_id" | sed -E 's/--[0-9]+$//g')
@@ -347,7 +332,13 @@ tmux new-window -n ui -t clipper: "faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./se
 
 # Pause replay and let it download the route
 tmux send-keys -t clipper:replay Space
-sleep "$DOWNLOAD_WAIT"
+
+sleep 2
+# Wait until netstat shows less than 2 connections from ./tools/replay process
+while [ "$(netstat -tuplan | grep -E '443.*repl' | wc -l)" -gt 1 ]; do
+		echo "Waiting for segments to download..."
+		sleep 3
+done
 
 tmux send-keys -t clipper:replay Enter "$SMEARED_STARTING_SEC" Enter
 tmux send-keys -t clipper:replay Space
