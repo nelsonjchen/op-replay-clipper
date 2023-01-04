@@ -264,6 +264,7 @@ function ctrl_c() {
 }
 # trap ctrl-c and call ctrl_c()
 trap ctrl_c INT
+trap ctrl_c ERR
 
 # # Cleanup stale stuff from last run
 cleanup
