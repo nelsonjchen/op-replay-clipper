@@ -378,6 +378,7 @@ pwd
 if [ "$NVIDIA_DIRECT_ENCODING" = "on" ]; then
 	# Directly encode with nvidia hardware
 	nice -n 10 ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec h264_nvenc -preset llhq -rc vbr_hq -cq 0 -b:v "$TARGET_BITRATE" -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080" -y -t "$RECORDING_LENGTH" "$VIDEO_OUTPUT"
+	cleanup
 else
 	nice -n 10 ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"
 	# The setup is no longer needed. Just transcode now.
