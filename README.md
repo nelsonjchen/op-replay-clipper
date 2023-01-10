@@ -82,7 +82,7 @@ There are options but these are the basic steps. Note, the screenshots below may
 1. Find the openpilot route you wish to take a clip from in Comma Connect at https://connect.comma.ai.
 2. Find the starting seconds value. The route's timeline will have a widget below your cursor that's "segment number, local time". Segments are made every minute and start from 0. So scrub it, and do a little mental arithmetic to get the starting second. I usually do "60 \* segment number + offset" as my mental calculation. Edit the starting second in the `scratch_run.sh` file to this value.
    - Sample: <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
-   - In this example, the starting second would be at least 6 \* 30 = 180 seconds.
+   - In this example, the starting second would be at least 60 \* 3 = 180 seconds.
    - Don't stress on this, if this is your first time, just wing it. You'll get it.
 3. Get any segment ID of the route from `More Info`. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52--1`. Edit the route ID in the `scratch_run.sh` file to this value.
    - <img width="336" alt="image" src="https://user-images.githubusercontent.com/5363/188817040-5341e1af-2176-47ad-87f3-ba0a3d88a32a.png">
