@@ -14,7 +14,7 @@ Give this project a test with [GitHub Codespaces](https://github.com/codespaces)
 * It's preset with a spending limit of $0/mo. There is no risk of charging you anything.
 * Setup is fast. You can go from nothing to rendering and developing a clip within two minutes.
 * You don't need a comma prime or lite subscription.
-* Cleanup is easy, you just close the browser tab and/or delete it from https://github.com/codespaces if you wish.
+* Cleanup is easy, you just delete it from https://github.com/codespaces afterwards.
 
 [Alternatively, you can also run this setup on your own machine. It is quite a bit more complicated but can grant you more power and speed via more CPU or use of a GPU if you desire.](#self-running)
 
