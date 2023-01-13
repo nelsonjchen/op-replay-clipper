@@ -86,7 +86,7 @@ There are options but these are the basic steps. Note, the screenshots below may
    - Don't stress on this, if this is your first time, just wing it. You'll get it.
 3. Get any segment ID of the route from `More Info`. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52--1`. Edit the route ID in the `scratch_run.sh` file to this value.
    - <img width="336" alt="image" src="https://user-images.githubusercontent.com/5363/188817040-5341e1af-2176-47ad-87f3-ba0a3d88a32a.png">
-4. Get a JWT Token from https://jwt.comma.ai. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Edit the JWT token in the `scratch_run.sh` file to this value. **Keep this token private, do not share it with anyone as it will grant access to your comma connect account for a year.**
+4. Get a JWT Token from https://jwt.comma.ai with the same account type you log into Comma Connect with. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Edit the JWT token in the `scratch_run.sh` file to this value. **Keep this token private, do not share it with anyone as it will grant access to your comma connect account for a year.**
 5. Change the clip length value in `scratch_run.sh` to the number of seconds you want to capture. Longer lengths take proportionally longer to capture.
 6. Run the script with `./scratch_run.sh` in the Terminal.
    - Sample: <img width="1072" alt="image" src="https://user-images.githubusercontent.com/5363/202886850-cf4e392f-f40f-423c-bbae-2b5917f74971.png">
