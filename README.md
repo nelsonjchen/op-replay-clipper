@@ -206,7 +206,7 @@ https://user-images.githubusercontent.com/5363/196210351-acc0b235-f87b-4dbc-8b2a
 
 It is possible to upload only a small portion of a long route for the clipper with Comma Connect's GUI.
 
-You are recommended to select a minute before, and a minute after the incident you want to clip. This will give a buffer before and after the incident to provide a margin for the clipper to render with.
+**You are strongly recommended to select a minute before, and a minute after the incident you want to clip.** This will give a buffer before and after the incident to provide a margin for the clipper to render with. Think of the clipper as a fragile film projector; give it some slack and upload the files for these adjacent segments. If you do not, rendering may not start at all.
 
 The video below shows how to do this with Comma Connect's GUI.
 
