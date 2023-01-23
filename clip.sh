@@ -364,8 +364,6 @@ if [ "$RENDER_METRIC_SYSTEM" = "on" ]; then
 else
 	echo -n "0" > ~/.comma/params/d/IsMetric
 fi
-# Make sure the UI runs at full speed.
-pwd
 
 if [ "$NVIDIA_DIRECT_ENCODING" = "on" ]; then
 	# Directly encode with nvidia hardware
