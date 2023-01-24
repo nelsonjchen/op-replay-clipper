@@ -27,9 +27,6 @@ RUN apt-get update && apt-get install -y \
     # For network monitoring
     net-tools
 
-# Add overlay
-RUN git clone https://github.com/ftorkler/x11-overlay --depth 1 && make -C x11-overlay && cp x11-overlay/bin/overlay /usr/local/bin
-
 ARG USERNAME=robin
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
