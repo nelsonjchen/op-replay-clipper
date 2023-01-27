@@ -12,14 +12,7 @@ RUN apt-get update && apt-get install -y \
     tigervnc-standalone-server \
     ffmpeg \
     faketime \
-    tmux \
-    # for overlay
-    libx11-dev \
-    libxfixes-dev \
-    libxrandr-dev \
-    libxft-dev \
-    libfreetype-dev \
-    atomicparsley \
+    tmux \    
     # For Debugging X stuff
     mesa-utils \
     # For script calcuation
