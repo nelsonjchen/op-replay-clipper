@@ -378,12 +378,6 @@ else
 	ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 2 -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 fi
 
-# Set mp4 metadata
-AtomicParsley "$VIDEO_OUTPUT" --title "Segment ID: $SEGMENT_ID, Starting Sec: $STARTING_SEC" \
---description "$CLIP_DESC" \
---encodedBy "https://github.com/nelsonjchen/op-replay-clipper, $(git describe --all --long)" \
- --overWrite
-
 ctrl_c
 
 RENDER_COMPLETE_MESSAGE="Finished rendering $SEGMENT_ID to $VIDEO_OUTPUT."
