@@ -1,6 +1,6 @@
 # 📽 Openpilot Replay Clipper
 
-Capture and develop short clips of [openpilot][op] with the openpilot UI (path, lane lines, modes, etc.) included, with the segment ID and seconds marker branded into the clip. Useful for posting clips in the [comma.ai Discord's #openpilot-experience channel](https://discord.comma.ai) or anywhere else that takes video.
+Capture and develop short clips of [openpilot][op] with the openpilot UI (path, lane lines, modes, etc.) included, with the segment ID and seconds marker branded into the clip. Useful for posting clips in the [comma.ai Discord's #driving-feedback and/or #openpilot-experience channel](https://discord.comma.ai) or anywhere else that takes video.
 
 Show the bad and the good of openpilot! Very useful for [making outstanding bug reports](https://github.com/commaai/openpilot/wiki/FAQ#how-do-i-report-a-bug) or [posting UI video in interesting situations on Twitter](https://twitter.com/yassineyousfi_/status/1590473942439198720)!
 
