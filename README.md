@@ -24,9 +24,9 @@ Demonstration of speed or longitudinal behavior of openpilot with model-based lo
 
 https://user-images.githubusercontent.com/5363/202886008-82cfbf02-d19a-4482-ab7a-59f96c802dd1.mp4
 
-openpilot can't do on-ramps and probably never will with my car, but this is a nice demo:
+Cars can have bugs themselves. Here's my 2020 Corolla Hatchback phantomly braking on metal strips in stop and go traffic probably from the radar. Perhaps a future openpilot that doesn't depend on radar might be the one sanity checking the radar instead of the other way around currently.
 
-https://user-images.githubusercontent.com/5363/202887339-97c69dc1-8a4a-4248-a1bc-fd8599bbb5b5.mp4
+https://user-images.githubusercontent.com/5363/219708673-4673f4ff-9b47-4c57-9be3-65f3ea703f3f.mp4
 
 This is a video of a bug report where openpilot's lateral handling lost the lane:
 
@@ -218,7 +218,7 @@ Just a single shell script that runs an X11 server, and tmux commands to control
 
 ## Credits
 
-The real MVP is @deanlee for the replay tool in the openpilot project. The level of effort to develop the replay tool is far beyond this script. The script is just a wrapper around the replay tool to make it easy to use for clipping videos.
+The real MVP is [@deanlee](https://github.com/deanlee) for the replay tool in the openpilot project. The level of effort to develop the replay tool is far beyond this script. The script is just a wrapper around the replay tool to make it easy to use for clipping videos.
 
 https://github.com/commaai/openpilot/blame/master/tools/replay/main.cc
 
