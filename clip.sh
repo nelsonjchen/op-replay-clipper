@@ -13,6 +13,7 @@
 # ARG_OPTIONAL_SINGLE([vnc],[],[VNC Port for debugging, -1 will disable],[0])
 # ARG_OPTIONAL_SINGLE([output],[o],[output clip name],[clip.mp4])
 # ARG_OPTIONAL_BOOLEAN([metric],[],[Use metric system in the ui],[off])
+# ARG_OPTIONAL_BOOLEAN([hidden-dongle-id],[],[Hide dongle ID],[off])
 # ARG_OPTIONAL_BOOLEAN([nv-direct-encoding],[],[Use an available Nvidia GPU to directly encode grabbed video],[off])
 # ARG_POSITIONAL_SINGLE([route_id],[comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) ])
 # ARG_HELP([See README at https://github.com/nelsonjchen/op-replay-clipper/])
@@ -54,13 +55,14 @@ _arg_video_cwd="./shared"
 _arg_vnc="0"
 _arg_output="clip.mp4"
 _arg_metric="off"
+_arg_hidden_dongle_id="off"
 _arg_nv_direct_encoding="off"
 
 
 print_help()
 {
 	printf '%s\n' "See README at https://github.com/nelsonjchen/op-replay-clipper/"
-	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [--(no-)nv-direct-encoding] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [--(no-)hidden-dongle-id] [--(no-)nv-direct-encoding] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
@@ -73,6 +75,7 @@ print_help()
 	printf '\t%s\n' "--vnc: VNC Port for debugging, -1 will disable (default: '0')"
 	printf '\t%s\n' "-o, --output: output clip name (default: 'clip.mp4')"
 	printf '\t%s\n' "--metric, --no-metric: Use metric system in the ui (off by default)"
+	printf '\t%s\n' "--hidden-dongle-id, --no-hidden-dongle-id: Hide dongle ID (off by default)"
 	printf '\t%s\n' "--nv-direct-encoding, --no-nv-direct-encoding: Use an available Nvidia GPU to directly encode grabbed video (off by default)"
 	printf '\t%s\n' "-h, --help: Prints help"
 }
@@ -192,6 +195,10 @@ parse_commandline()
 			--no-metric|--metric)
 				_arg_metric="on"
 				test "${1:0:5}" = "--no-" && _arg_metric="off"
+				;;
+			--no-hidden-dongle-id|--hidden-dongle-id)
+				_arg_hidden_dongle_id="on"
+				test "${1:0:5}" = "--no-" && _arg_hidden_dongle_id="off"
 				;;
 			--no-nv-direct-encoding|--nv-direct-encoding)
 				_arg_nv_direct_encoding="on"
@@ -348,8 +355,16 @@ tmux send-keys -t clipper:replay Space
 
 popd
 
+# Construct Displayed Segment ID to $DISPLAYED_SEGMENT_ID
+# If hidden dongle id is enabled, replace the characters before | with <Hidden>
+if [ $_arg_hidden_dongle_id = "on" ]; then
+		DISPLAYED_SEGMENT_ID=$(echo "$SEGMENT_ID" | sed -E 's/^[^|]*\|/<Hidden>|/g')
+else
+		DISPLAYED_SEGMENT_ID=$SEGMENT_ID
+fi
+
 # Generate and start overlay
-CLIP_DESC="Segment ID: $SEGMENT_ID, Starting Second: $STARTING_SEC, Clip Length: $RECORDING_LENGTH, \
+CLIP_DESC="Segment ID: $DISPLAYED_SEGMENT_ID, Starting Second: $STARTING_SEC, Clip Length: $RECORDING_LENGTH, \
 $ROUTE_INFO_GIT_REMOTE, $ROUTE_INFO_GIT_BRANCH, $ROUTE_INFO_GIT_COMMIT, Dirty: \
 $ROUTE_INFO_GIT_DIRTY, $ROUTE_INFO_PLATFORM"
 echo -n "$CLIP_DESC" > /tmp/overlay.txt
