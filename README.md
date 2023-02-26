@@ -50,7 +50,8 @@ Ensure your openpilot route's files are fully uploaded on https://connect.comma.
   - <img width="347" alt="Screen Shot 2022-09-06 at 11 55 39 PM" src="https://user-images.githubusercontent.com/5363/188815682-6694c2f8-1d77-468e-9152-75a709477c9a.png">
 - This route is fully uploaded:
   - <img width="316" alt="Screen Shot 2022-09-07 at 12 27 26 AM" src="https://user-images.githubusercontent.com/5363/188816174-51045496-4614-4050-b911-c4abb987c5fe.png">
-- The driver or interior camera is not required to be enabled for recording or uploading for this. It's easier to just hit that "Upload all" button though. Unfortunately there's no only upload all wide camera, forward camera, and logs button.
+- The driver or interior camera is not required to be enabled for recording or uploading for this. It's easier to just hit that "Upload all" button though. Unfortunately there's no only upload all wide camera, forward camera, and logs button. 
+  - If this is news to you about recording or uploading driver video, you should be aware of a toggle in the openpilot UI to not record driver video and thus effectively not allowing upload of the driver video. Unfortunately, there's no record but block upload driver videos option.
 - Note: If you do not upload all the forward camera files, the replay will not progress past the starting UI.
 - It is possible to upload only a portion to of the route and still render a clip, but it's not recommended if you are new to this clipper. You can find those instructions [in Advanced Tips > Partial Uploads.](#partial-upload).
 
