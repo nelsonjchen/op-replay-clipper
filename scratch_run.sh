@@ -24,7 +24,7 @@
   `# https://ntfy.sh can be used to provide desktop notifications when a rendering is complete.` \
   `# Pick a unique topic name of your choice, and replace "ntfy_topic_of_your_choice" below with it` \
   `# Then, visit and allow desktop notifications from https://ntfy.sh/ntfy_topic_of_your_choice` \
-  `# so you know when its done and get a nice notification on your desktop to come back.` \
+  `# so you know when it is done and get a nice notification on your desktop to come back.` \
   --ntfysh ntfy_topic_of_your_choice \
   `# Much of the world like a superior systems of measurement. Uncomment-ize the next line to render in metric.` \
   `# --metric` \
