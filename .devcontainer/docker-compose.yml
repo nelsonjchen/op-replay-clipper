@@ -47,6 +47,7 @@ services:
     #           count: 1
     #           capabilities: [gpu]
     tty: true
+    working_dir: /workspace/op-replay-clipper
     environment:
       - DISPLAY=:0
       - SCALE=1
