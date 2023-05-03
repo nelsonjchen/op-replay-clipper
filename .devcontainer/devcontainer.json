@@ -18,6 +18,11 @@
 	// use. Update this value and .devcontainer/docker-compose.yml to the real service name.
 	"service": "dev",
 	"customizations": {
+		"codespaces": {
+			"openFiles": [
+				"scratch_run.sh"
+			]
+		},
 		"vscode": {
 			"extensions": [
 				"ms-vsliveshare.vsliveshare",
