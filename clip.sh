@@ -335,7 +335,7 @@ fi
 
 # Start processes
 tmux new-session -d -s clipper -n x11 "Xtigervnc :0 -geometry 1920x1080 -SecurityTypes None -rfbport $VNC_PORT"
-tmux new-window -n replay -t clipper: "TERM=xterm-256color faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./tools/replay/replay --ecam -s \"$SMEARED_STARTING_SEC\" \"$ROUTE\""
+tmux new-window -n replay -t clipper: "TERM=xterm-256color faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./tools/replay/replay -s \"$SMEARED_STARTING_SEC\" \"$ROUTE\" --data_dir /host_mnt/c/Users/Nelson/Desktop/realdata "
 tmux new-window -n ui -t clipper: "faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./selfdrive/ui/ui"
 
 # Pause replay and let it download the route
@@ -383,6 +383,8 @@ DRAW_TEXT_FILTER="drawtext=textfile=/tmp/overlay.txt:reload=1:fontcolor=white:fo
 
 if [ "$NVIDIA_DIRECT_ENCODING" = "on" ]; then
 	# Directly encode with nvidia hardware
+	# Commented out special hevc version for super long encode sessions
+	# ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec hevc_nvenc -preset hq -tune hq -bufsize 5M -r 20 -filter:v "mpdecimate,setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_OUTPUT"
 	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec h264_nvenc -preset hq -tune hq -b:v "$TARGET_BITRATE" -bufsize 5M -maxrate "$TARGET_BITRATE" -qmin 0 -g 250 -bf 3 -b_ref_mode middle -temporal-aq 1 -rc-lookahead 20 -i_qfactor 0.75 -b_qfactor 1.1 -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_OUTPUT"
 	cleanup
 else
