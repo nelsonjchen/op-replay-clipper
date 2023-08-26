@@ -1,4 +1,5 @@
-FROM ghcr.io/commaai/openpilot-prebuilt:latest AS base
+# Temporary pin until the dust settles
+FROM ghcr.io/commaai/openpilot-prebuilt:3719be8b76f81068da3aadd5bd0f76e8a4d00396 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -12,7 +13,7 @@ RUN apt-get update && apt-get install -y \
     tigervnc-standalone-server \
     ffmpeg \
     faketime \
-    tmux \    
+    tmux \
     # For Debugging X stuff
     mesa-utils \
     # For script calcuation
