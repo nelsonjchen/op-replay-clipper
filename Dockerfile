@@ -27,7 +27,8 @@ RUN apt-get update && apt-get install -y \
 # Download and install openpilot
 RUN mkdir /home/batman/
 RUN git clone --depth=1 --recurse-submodules https://github.com/commaai/openpilot /home/batman/openpilot
-RUN cd /home/batman/openpilot && ./tools/ubuntu_setup.sh
+RUN cd /home/batman/openpilot && ./tools/ubuntu_setup.sh && \
+  rm -rf /root/.cache
 RUN cd /home/batman/openpilot && /root/.pyenv/bin/pyenv exec poetry run scons -j8 ./tools/replay/replay ./selfdrive/ui/_ui
 
 RUN apt-get update && apt-get install -y \
