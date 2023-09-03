@@ -8,10 +8,11 @@
 		"memory": "4gb",
 		"storage": "16gb"
 	},
-	"name": "Docker Compose",
+	"name": "Docker Compose with GPU",
 	// Update the 'dockerComposeFile' list if you have more compose files or use different names.
 	// The .devcontainer/docker-compose.yml file contains any overrides you need/want to make.
 	"dockerComposeFile": [
+		"../docker-compose.yml",
 		"docker-compose.yml"
 	],
 	// The 'service' property is the name of the service for the container that VS Code should
@@ -25,8 +26,7 @@
 		},
 		"vscode": {
 			"extensions": [
-				"timonwong.shellcheck",
-				"ritwickdey.LiveServer"
+				"timonwong.shellcheck"
 			]
 		}
 	},
