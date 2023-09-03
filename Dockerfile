@@ -6,6 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     # missing in nvidia image
     git \
+    sudo \
     # The usual dev stuff
     htop \
     vim \
@@ -28,7 +29,6 @@ RUN mkdir /home/batman/
 RUN git clone --depth=1 --recurse-submodules https://github.com/commaai/openpilot /home/batman/openpilot
 RUN cd /home/batman/openpilot && ./tools/ubuntu_setup.sh
 RUN cd /home/batman/openpilot && /root/.pyenv/bin/pyenv exec poetry run scons -j8 ./tools/replay/replay ./selfdrive/ui/_ui
-RUN sudo git config --global --add safe.directory /tmp/openpilot
 
 RUN apt-get update && apt-get install -y \
     # The usual dev stuff
