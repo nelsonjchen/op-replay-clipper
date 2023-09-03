@@ -6,7 +6,7 @@
 	"hostRequirements": {
 		"cpus": 4,
 		"memory": "4gb",
-		"storage": "16gb"
+		"storage": "32gb"
 	},
 	"name": "Docker Compose with GPU",
 	// Update the 'dockerComposeFile' list if you have more compose files or use different names.
