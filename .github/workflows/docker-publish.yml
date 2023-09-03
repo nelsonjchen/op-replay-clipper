@@ -38,6 +38,8 @@ jobs:
     steps:
       - name: Maximize build space
         uses: easimon/maximize-build-space@v8
+        with:
+          remove-codeql: 'true'
       - name: Checkout repository
         uses: actions/checkout@v3
 
