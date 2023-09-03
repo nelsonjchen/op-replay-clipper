@@ -31,24 +31,6 @@ RUN cd /home/batman/openpilot && ./tools/ubuntu_setup.sh && \
   rm -rf /root/.cache
 RUN cd /home/batman/openpilot && /root/.pyenv/bin/pyenv exec poetry run scons -j8 ./tools/replay/replay ./selfdrive/ui/_ui
 
-RUN apt-get update && apt-get install -y \
-    # The usual dev stuff
-    htop \
-    vim \
-    jq \
-    shellcheck \
-    # For Replay
-    tigervnc-standalone-server \
-    ffmpeg \
-    faketime \
-    tmux \
-    # For Debugging X stuff
-    mesa-utils \
-    # For script calcuation
-    bc \
-    # For network monitoring
-    net-tools
-
 ARG USERNAME=robin
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
