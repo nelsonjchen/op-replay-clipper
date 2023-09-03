@@ -1,7 +1,34 @@
 # Temporary pin until the dust settles
-FROM ghcr.io/commaai/openpilot-prebuilt:3719be8b76f81068da3aadd5bd0f76e8a4d00396 AS base
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    # missing in nvidia image
+    git \
+    sudo \
+    # The usual dev stuff
+    htop \
+    vim \
+    jq \
+    shellcheck \
+    # For Replay
+    tigervnc-standalone-server \
+    ffmpeg \
+    faketime \
+    tmux \
+    # For Debugging X stuff
+    mesa-utils \
+    # For script calcuation
+    bc \
+    # For network monitoring
+    net-tools
+
+# Download and install openpilot
+RUN mkdir /home/batman/
+RUN git clone --depth=1 --recurse-submodules https://github.com/commaai/openpilot /home/batman/openpilot
+RUN cd /home/batman/openpilot && ./tools/ubuntu_setup.sh
+RUN cd /home/batman/openpilot && /root/.pyenv/bin/pyenv exec poetry run scons -j8 ./tools/replay/replay ./selfdrive/ui/_ui
 
 RUN apt-get update && apt-get install -y \
     # The usual dev stuff
