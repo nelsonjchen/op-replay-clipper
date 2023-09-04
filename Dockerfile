@@ -47,8 +47,3 @@ FROM base AS clipper
 COPY ./clip.sh /workspace/clip.sh
 
 CMD ["/workspace/clip.sh"]
-
-FROM clipper AS clipper-gpu-cog
-
-RUN sudo curl -o /usr/local/bin/cog -L "https://github.com/replicate/cog/releases/latest/download/cog_$(uname -s)_$(uname -m)" && \
-sudo chmod +x /usr/local/bin/cog
