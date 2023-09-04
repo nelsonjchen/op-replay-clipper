@@ -1,10 +1,10 @@
 #!/bin/sh
 
-# This script is base64 encoded and embedded in the cog.yaml file since there
-# is no way to copy files to run to the cog container.
+# Shared script to setup OP environment for DevContainers and Cog
 
-apt update -y && apt install -y \
+apt-get update -y && apt-get install -y \
     `# For Replay` \
+    jq \
     tigervnc-standalone-server \
     ffmpeg \
     faketime \
@@ -16,6 +16,7 @@ apt update -y && apt install -y \
     `# For network monitoring` \
     net-tools \
     `# Missing in the base cog image` \
+    sudo \
     git
 
 git clone --depth 1 --recurse-submodules https://github.com/commaai/openpilot /home/batman/openpilot
