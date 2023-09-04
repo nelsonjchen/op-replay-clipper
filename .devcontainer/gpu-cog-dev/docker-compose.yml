@@ -1,0 +1,12 @@
+version: '2.4'
+services:
+  dev:
+    build:
+      target: clipper-gpu-cog
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
