@@ -1,25 +1,9 @@
 # Temporary pin until the dust settles
-FROM ghcr.io/commaai/openpilot-prebuilt:3719be8b76f81068da3aadd5bd0f76e8a4d00396 AS base
+FROM ubuntu:22.04 AS base
 
-ENV DEBIAN_FRONTEND=noninteractive
+COPY ./common/setup.sh /setup.sh
 
-RUN apt-get update && apt-get install -y \
-    # The usual dev stuff
-    htop \
-    vim \
-    jq \
-    shellcheck \
-    # For Replay
-    tigervnc-standalone-server \
-    ffmpeg \
-    faketime \
-    tmux \
-    # For Debugging X stuff
-    mesa-utils \
-    # For script calcuation
-    bc \
-    # For network monitoring
-    net-tools
+RUN /setup.sh
 
 ARG USERNAME=robin
 ARG USER_UID=1000
