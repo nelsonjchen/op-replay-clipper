@@ -7,9 +7,9 @@ RUN apt-get update && apt-get install -y \
     # The usual dev stuff
     htop \
     vim \
-    jq \
     shellcheck \
     # For Replay
+    jq \
     tigervnc-standalone-server \
     ffmpeg \
     faketime \
