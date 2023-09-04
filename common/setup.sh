@@ -9,7 +9,8 @@ apt-get update -y && apt-get install -y \
     ffmpeg \
     faketime \
     tmux \
-    `# For Debugging X stuff` \
+    `# For Debugging stuff` \
+    htop \
     mesa-utils \
     `# For script calcuation` \
     bc \
