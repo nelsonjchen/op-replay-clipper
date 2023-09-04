@@ -1,1 +1,5 @@
 out.mp4
+# Cog stuff
+.cog/
+# cog.yaml is generated as a workaround for cog having no COPY equivalent
+cog.yaml
