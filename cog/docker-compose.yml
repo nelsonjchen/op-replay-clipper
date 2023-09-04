@@ -1,0 +1,17 @@
+# Local Docker Compose for testing setup script
+services:
+  dev:
+    # May change
+    image: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    shm_size: '1gb'
+    tty: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
