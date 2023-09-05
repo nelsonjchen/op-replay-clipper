@@ -1,6 +1,7 @@
 build:
   gpu: true
   python_version: "3.11"
+  cuda: "12.1"
   # variable to be replaced by the base64 encoded script
   run:
     - "echo ENCODED_SCRIPT | base64 -d > setup.sh && bash setup.sh"
