@@ -258,6 +258,12 @@ assign_positional_args 1 "${_positionals[@]}"
 
 set -ex
 
+# Echo `mount`
+echo "$(mount)"
+
+# Echo `env`
+echo "$(env)"
+
 # Cleanup processes for easy fast testing.
 # Rely on Docker to clean up containers processes in production though
 function cleanup() {
