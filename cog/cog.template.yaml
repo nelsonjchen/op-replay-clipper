@@ -1,7 +1,7 @@
 build:
   gpu: true
   python_version: "3.11"
-  # ENCODED_SCRIPT to be replaced by the base64 encoded script
+  # variable to be replaced by the base64 encoded script
   run:
     - "echo ENCODED_SCRIPT | base64 -d > setup.sh && bash setup.sh"
 predict: "predict.py:Predictor"
