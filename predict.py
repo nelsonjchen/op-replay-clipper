@@ -30,6 +30,9 @@ class Predictor(BasePredictor):
         lengthSeconds: int = Input(
             description="Length of clip in seconds", ge=10, le=60, default=30
         ),
+        speedhackRatio: float = Input(
+            description="Speedhack ratio", ge=0.2, le=3.0, default=1.5
+        ),
     ) -> Output:
         """Run clip.sh with arguments."""
 
@@ -40,11 +43,18 @@ class Predictor(BasePredictor):
             f"--start-seconds={startSeconds}",
             f"--length-seconds={lengthSeconds}",
             f"--smear-amount=5",
-            f"--speedhack-ratio=1.5",
+            f"--speedhack-ratio={speedhackRatio}",
             f"--nv-direct-encoding",
             f"--output=cog-clip.mp4",
         ]
-        process = subprocess.Popen(command, stdout=subprocess.PIPE)
+        process = subprocess.Popen(
+            command,
+            env={
+                "DISPLAY": ":0",
+                "SCALE": "1"
+            },
+            stdout=subprocess.PIPE
+         )
 
         running_log = ""
 
