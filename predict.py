@@ -1,22 +1,62 @@
-# Prediction interface for Cog ⚙️
+# "Prediction" interface for Cog ⚙️
+# We just use this to run a program in an Nvidia GPU-accelerated environment
 # https://github.com/replicate/cog/blob/main/docs/python.md
 
-from cog import BasePredictor, Input, Path
+from cog import BasePredictor, Input, Path, BaseModel
+import subprocess
+
+from typing import Iterator, Optional
+
+
+class Output(BaseModel):
+    running_log: str
+    output_clip: Optional[Path]
 
 
 class Predictor(BasePredictor):
     def setup(self) -> None:
-        """Load the model into memory to make running multiple predictions efficient"""
-        # self.model = torch.load("./weights.pth")
+        """There's nothing to setup!"""
+        pass
 
     def predict(
         self,
-        image: Path = Input(description="Grayscale input image"),
-        scale: float = Input(
-            description="Factor to scale image by", ge=0, le=10, default=1.5
+        route: str = Input(
+            description="Route/Segment ID",
+            default="a2a0ccea32023010|2023-07-27--13-01-19",
         ),
-    ) -> Path:
-        """Run a single prediction on the model"""
-        # processed_input = preprocess(image)
-        # output = self.model(processed_image, scale)
-        # return postprocess(output)
+        startSeconds: int = Input(
+            description="Start time in seconds", ge=0, default=60
+        ),
+        lengthSeconds: int = Input(
+            description="Length of clip in seconds", ge=10, le=60, default=30
+        ),
+    ) -> Output:
+        """Run clip.sh with arguments."""
+
+        # Start the shell command and capture its output
+        command = [
+            "./clip.sh",
+            route,
+            f"--start-seconds={startSeconds}",
+            f"--length-seconds={lengthSeconds}",
+            f"--smear-amount=5",
+            f"--speedhack-ratio=1.5",
+            f"--nv-direct-encoding",
+            f"--output=cog-clip.mp4",
+        ]
+        process = subprocess.Popen(command, stdout=subprocess.PIPE)
+
+        running_log = ""
+
+        # Read the output as it becomes available and yield it to the caller
+        while True:
+            output = process.stdout.readline()
+            if output == b"" and process.poll() is not None:
+                break
+            if output:
+                running_log += output.decode("utf-8")
+
+
+        return Output(
+            running_log=running_log, output_clip=Path("./shared/cog-clip.mp4")
+        )
