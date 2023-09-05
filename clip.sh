@@ -372,6 +372,10 @@ echo -n "$CLIP_DESC" > /tmp/overlay.txt
 # Record with ffmpeg
 mkdir -p "$VIDEO_CWD"
 pushd "$VIDEO_CWD"
+
+# Make parameters directory
+mkdir -p ~/.comma/params/d/
+
 # Use metric system in the ui
 if [ "$RENDER_METRIC_SYSTEM" = "on" ]; then
 	echo -n "1" > ~/.comma/params/d/IsMetric
