@@ -29,9 +29,9 @@ class Predictor(BasePredictor):
         speedhackRatio: float = Input(
             description="Speedhack ratio", ge=0.2, le=3.0, default=1.5
         ),
-        debugCommand: str = Input(
-            description="Debug command to run instead of clip", default=""
-        ),
+        # debugCommand: str = Input(
+        #     description="Debug command to run instead of clip", default=""
+        # ),
     ) -> Path:
         """Run clip.sh with arguments."""
 
@@ -46,9 +46,9 @@ class Predictor(BasePredictor):
             f"--nv-direct-encoding",
             f"--output=cog-clip.mp4",
         ]
-        if debugCommand != "":
-            # Run bash with the command
-            command = ["bash", "-c", debugCommand]
+        # if debugCommand != "":
+        #     # Run bash with the command
+        #     command = ["bash", "-c", debugCommand]
         env = {}
         env.update(os.environ)
         env.update({
