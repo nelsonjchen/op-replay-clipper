@@ -6,10 +6,9 @@ from cog import BasePredictor, Input, Path, BaseModel
 import subprocess
 
 from typing import Iterator, Optional
-
+import os
 
 class Output(BaseModel):
-    running_log: str
     output_clip: Optional[Path]
 
 
@@ -47,26 +46,26 @@ class Predictor(BasePredictor):
             f"--nv-direct-encoding",
             f"--output=cog-clip.mp4",
         ]
+        env = {}
+        env.update(os.environ)
+        env.update({
+            "DISPLAY": ":0",
+            "SCALE": "1"
+        })
+
         process = subprocess.Popen(
             command,
-            env={
-                "DISPLAY": ":0",
-                "SCALE": "1"
-            },
-            stdout=subprocess.PIPE
+            env=env,
+            stdout=subprocess.STDOUT
          )
 
-        running_log = ""
 
         # Read the output as it becomes available and yield it to the caller
         while True:
             output = process.stdout.readline()
             if output == b"" and process.poll() is not None:
                 break
-            if output:
-                running_log += output.decode("utf-8")
-
 
         return Output(
-            running_log=running_log, output_clip=Path("./shared/cog-clip.mp4")
+            output_clip=Path("./shared/cog-clip.mp4")
         )
