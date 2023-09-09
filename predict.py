@@ -17,8 +17,9 @@ class Predictor(BasePredictor):
     def predict(
         self,
         route: str = Input(
-            description="Route/Segment ID (⚠️ ROUTE MUST BE PUBLIC! You can set this temporarily in Connect)"
-             " (⚠️ Ensure all data from both forward cameras and \"Logs\" to be rendered have been uploaded)",
+            description="Route/Segment ID "
+            " (⚠️ ROUTE MUST BE PUBLIC! You can set this temporarily in Connect)"
+            ' (⚠️ Ensure all data from both forward cameras and "Logs" to be rendered have been uploaded; See README for more info)',
             default="a2a0ccea32023010|2023-07-27--13-01-19",
         ),
         startSeconds: int = Input(
@@ -27,8 +28,17 @@ class Predictor(BasePredictor):
         lengthSeconds: int = Input(
             description="Length of clip in seconds", ge=5, le=60, default=10
         ),
+        smearAmount: int = Input(
+            description="Smear amount (Let the video start this time before beginning recording, useful for making sure the radar △, if present, is rendered at the start if necessary)",
+            ge=0,
+            le=20,
+            default=10,
+        ),
         speedhackRatio: float = Input(
-            description="Speedhack ratio (Higher renders faster but may be more unstable and have artifacts)", ge=0.2, le=3.0, default=1.5
+            description="Speedhack ratio (Higher renders faster but renders may be more unstable and have artifacts)",
+            ge=0.2,
+            le=3.0,
+            default=1.0,
         ),
         # debugCommand: str = Input(
         #     description="Debug command to run instead of clip", default=""
@@ -42,7 +52,7 @@ class Predictor(BasePredictor):
             route,
             f"--start-seconds={startSeconds}",
             f"--length-seconds={lengthSeconds}",
-            f"--smear-amount=5",
+            f"--smear-amount={smearAmount}",
             f"--speedhack-ratio={speedhackRatio}",
             f"--nv-direct-encoding",
             f"--output=cog-clip.mp4",
@@ -52,16 +62,9 @@ class Predictor(BasePredictor):
         #     command = ["bash", "-c", debugCommand]
         env = {}
         env.update(os.environ)
-        env.update({
-            "DISPLAY": ":0",
-            "SCALE": "1"
-        })
+        env.update({"DISPLAY": ":0", "SCALE": "1"})
 
-        process = subprocess.Popen(
-            command,
-            env=env,
-            stdout=subprocess.PIPE
-         )
+        process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE)
 
         # Read the output as it becomes available and yield it to the caller
         while True:
