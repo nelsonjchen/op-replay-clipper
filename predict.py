@@ -8,9 +8,6 @@ import subprocess
 from typing import Iterator, Optional
 import os
 
-class Output(BaseModel):
-    output_clip: Optional[Path]
-
 
 class Predictor(BasePredictor):
     def setup(self) -> None:
@@ -27,12 +24,15 @@ class Predictor(BasePredictor):
             description="Start time in seconds", ge=0, default=60
         ),
         lengthSeconds: int = Input(
-            description="Length of clip in seconds", ge=10, le=60, default=30
+            description="Length of clip in seconds", ge=5, le=60, default=10
         ),
         speedhackRatio: float = Input(
             description="Speedhack ratio", ge=0.2, le=3.0, default=1.5
         ),
-    ) -> Output:
+        debugCommand: str = Input(
+            description="Debug command to run instead of clip", default=""
+        ),
+    ) -> Path:
         """Run clip.sh with arguments."""
 
         # Start the shell command and capture its output
@@ -46,6 +46,9 @@ class Predictor(BasePredictor):
             f"--nv-direct-encoding",
             f"--output=cog-clip.mp4",
         ]
+        if debugCommand != "":
+            # Run bash with the command
+            command = ["bash", "-c", debugCommand]
         env = {}
         env.update(os.environ)
         env.update({
@@ -56,9 +59,8 @@ class Predictor(BasePredictor):
         process = subprocess.Popen(
             command,
             env=env,
-            stdout=subprocess.STDOUT
+            stdout=subprocess.PIPE
          )
-
 
         # Read the output as it becomes available and yield it to the caller
         while True:
@@ -66,6 +68,4 @@ class Predictor(BasePredictor):
             if output == b"" and process.poll() is not None:
                 break
 
-        return Output(
-            output_clip=Path("./shared/cog-clip.mp4")
-        )
+        return Path("./shared/cog-clip.mp4")
