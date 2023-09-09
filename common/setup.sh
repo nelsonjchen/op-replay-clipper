@@ -42,6 +42,13 @@ export DEBIAN_FRONTEND=noninteractive
     rm -rf /var/lib/apt/lists/* && \
     rm -rf /tmp/*
 
+# Replicate.com unfortunately has a very small /dev/shm, so we need to use /var/tmp instead
+find . -type f -exec sed -i 's/\/dev\/shm/\/var\/tmp/g' {} \;
+
+# Replace "constexpr int MIN_SEGMENTS_CACHE = 5;" with "constexpr int MIN_SEGMENTS_CACHE = 2;"
+# in tools/replay/replay.h as for some reason the argument does not appear to be working
+sed -i 's/constexpr int MIN_SEGMENTS_CACHE = 5;/constexpr int MIN_SEGMENTS_CACHE = 2;/g' tools/replay/replay.h
+
 scons -j8 tools/replay/replay selfdrive/ui/_ui
 
 # Only copy the folders we need from the build repo to /home/batman/openpilot_min
