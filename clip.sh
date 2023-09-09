@@ -264,6 +264,9 @@ echo "$(mount)"
 # Echo `env`
 echo "$(env)"
 
+# Echo where's this libcuda.so
+echo "$(find /usr/ -name 'libcuda.so.*')" || true
+
 # Cleanup processes for easy fast testing.
 # Rely on Docker to clean up containers processes in production though
 function cleanup() {
