@@ -9,3 +9,8 @@ build: cog/cog.template.yaml cog/generate.sh
 predict:
 	./cog/generate.sh
 	../cog/cog predict
+
+# Push using modified cog
+push:
+	./cog/generate.sh
+	../cog/cog push r8.im/nelsonjchen/op-replay-clipper
