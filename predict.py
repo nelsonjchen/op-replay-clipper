@@ -17,7 +17,8 @@ class Predictor(BasePredictor):
     def predict(
         self,
         route: str = Input(
-            description="Route/Segment ID",
+            description="Route/Segment ID (⚠️ ROUTE MUST BE PUBLIC! You can set this temporarily in Connect)"
+             " (⚠️ Ensure all data from both forward cameras and \"Logs\" to be rendered have been uploaded)",
             default="a2a0ccea32023010|2023-07-27--13-01-19",
         ),
         startSeconds: int = Input(
@@ -27,7 +28,7 @@ class Predictor(BasePredictor):
             description="Length of clip in seconds", ge=5, le=60, default=10
         ),
         speedhackRatio: float = Input(
-            description="Speedhack ratio", ge=0.2, le=3.0, default=1.5
+            description="Speedhack ratio (Higher renders faster but may be more unstable and have artifacts)", ge=0.2, le=3.0, default=1.5
         ),
         # debugCommand: str = Input(
         #     description="Debug command to run instead of clip", default=""
