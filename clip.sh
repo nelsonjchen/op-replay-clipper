@@ -436,7 +436,7 @@ if [ "$NVIDIA_DIRECT_ENCODING" = "on" ]; then
 	# Save the full video, then cut it by keyframe so the smear amount is cut off the front.
 	# For some reason, when Nvidia accelerated encoding is used, the first few frames stutter.
 	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss 0 -vcodec h264_nvenc -b:v "$TARGET_BITRATE_PLUS_SMEAR" -r 20 -filter:v "mpdecimate,setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
-	ffmpeg -hwaccel cuda -i "$VIDEO_RAW_OUTPUT" -ss "$SMEAR_AMOUNT" -c:v h264_nvenc -b:v "$TARGET_BITRATE" -y -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
+	ffmpeg -hwaccel cuda -i "$VIDEO_RAW_OUTPUT" -ss "$SMEAR_AMOUNT" -c:v h264_nvenc -b:v "$TARGET_BITRATE" -y -pix_fmt yuv420p -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 	cleanup
 else
 	nice -n 10 ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"

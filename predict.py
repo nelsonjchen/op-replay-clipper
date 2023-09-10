@@ -23,22 +23,22 @@ class Predictor(BasePredictor):
             default="a2a0ccea32023010|2023-07-27--13-01-19",
         ),
         startSeconds: int = Input(
-            description="Start time in seconds", ge=0, default=60
+            description="Start time in seconds", ge=0, default=50
         ),
         lengthSeconds: int = Input(
-            description="Length of clip in seconds", ge=5, le=60, default=10
+            description="Length of clip in seconds", ge=5, le=60, default=20
         ),
         smearAmount: int = Input(
             description="Smear amount (Let the video start this time before beginning recording, useful for making sure the radar △, if present, is rendered at the start if necessary)",
-            ge=0,
+            ge=5,
             le=40,
-            default=3,
+            default=5,
         ),
         speedhackRatio: float = Input(
             description="Speedhack ratio (Higher renders faster but renders may be more unstable and have artifacts)",
             ge=0.3,
             le=3.0,
-            default=1.0,
+            default=1.1,
         ),
         # debugCommand: str = Input(
         #     description="Debug command to run instead of clip", default=""
