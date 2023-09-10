@@ -1,5 +1,6 @@
 services:
   dev:
+    shm_size: '64mb'
     deploy:
       resources:
         reservations:
