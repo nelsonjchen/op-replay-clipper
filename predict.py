@@ -31,12 +31,12 @@ class Predictor(BasePredictor):
         smearAmount: int = Input(
             description="Smear amount (Let the video start this time before beginning recording, useful for making sure the radar △, if present, is rendered at the start if necessary)",
             ge=0,
-            le=20,
-            default=10,
+            le=40,
+            default=3,
         ),
         speedhackRatio: float = Input(
             description="Speedhack ratio (Higher renders faster but renders may be more unstable and have artifacts)",
-            ge=0.2,
+            ge=0.3,
             le=3.0,
             default=1.0,
         ),
