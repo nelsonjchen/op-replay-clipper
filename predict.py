@@ -38,7 +38,7 @@ class Predictor(BasePredictor):
             description="Speedhack ratio (Higher renders faster but renders may be more unstable and have artifacts)",
             ge=0.3,
             le=3.0,
-            default=1.1,
+            default=0.7,
         ),
         # debugCommand: str = Input(
         #     description="Debug command to run instead of clip", default=""
