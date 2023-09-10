@@ -6,7 +6,7 @@
 # ARG_OPTIONAL_SINGLE([length-seconds],[l],[Clip length],[30])
 # ARG_OPTIONAL_SINGLE([target-mb],[m],[Target converted file size in MB],[50])
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
-# ARG_OPTIONAL_SINGLE([smear-amount],[],[Amount of seconds to smear the clip start by before recording starts],[10])
+# ARG_OPTIONAL_SINGLE([smear-amount],[],[Amount of seconds to smear the clip start by before recording starts],[3])
 # ARG_OPTIONAL_SINGLE([ntfysh],[n],[ntfy.sh topic to post to when clip has completed rendering])
 # ARG_OPTIONAL_SINGLE([speedhack-ratio],[r],[speedhack ratio for stable, non-jittery rendering],[0.35])
 # ARG_OPTIONAL_SINGLE([video-cwd],[c],[video working and output directory],[./shared])
@@ -48,7 +48,7 @@ _arg_start_seconds="60"
 _arg_length_seconds="30"
 _arg_target_mb="50"
 _arg_jwt_token=
-_arg_smear_amount="10"
+_arg_smear_amount="3"
 _arg_ntfysh=
 _arg_speedhack_ratio="0.35"
 _arg_video_cwd="./shared"
@@ -68,7 +68,7 @@ print_help()
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
 	printf '\t%s\n' "-m, --target-mb: Target converted file size in MB (default: '50')"
 	printf '\t%s\n' "-j, --jwt-token: JWT Auth token to use (get token from https://jwt.comma.ai) (no default)"
-	printf '\t%s\n' "--smear-amount: Amount of seconds to smear the clip start by before recording starts (default: '10')"
+	printf '\t%s\n' "--smear-amount: Amount of seconds to smear the clip start by before recording starts (default: '3')"
 	printf '\t%s\n' "-n, --ntfysh: ntfy.sh topic to post to when clip has completed rendering (no default)"
 	printf '\t%s\n' "-r, --speedhack-ratio: speedhack ratio for stable, non-jittery rendering (default: '0.35')"
 	printf '\t%s\n' "-c, --video-cwd: video working and output directory (default: './shared')"
@@ -258,6 +258,15 @@ assign_positional_args 1 "${_positionals[@]}"
 
 set -ex
 
+# Echo `mount`
+echo "$(mount)"
+
+# Echo `env`
+echo "$(env)"
+
+# Echo where's this libcuda.so
+echo "$(find /usr/ -name 'libcuda.so.*')" || true
+
 # Cleanup processes for easy fast testing.
 # Rely on Docker to clean up containers processes in production though
 function cleanup() {
@@ -285,6 +294,7 @@ if [ $SMEARED_STARTING_SEC -lt 0 ]; then
 		SMEARED_STARTING_SEC=0
 fi
 RECORDING_LENGTH=$_arg_length_seconds
+RECORDING_LENGTH_PLUS_SMEAR=$(($RECORDING_LENGTH + $SMEAR_AMOUNT))
 # Cleanup trailing segment count. Seconds is what matters
 ROUTE=$(echo "$_arg_route_id" | sed -E 's/--[0-9]+$//g')
 # Segment ID is the floor of the starting seconds divided by 60
@@ -301,6 +311,7 @@ TARGET_MB=$_arg_target_mb
 # Subtract a few megabyte to give some leeway for uploader limits
 TARGET_BYTES=$((($TARGET_MB - 5) * 1024 * 1024))
 TARGET_BITRATE=$(($TARGET_BYTES * 8 / $RECORDING_LENGTH))
+TARGET_BITRATE_PLUS_SMEAR=$(($TARGET_BYTES * 8 / $RECORDING_LENGTH_PLUS_SMEAR))
 VNC_PORT=$_arg_vnc
 
 # URL Encode Route
@@ -333,9 +344,44 @@ if [ -n "$JWT_AUTH" ]; then
     echo "{\"access_token\": \"$JWT_AUTH\"}" > "$HOME"/.comma/auth.json
 fi
 
+ALLOWED_SERVICES="modelV2,\
+controlsState,\
+liveCalibration,\
+radarState,\
+deviceState,\
+roadCameraState,\
+pandaStates,\
+carParams,\
+driverMonitoringState,\
+carState,\
+liveLocationKalman,\
+driverStateV2,\
+wideRoadCameraState,\
+managerState,\
+navInstruction,\
+navRoute,\
+uiPlan"
+
+# Accelerate certain msgq queues with /dev/shm
+# Applicable to OP compiled to use msgq at /var/tmp
+pushd /var/tmp
+# Blow away everything in /dev/shm/op as it is where accelerated msgq queues are stored
+rm -rf /dev/shm/op/* || true
+mkdir -p /dev/shm/op || true
+# Vision
+ln -s /dev/shm/visionipc_camerad_0 visionipc_camerad_0 || true
+ln -s /dev/shm/visionipc_camerad_2 visionipc_camerad_2 || true
+# For each ALLOWED_SERVICES, create a symlink to /dev/shm/<service_name>
+# ln -s /dev/shm/<service_name> <service_name> || true
+for service in ${ALLOWED_SERVICES//,/ }; do
+    ln -s /dev/shm/op/"$service" "$service" || true
+done
+popd
+
 # Start processes
 tmux new-session -d -s clipper -n x11 "Xtigervnc :0 -geometry 1920x1080 -SecurityTypes None -rfbport $VNC_PORT"
-tmux new-window -n replay -t clipper: "TERM=xterm-256color faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./tools/replay/replay --ecam -s \"$SMEARED_STARTING_SEC\" \"$ROUTE\""
+# TODO: ALLOWED_SERVICES is killing too much for some reason. Need to figure out what is the actual minimal set of services to run. Or just don't care.
+tmux new-window -n replay -t clipper: "TERM=xterm-256color faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./tools/replay/replay --ecam --start \"$SMEARED_STARTING_SEC\" \"$ROUTE\""
 tmux new-window -n ui -t clipper: "faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./selfdrive/ui/ui"
 
 # Pause replay and let it download the route
@@ -372,6 +418,10 @@ echo -n "$CLIP_DESC" > /tmp/overlay.txt
 # Record with ffmpeg
 mkdir -p "$VIDEO_CWD"
 pushd "$VIDEO_CWD"
+
+# Make parameters directory
+mkdir -p ~/.comma/params/d/
+
 # Use metric system in the ui
 if [ "$RENDER_METRIC_SYSTEM" = "on" ]; then
 	echo -n "1" > ~/.comma/params/d/IsMetric
@@ -383,8 +433,11 @@ DRAW_TEXT_FILTER="drawtext=textfile=/tmp/overlay.txt:reload=1:fontcolor=white:fo
 
 if [ "$NVIDIA_DIRECT_ENCODING" = "on" ]; then
 	# Directly encode with nvidia hardware
-	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec h264_nvenc -preset hq -tune hq -b:v "$TARGET_BITRATE" -bufsize 5M -maxrate "$TARGET_BITRATE" -qmin 0 -g 250 -bf 3 -b_ref_mode middle -temporal-aq 1 -rc-lookahead 20 -i_qfactor 0.75 -b_qfactor 1.1 -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_OUTPUT"
+	# Save the full video, then cut it by keyframe so the smear amount is cut off the front.
+	# For some reason, when Nvidia accelerated encoding is used, the first few frames stutter.
+	nice -n 10 ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss 0 -vcodec h264_nvenc -b:v "$TARGET_BITRATE_PLUS_SMEAR" -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
 	cleanup
+	ffmpeg -hwaccel cuda -i "$VIDEO_RAW_OUTPUT" -ss "$SMEAR_AMOUNT" -c:v h264_nvenc -b:v "$TARGET_BITRATE" -y -pix_fmt yuv420p -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 else
 	nice -n 10 ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"
 	# The setup is no longer needed. Just transcode now.

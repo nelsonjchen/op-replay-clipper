@@ -3,3 +3,5 @@ out.mp4
 .cog/
 # cog.yaml is generated as a workaround for cog having no COPY equivalent
 cog.yaml
+__pycache__/
+output.mp4
