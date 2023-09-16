@@ -71,5 +71,7 @@ class Predictor(BasePredictor):
             output = process.stdout.readline()
             if output == b"" and process.poll() is not None:
                 break
+            if output:
+                print(output.strip())
 
         return Path("./shared/cog-clip.mp4")
