@@ -18,3 +18,4 @@ __pycache__
 
 # Exclude local shared folder
 shared/
+*.mp4
