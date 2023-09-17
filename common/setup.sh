@@ -2,6 +2,9 @@
 
 # Shared script to setup OP environment for DevContainers and Cog
 
+# Set Debian noninteractive mode
+export DEBIAN_FRONTEND=noninteractive
+
 apt-get update -y && apt-get install -y \
     `# For Replay` \
     jq \
@@ -34,9 +37,6 @@ export POETRY_VIRTUALENVS_CREATE=false
 export PYENV_VERSION=3.11.4
 export PYENV_ROOT="/root/.pyenv_openpilot"
 export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
-
-# Set Debian noninteractive mode
-export DEBIAN_FRONTEND=noninteractive
 
 # Install python dependencies
 ./tools/ubuntu_setup.sh
