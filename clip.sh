@@ -15,7 +15,8 @@
 # ARG_OPTIONAL_BOOLEAN([metric],[],[Use metric system in the ui],[off])
 # ARG_OPTIONAL_BOOLEAN([hidden-dongle-id],[],[Hide dongle ID],[off])
 # ARG_OPTIONAL_BOOLEAN([nv-hardware-rendering],[],[Use an available Nvidia GPU to render the openpilot GUI],[off])
-# ARG_OPTIONAL_BOOLEAN([nv-fast-encoding],[],[Use an available Nvidia GPU to accelerate encoding of grabbed video],[off])
+# ARG_OPTIONAL_BOOLEAN([nv-hybrid-encoding],[],[Use an available Nvidia GPU to accelerate encoding of grabbed video],[off])
+# ARG_OPTIONAL_BOOLEAN([nv-fast-encoding],[],[Use an available Nvidia GPU to accelerate encoding of grabbed video, then encode],[off])
 # ARG_OPTIONAL_BOOLEAN([nv-direct-encoding],[],[Use an available Nvidia GPU to directly encode grabbed video. Supercedes fast encoding],[off])
 # ARG_POSITIONAL_SINGLE([route_id],[comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) ])
 # ARG_HELP([See README at https://github.com/nelsonjchen/op-replay-clipper/])
@@ -59,6 +60,7 @@ _arg_output="clip.mp4"
 _arg_metric="off"
 _arg_hidden_dongle_id="off"
 _arg_nv_hardware_rendering="off"
+_arg_nv_hybrid_encoding="off"
 _arg_nv_fast_encoding="off"
 _arg_nv_direct_encoding="off"
 
@@ -66,7 +68,7 @@ _arg_nv_direct_encoding="off"
 print_help()
 {
 	printf '%s\n' "See README at https://github.com/nelsonjchen/op-replay-clipper/"
-	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [--(no-)hidden-dongle-id] [--(no-)nv-hardware-rendering] [--(no-)nv-fast-encoding] [--(no-)nv-direct-encoding] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [--(no-)hidden-dongle-id] [--(no-)nv-hardware-rendering] [--(no-)nv-hybrid-encoding] [--(no-)nv-fast-encoding] [--(no-)nv-direct-encoding] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
@@ -81,7 +83,8 @@ print_help()
 	printf '\t%s\n' "--metric, --no-metric: Use metric system in the ui (off by default)"
 	printf '\t%s\n' "--hidden-dongle-id, --no-hidden-dongle-id: Hide dongle ID (off by default)"
 	printf '\t%s\n' "--nv-hardware-rendering, --no-nv-hardware-rendering: Use an available Nvidia GPU to render the openpilot GUI (off by default)"
-	printf '\t%s\n' "--nv-fast-encoding, --no-nv-fast-encoding: Use an available Nvidia GPU to accelerate encoding of grabbed video (off by default)"
+	printf '\t%s\n' "--nv-hybrid-encoding, --no-nv-hybrid-encoding: Use an available Nvidia GPU to accelerate encoding of grabbed video (off by default)"
+	printf '\t%s\n' "--nv-fast-encoding, --no-nv-fast-encoding: Use an available Nvidia GPU to accelerate encoding of grabbed video, then encode (off by default)"
 	printf '\t%s\n' "--nv-direct-encoding, --no-nv-direct-encoding: Use an available Nvidia GPU to directly encode grabbed video. Supercedes fast encoding (off by default)"
 	printf '\t%s\n' "-h, --help: Prints help"
 }
@@ -210,6 +213,10 @@ parse_commandline()
 				_arg_nv_hardware_rendering="on"
 				test "${1:0:5}" = "--no-" && _arg_nv_hardware_rendering="off"
 				;;
+			--no-nv-hybrid-encoding|--nv-hybrid-encoding)
+				_arg_nv_hybrid_encoding="on"
+				test "${1:0:5}" = "--no-" && _arg_nv_hybrid_encoding="off"
+				;;
 			--no-nv-fast-encoding|--nv-fast-encoding)
 				_arg_nv_fast_encoding="on"
 				test "${1:0:5}" = "--no-" && _arg_nv_fast_encoding="off"
@@ -269,6 +276,7 @@ assign_positional_args 1 "${_positionals[@]}"
 # [ <-- needed because of Argbash
 # ] <-- needed because of Argbash
 
+
 set -ex
 
 # Echo `mount`
@@ -319,6 +327,7 @@ SEGMENT_ID="$ROUTE--$SEGMENT_NUM"
 RENDER_METRIC_SYSTEM=$_arg_metric
 NVIDIA_HARDWARE_RENDERING=$_arg_nv_hardware_rendering
 NVIDIA_DIRECT_ENCODING=$_arg_nv_direct_encoding
+NVIDIA_HYBRID_ENCODING=$_arg_nv_hybrid_encoding
 NVIDIA_FAST_ENCODING=$_arg_nv_fast_encoding
 JWT_AUTH=$_arg_jwt_token
 VIDEO_CWD=$_arg_video_cwd
@@ -391,9 +400,9 @@ ln -s /dev/shm/visionipc_camerad_0 visionipc_camerad_0 || true
 ln -s /dev/shm/visionipc_camerad_2 visionipc_camerad_2 || true
 # For each ALLOWED_SERVICES, create a symlink to /dev/shm/<service_name>
 # ln -s /dev/shm/<service_name> <service_name> || true
-for service in ${ALLOWED_SERVICES//,/ }; do
-    ln -s /dev/shm/op/"$service" "$service" || true
-done
+# for service in ${ALLOWED_SERVICES//,/ }; do
+#     ln -s /dev/shm/op/"$service" "$service" || true
+# done
 popd
 
 # Start processes
@@ -497,21 +506,30 @@ DRAW_TEXT_FILTER="drawtext=textfile=/tmp/overlay.txt:reload=1:fontcolor=white:fo
 if [ "$NVIDIA_DIRECT_ENCODING" = "on" ]; then
 	# Directly encode with nvidia hardware to the target file
 	# Good for setups where the video renders fast.
-	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec h264_nvenc -preset hq -tune hq -b:v "$TARGET_BITRATE" -bufsize 5M -maxrate "$TARGET_BITRATE" -qmin 0 -g 250 -bf 3 -b_ref_mode middle -temporal-aq 1 -rc-lookahead 20 -i_qfactor 0.75 -b_qfactor 1.1 -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_OUTPUT"
+	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec h264_nvenc -preset llhp -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -r 20 -filter:v "mpdecimate,setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_OUTPUT"
 	cleanup
+elif [ "$NVIDIA_HYBRID_ENCODING" = "on" ]; then
+	# Directly encode with nvidia hardware to the target file with the smear amount also recorded.
+	# Then lop it off with copy mode.
+	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0  -vcodec h264_nvenc -preset llhp -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -g 20 -r 20 -filter:v "mpdecimate,setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_OUTPUT"
+	cleanup
+	ffmpeg -y -i "$VIDEO_OUTPUT" -ss "$SMEAR_AMOUNT" -c:v copy -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 elif [ "$NVIDIA_FAST_ENCODING" = "on" ]; then
-	# Directly encode with nvidia hardware but then save the full video, then reencode with acceleration /cut it so the smear amount is cut off the front.
+	# Directly save the full video, then reencode with acceleration /cut it so the smear amount is cut off the front.
 	# For some reason, when Nvidia "direct" encoding is used, the first few frames stutter on CPU bound systems.
-	nice -n 10 ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss 0 -vcodec h264_nvenc -b:v "$TARGET_BITRATE_PLUS_SMEAR" -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
-	cleanup
-	ffmpeg -hwaccel cuda -i "$VIDEO_RAW_OUTPUT" -ss "$SMEAR_AMOUNT" -c:v h264_nvenc -b:v "$TARGET_BITRATE" -y -pix_fmt yuv420p -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
-else
-	# Complete CPU rendering
-	nice -n 10 ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"
+	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0  -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
 	# The setup is no longer needed. Just transcode now.
 	cleanup
-	ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 1 -an -f MP4 /dev/null
-	ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 2 -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
+	ffmpeg -hwaccel auto -i "$VIDEO_RAW_OUTPUT" -ss "$SMEAR_AMOUNT" -c:v h264_nvenc -b:v "$TARGET_BITRATE" -y -pix_fmt yuv420p -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
+else
+	# Complete CPU rendering
+	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0  -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
+	# The setup is no longer needed. Just transcode now.
+	cleanup
+	# Unused two pass, it's just excessive
+	# ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 1 -an -f MP4 /dev/null
+	# ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -pass 2 -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
+	ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -ss "$SMEAR_AMOUNT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 fi
 
 ctrl_c

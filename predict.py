@@ -19,7 +19,7 @@ class Predictor(BasePredictor):
         route: str = Input(
             description="Route/Segment ID "
             " (⚠️ ROUTE MUST BE PUBLIC! You can set this temporarily in Connect)"
-            ' (⚠️ Ensure all data from both forward cameras and "Logs" to be rendered have been uploaded; See README for more info)',
+            ' (⚠️ Ensure all data from forward and wide cameras and "Logs" to be rendered have been uploaded; See README for more info)',
             default="a2a0ccea32023010|2023-07-27--13-01-19",
         ),
         startSeconds: int = Input(
@@ -30,15 +30,15 @@ class Predictor(BasePredictor):
         ),
         smearAmount: int = Input(
             description="Smear amount (Let the video start this time before beginning recording, useful for making sure the radar △, if present, is rendered at the start if necessary)",
-            ge=5,
+            ge=6,
             le=40,
-            default=5,
+            default=10,
         ),
         speedhackRatio: float = Input(
-            description="Speedhack ratio (Higher renders faster but renders may be more unstable and have artifacts)",
+            description="Speedhack ratio (Higher ratio renders faster but renders may be more unstable and have artifacts) (Suggestion: 0.3-0.5 for jitter-free, 1-3 for fast renders, 4+ for buggy territory)",
             ge=0.3,
-            le=3.0,
-            default=0.7,
+            le=7.0,
+            default=2.0,
         ),
         # debugCommand: str = Input(
         #     description="Debug command to run instead of clip", default=""
@@ -55,9 +55,9 @@ class Predictor(BasePredictor):
             f"--smear-amount={smearAmount}",
             f"--speedhack-ratio={speedhackRatio}",
             f"--nv-hardware-rendering",
-            f"--nv-fast-encoding",
             f"--output=cog-clip.mp4",
         ]
+        command.append("--nv-fast-encoding")
         # if debugCommand != "":
         #     # Run bash with the command
         #     command = ["bash", "-c", debugCommand]
