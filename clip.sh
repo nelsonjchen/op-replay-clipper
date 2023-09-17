@@ -417,9 +417,28 @@ Section "Device"
 		BusID          "$GPU_PCI"
 EndSection
 
+Section "Monitor"
+    Identifier     "Monitor0"
+    VendorName     "Unknown"
+    ModelName      "Unknown"
+    Option         "DPMS"
+EndSection
+
+Section "Screen"
+    Identifier     "Screen0"
+    Device         "Device0"
+    Monitor        "Monitor0"
+    DefaultDepth    24
+    SubSection     "Display"
+        Virtual     1920 1080
+        Depth       24
+				Modes       "1920x1080"
+    EndSubSection
+EndSection
+
 EOT
 
-	tmux new-session -d -s clipper -n x11 "Xorg -noreset +extension GLX +extension RANDR +extension RENDER -logfile ./shared/xserver.log vt1 $DISPLAY"
+	tmux new-session -d -s clipper -n x11 "Xorg -noreset +extension GLX +extension RANDR +extension RENDER -logfile /tmp/xserver.log vt1 $DISPLAY"
 else
 	# Non-accelerated UI rendering
 	tmux new-session -d -s clipper -n x11 "Xtigervnc :0 -geometry 1920x1080 -SecurityTypes None -rfbport $VNC_PORT"
