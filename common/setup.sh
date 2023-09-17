@@ -12,6 +12,8 @@ apt-get update -y && apt-get install -y \
     `# For Debugging stuff` \
     htop \
     mesa-utils \
+    `# For hardware accelerated rendering` \
+    xserver-xorg-video-nvidia-525 \
     `# For script calcuation` \
     bc \
     `# For network monitoring` \

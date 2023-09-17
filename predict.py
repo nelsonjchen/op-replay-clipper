@@ -54,7 +54,8 @@ class Predictor(BasePredictor):
             f"--length-seconds={lengthSeconds}",
             f"--smear-amount={smearAmount}",
             f"--speedhack-ratio={speedhackRatio}",
-            f"--nv-direct-encoding",
+            f"--nv-hardware-rendering",
+            f"--nv-fast-encoding",
             f"--output=cog-clip.mp4",
         ]
         # if debugCommand != "":
