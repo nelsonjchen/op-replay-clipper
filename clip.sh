@@ -14,7 +14,9 @@
 # ARG_OPTIONAL_SINGLE([output],[o],[output clip name],[clip.mp4])
 # ARG_OPTIONAL_BOOLEAN([metric],[],[Use metric system in the ui],[off])
 # ARG_OPTIONAL_BOOLEAN([hidden-dongle-id],[],[Hide dongle ID],[off])
-# ARG_OPTIONAL_BOOLEAN([nv-direct-encoding],[],[Use an available Nvidia GPU to directly encode grabbed video],[off])
+# ARG_OPTIONAL_BOOLEAN([nv-hardware-rendering],[],[Use an available Nvidia GPU to render the openpilot GUI],[off])
+# ARG_OPTIONAL_BOOLEAN([nv-fast-encoding],[],[Use an available Nvidia GPU to accelerate encoding of grabbed video],[off])
+# ARG_OPTIONAL_BOOLEAN([nv-direct-encoding],[],[Use an available Nvidia GPU to directly encode grabbed video. Supercedes fast encoding],[off])
 # ARG_POSITIONAL_SINGLE([route_id],[comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) ])
 # ARG_HELP([See README at https://github.com/nelsonjchen/op-replay-clipper/])
 # ARGBASH_GO()
@@ -56,13 +58,15 @@ _arg_vnc="0"
 _arg_output="clip.mp4"
 _arg_metric="off"
 _arg_hidden_dongle_id="off"
+_arg_nv_hardware_rendering="off"
+_arg_nv_fast_encoding="off"
 _arg_nv_direct_encoding="off"
 
 
 print_help()
 {
 	printf '%s\n' "See README at https://github.com/nelsonjchen/op-replay-clipper/"
-	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [--(no-)hidden-dongle-id] [--(no-)nv-direct-encoding] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [--(no-)hidden-dongle-id] [--(no-)nv-hardware-rendering] [--(no-)nv-fast-encoding] [--(no-)nv-direct-encoding] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
@@ -76,7 +80,9 @@ print_help()
 	printf '\t%s\n' "-o, --output: output clip name (default: 'clip.mp4')"
 	printf '\t%s\n' "--metric, --no-metric: Use metric system in the ui (off by default)"
 	printf '\t%s\n' "--hidden-dongle-id, --no-hidden-dongle-id: Hide dongle ID (off by default)"
-	printf '\t%s\n' "--nv-direct-encoding, --no-nv-direct-encoding: Use an available Nvidia GPU to directly encode grabbed video (off by default)"
+	printf '\t%s\n' "--nv-hardware-rendering, --no-nv-hardware-rendering: Use an available Nvidia GPU to render the openpilot GUI (off by default)"
+	printf '\t%s\n' "--nv-fast-encoding, --no-nv-fast-encoding: Use an available Nvidia GPU to accelerate encoding of grabbed video (off by default)"
+	printf '\t%s\n' "--nv-direct-encoding, --no-nv-direct-encoding: Use an available Nvidia GPU to directly encode grabbed video. Supercedes fast encoding (off by default)"
 	printf '\t%s\n' "-h, --help: Prints help"
 }
 
@@ -200,6 +206,14 @@ parse_commandline()
 				_arg_hidden_dongle_id="on"
 				test "${1:0:5}" = "--no-" && _arg_hidden_dongle_id="off"
 				;;
+			--no-nv-hardware-rendering|--nv-hardware-rendering)
+				_arg_nv_hardware_rendering="on"
+				test "${1:0:5}" = "--no-" && _arg_nv_hardware_rendering="off"
+				;;
+			--no-nv-fast-encoding|--nv-fast-encoding)
+				_arg_nv_fast_encoding="on"
+				test "${1:0:5}" = "--no-" && _arg_nv_fast_encoding="off"
+				;;
 			--no-nv-direct-encoding|--nv-direct-encoding)
 				_arg_nv_direct_encoding="on"
 				test "${1:0:5}" = "--no-" && _arg_nv_direct_encoding="off"
@@ -255,7 +269,6 @@ assign_positional_args 1 "${_positionals[@]}"
 # [ <-- needed because of Argbash
 # ] <-- needed because of Argbash
 
-
 set -ex
 
 # Echo `mount`
@@ -304,7 +317,9 @@ ROUTE=$(echo "$_arg_route_id" | sed -E 's/--[0-9]+$//g')
 SEGMENT_NUM=$(($STARTING_SEC / 60))
 SEGMENT_ID="$ROUTE--$SEGMENT_NUM"
 RENDER_METRIC_SYSTEM=$_arg_metric
+NVIDIA_HARDWARE_RENDERING=$_arg_nv_hardware_rendering
 NVIDIA_DIRECT_ENCODING=$_arg_nv_direct_encoding
+NVIDIA_FAST_ENCODING=$_arg_nv_fast_encoding
 JWT_AUTH=$_arg_jwt_token
 VIDEO_CWD=$_arg_video_cwd
 VIDEO_RAW_OUTPUT=clip_raw.mkv
@@ -382,7 +397,33 @@ done
 popd
 
 # Start processes
-tmux new-session -d -s clipper -n x11 "Xtigervnc :0 -geometry 1920x1080 -SecurityTypes None -rfbport $VNC_PORT"
+if [ "$NVIDIA_HARDWARE_RENDERING" = "on" ]; then
+	# Does not work on WSL2
+	GPU_BOARD=$(nvidia-xconfig --query-gpu-info | grep -i 'Name' | awk -F ': ' '{print $2}')
+	GPU_PCI=$(nvidia-xconfig --query-gpu-info | grep BusID | awk '{print $4}')
+
+	mkdir -p /etc/X11
+cat <<EOT > /etc/X11/xorg.conf
+Section "Files"
+		ModulePath      "/usr/lib/xorg/modules"
+		ModulePath      "/usr/local/nvidia"
+EndSection
+
+Section "Device"
+		Identifier     "Device0"
+		Driver         "nvidia"
+		VendorName     "NVIDIA Corporation"
+		BoardName      "$GPU_BOARD"
+		BusID          "$GPU_PCI"
+EndSection
+
+EOT
+
+	tmux new-session -d -s clipper -n x11 "Xorg -noreset +extension GLX +extension RANDR +extension RENDER -logfile ./shared/xserver.log vt1 $DISPLAY"
+else
+	# Non-accelerated UI rendering
+	tmux new-session -d -s clipper -n x11 "Xtigervnc :0 -geometry 1920x1080 -SecurityTypes None -rfbport $VNC_PORT"
+fi
 # TODO: ALLOWED_SERVICES is killing too much for some reason. Need to figure out what is the actual minimal set of services to run. Or just don't care.
 tmux new-window -n replay -t clipper: "TERM=xterm-256color faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./tools/replay/replay --ecam --start \"$SMEARED_STARTING_SEC\" \"$ROUTE\""
 tmux new-window -n ui -t clipper: "faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./selfdrive/ui/ui"
@@ -435,13 +476,18 @@ fi
 DRAW_TEXT_FILTER="drawtext=textfile=/tmp/overlay.txt:reload=1:fontcolor=white:fontsize=14:box=1:boxcolor=black@0.5:boxborderw=5:x=(w-text_w)/2:y=10"
 
 if [ "$NVIDIA_DIRECT_ENCODING" = "on" ]; then
-	# Directly encode with nvidia hardware
-	# Save the full video, then cut it by keyframe so the smear amount is cut off the front.
-	# For some reason, when Nvidia accelerated encoding is used, the first few frames stutter.
+	# Directly encode with nvidia hardware to the target file
+	# Good for setups where the video renders fast.
+	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec h264_nvenc -preset hq -tune hq -b:v "$TARGET_BITRATE" -bufsize 5M -maxrate "$TARGET_BITRATE" -qmin 0 -g 250 -bf 3 -b_ref_mode middle -temporal-aq 1 -rc-lookahead 20 -i_qfactor 0.75 -b_qfactor 1.1 -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_OUTPUT"
+	cleanup
+elif [ "$NVIDIA_FAST_ENCODING" = "on" ]; then
+	# Directly encode with nvidia hardware but then save the full video, then reencode with acceleration /cut it so the smear amount is cut off the front.
+	# For some reason, when Nvidia "direct" encoding is used, the first few frames stutter on CPU bound systems.
 	nice -n 10 ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss 0 -vcodec h264_nvenc -b:v "$TARGET_BITRATE_PLUS_SMEAR" -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
 	cleanup
 	ffmpeg -hwaccel cuda -i "$VIDEO_RAW_OUTPUT" -ss "$SMEAR_AMOUNT" -c:v h264_nvenc -b:v "$TARGET_BITRATE" -y -pix_fmt yuv420p -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 else
+	# Complete CPU rendering
 	nice -n 10 ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_RAW_OUTPUT"
 	# The setup is no longer needed. Just transcode now.
 	cleanup
