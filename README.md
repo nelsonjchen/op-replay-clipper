@@ -4,19 +4,44 @@ Capture and develop short clips of [openpilot][op] with the openpilot UI (path, 
 
 Show the bad and the good of openpilot! Very useful for [making outstanding bug reports](https://github.com/commaai/openpilot/wiki/FAQ#how-do-i-report-a-bug) or [posting UI video in interesting situations on X](https://twitter.com/yassineyousfi_/status/1590473942439198720)!
 
-Give this project a test with [GitHub Codespaces](https://github.com/codespaces) if you haven't already!
+## Platforms
 
-* Prior GitHub Codespaces experience is not needed!
-* You don't need an existing openpilot development environment setup!
-* You don't need to install anything on your computer!
-* You just need a free GitHub account.
-* The free GitHub account will give you 30 free hours of a 4 CPU machine every month.
-* It's preset with a spending limit of $0/mo. There is no risk of charging you anything.
-* Setup is fast. You can go from nothing to rendering and developing a clip within two minutes.
-* You don't need a comma prime or lite subscription.
-* Cleanup is easy, you just delete it from https://github.com/codespaces afterwards.
+The replay clipper is packaged to run on two platforms for ease of use:
+
+- [Replicate][replicate] (Not free, cheap! But very fast and the UI is easy to use.)
+- [GitHub Codespaces][ghcs] (Free! But slow.)
 
 [Alternatively, you can also run this setup on your own machine. It is quite a bit more complicated but can grant you more power and speed via more CPU or use of a GPU if you desire.](#self-running)
+
+Give this project a test with [Replicate](https://replicate.com/nelsonjchen/op-replay-clipper) or [GitHub Codespaces](https://github.com/codespaces) if you haven't already!
+
+### Common to Replicate and GitHub Codespaces
+
+* Setup is fast. You can go from nothing to rendering and developing a clip within two minutes.
+* You don't need a comma prime or lite subscription.
+* You don't need to install anything on your computer!
+* You don't need an existing openpilot development environment setup!
+* You need a GitHub account to use GitHub Codespaces *and* Replicate as Replicate uses GitHub for authentication.
+
+### Replicate
+
+* The GUI is really easy to use compared to GitHub Codespaces.
+* Replicate is a paid service. You'll probably need to input payment information.
+* It costs about $0.01 per render and you may have multiple renders to do. You really won't notice and it's a small price to pay for the convenience.
+* Replicate is fast. It can render a 30 second clip in about 1 minute or even faster since a GPU is available to accelerate the rendering and encoding.
+* The download portion of the render is slow since it isn't next to the Comma Connect servers like Codespaces is.
+* You don't need to worry about cleanup. Replicate just cleans up after itself.
+* You'll need to temporarily make your route public for Replicate to access it. You can toggle it back to private after you're done with clip making.
+
+### Codespaces
+
+* Some experience with VSCode and text editors is recommended.
+* The free GitHub account will give you 30 free hours of a 4 CPU machine every month.
+* It's preset with a spending limit of $0/mo. There is no risk of charging you anything.
+* Cleanup is easy, but you should delete it from https://github.com/codespaces afterwards if you aren't going to use it anymore so it isn't taking up your free hours. It will automatically be deleted after 30 days of inactivity though.
+* Downloading rendered clips is a bit tricky at the moment.
+* You can run this against a non-public route by providing a JWT token.
+* This is slower than Replicate. It can render a 30 second clip in about 5 minutes and the slowdown is due to the lack of a GPU to accelerate the rendering and encoding. So it's all software rendering and encoding.
 
 ## Samples
 
@@ -34,7 +59,7 @@ This is a video of a bug report where openpilot's lateral handling lost the lane
 
 https://user-images.githubusercontent.com/5363/205901777-53fd18f9-2ab5-400b-92f5-45daf3a34fbd.mp4
 
-Lane cutting? 
+Lane cutting?
 
 https://github.com/nelsonjchen/op-replay-clipper/assets/5363/d0ab3365-b5ef-4e05-84ee-370b88e8af02
 
@@ -44,7 +69,7 @@ https://github.com/nelsonjchen/op-replay-clipper/assets/5363/8f970c76-21d1-4209-
 
 ## Limitations
 
-- This has only been tested on data from a Comma Three. It is unknown if it can work for any other devices.
+- This has only been tested on data from a Comma 3 and/or Comma 3X. It is unknown if it can work for any other devices.
 - The UI replayed is comma.ai's latest stock UI on their master branch; routes from forks that differ alot from stock may not render correctly. Your experience may and will vary. Please make sure to note these replays are from fork data and may not be representative of the stock behavior. [The comma team really does not like it if you ask them to debug fork code as "it just takes too much time to be sidetracked by hidden and unclear changes"](https://discord.com/channels/469524606043160576/616456819027607567/1042263657851142194).
 - Older routes may not replay correctly or at all on the latest UI in the master branch.
 - I strongly recommend you work on this from a desktop, laptop, or at least a tablet.
@@ -60,19 +85,27 @@ Ensure your openpilot route's files are fully uploaded on https://connect.comma.
   - <img width="347" alt="Screen Shot 2022-09-06 at 11 55 39 PM" src="https://user-images.githubusercontent.com/5363/188815682-6694c2f8-1d77-468e-9152-75a709477c9a.png">
 - This route is fully uploaded:
   - <img width="316" alt="Screen Shot 2022-09-07 at 12 27 26 AM" src="https://user-images.githubusercontent.com/5363/188816174-51045496-4614-4050-b911-c4abb987c5fe.png">
-- The driver or interior camera is not required to be enabled for recording or uploading for this. It's easier to just hit that "Upload all" button though. Unfortunately there's no only upload all wide camera, forward camera, and logs button. 
+- The driver or interior camera is not required to be enabled for recording or uploading for this. It's easier to just hit that "Upload all" button though. Unfortunately there's no only upload all wide camera, forward camera, and logs button.
   - If this is news to you about recording or uploading driver video, you should be aware of a toggle in the openpilot UI to not record driver video and thus effectively not allowing upload of the driver video. Unfortunately, there's no record but block upload driver videos option.
 - Note: If you do not upload all the forward camera files, the replay will not progress past the starting UI.
 - It is possible to upload only a portion of the route and still render a clip, but it's not recommended if you are new to this clipper. You can find those instructions [in Advanced Tips > Partial Uploads.](#partial-upload).
 
 ### Setup
 
-We will be using [GitHub Codespaces][ghcs].
-
 #### Time Estimates
 
-- Setup: 1 minute
-- Per Clip: About 5 minutes to capture a 30 second frame with the UI and compress the 30 second clip to ~50MB.
+- Replicate
+  - Setup: If the clipper is cold, it'll take about 4 minutes to spin up. You aren't charged for this by Replicate. If you're lucky, someone else has already spun up the clipper and an existing public instance will already be warm and ready to go.
+  - Per Clip
+     - 1 minute for an uncached 30 second clip.
+     - 0.5 minutes to re-render said 30 second clip that was run recently and data cached by Replicate.
+- Codespaces
+  - Setup: 1 minute
+  - Per Clip: About 5 minutes to capture a 30 second frame with the UI and compress the 30 second clip to ~50MB.
+
+#### Setup Replicate
+
+1. Visit https://replicate.com/nelsonjchen/op-replay-clipper. That's it. You're done. You can skip to [Steps](#steps).
 
 #### Setup GitHub Codespaces
 
@@ -88,29 +121,52 @@ We will be using [GitHub Codespaces][ghcs].
 
 ### Steps
 
+#### Gather Information
+
+You'll need:
+
+- A comma connect `route or segment ID`.
+   - <img width="336" alt="image" src="https://user-images.githubusercontent.com/5363/188817040-5341e1af-2176-47ad-87f3-ba0a3d88a32a.png">
+- The `starting second` on the route you want to clip.
+   - On comma connect, the route's timeline will have a widget below your cursor that's "segment number, local time". Segments are made every minute and start from 0. So scrub it, and do a little mental arithmetic to get the starting second. I usually do "60 \* segment number + offset" as my mental calculation.
+     - Sample
+       - <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
+     - In this example, the starting second would be at least 60 \* 3 = 180 seconds.
+     - Don't stress on this, if this is your first time, just wing it. You'll get it.
+- How long you want the clip to be. Recommended to be 30 seconds or less.
+
+#### Replicate
+
+1. Make sure the route is Public. If it isn't, toggle the `Make Public` active under More Info. You can toggle it back  after you're done with clip making to make it private again.
+   - ![image](https://github.com/nelsonjchen/op-replay-clipper/assets/5363/24d70619-f735-4b17-a852-77a4f96cda25)
+2. Put `route or segment ID` into the `route` field.
+3. Put the `starting second` into the `start` field.
+4. Put the `clip length` into the `length` field.
+5. Click `Submit` and wait for the clip to render.
+
+![image](https://github.com/nelsonjchen/op-replay-clipper/assets/5363/787d0ef0-3d9d-48d7-9671-74f6f07c640c)
+
+#### GitHub Codespaces
+
 There are options but these are the basic steps. Note, the screenshots below may vary in themes and UI, but the layout is generally the same.
 
-1. Find the openpilot route you wish to take a clip from in Comma Connect at https://connect.comma.ai.
-2. Find the starting seconds value. The route's timeline will have a widget below your cursor that's "segment number, local time". Segments are made every minute and start from 0. So scrub it, and do a little mental arithmetic to get the starting second. I usually do "60 \* segment number + offset" as my mental calculation. Edit the starting second in the `scratch_run.sh` file to this value.
-   - Sample: <img width="282" alt="Screen Shot 2022-09-06 at 11 56 10 PM" src="https://user-images.githubusercontent.com/5363/188816664-6e1cd8e3-a363-4653-85da-a03332e39c13.png">
-   - In this example, the starting second would be at least 60 \* 3 = 180 seconds.
-   - Don't stress on this, if this is your first time, just wing it. You'll get it.
-3. Get any segment ID of the route from `More Info`. The example below would be `071ba9916a1da2fa|2022-09-04--11-15-52--1`. Edit the route ID in the `scratch_run.sh` file to this value.
-   - <img width="336" alt="image" src="https://user-images.githubusercontent.com/5363/188817040-5341e1af-2176-47ad-87f3-ba0a3d88a32a.png">
-4. Get a JWT Token from https://jwt.comma.ai with the same account type you log into Comma Connect with. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Edit the JWT token in the `scratch_run.sh` file to this value. **Keep this token private, do not share it with anyone as it will grant access to your comma connect account for a year.**
-5. Change the clip length value in `scratch_run.sh` to the number of seconds you want to capture. Longer lengths take proportionally longer to capture.
-6. Run the script with `./scratch_run.sh` in the Terminal.
+1. Edit the placeholder `route or segment ID` in `scratch_run.sh` to the `route or segment ID`.
+2. Edit the starting second in the `scratch_run.sh` file to this value.
+3. Make sure the route is accessible.
+   - Get a JWT Token from https://jwt.comma.ai with the same account type you log into Comma Connect with. It'll be a long string that starts a bit like `eyJ0eXAiOiJKV1QiLCJhb...`. Edit the JWT token in the `scratch_run.sh` file to this value. **Keep this token private, do not share it with anyone as it will grant access to your comma connect account for a year.**
+4. Change the clip length value in `scratch_run.sh` to the number of seconds you want to capture. Longer lengths take proportionally longer to capture.
+5. Run the script with `./scratch_run.sh` in the Terminal.
    - Sample: <img width="1072" alt="image" src="https://user-images.githubusercontent.com/5363/202886850-cf4e392f-f40f-423c-bbae-2b5917f74971.png">
-7. Wait 3 minutes, and the script should complete.
+6. Wait 3 minutes, and the script should complete.
    - Sample: <img width="1511" alt="Screenshot 2022-11-27 at 2 32 19 PM" src="https://user-images.githubusercontent.com/5363/204163251-638257ee-df14-440a-a8f0-3e26e4aae80e.png">
-8. ~~After it completes, click "Go Live" in the bottom right corner to start a web server and open the web server in a new tab. Browse to the `shared` folder.~~ [This and the next step is currently broken with web browser codespace; It may be fine on Desktop VSCode connected to a codespace though.](https://github.com/nelsonjchen/op-replay-clipper/issues/30) As an alternative, you can right click on the file in VSCode under shared and press "Download...". If on macOS it complains about "system folders", make a new folder under your home folder and save to there.
+7. ~~After it completes, click "Go Live" in the bottom right corner to start a web server and open the web server in a new tab. Browse to the `shared` folder.~~ [This and the next step is currently broken with web browser codespace; It may be fine on Desktop VSCode connected to a codespace though.](https://github.com/nelsonjchen/op-replay-clipper/issues/30) As an alternative, you can right click on the file in VSCode under shared and press "Download...". If on macOS it complains about "system folders", make a new folder under your home folder and save to there.
    - Clicking Go Live:
       - <img width="1186" alt="Screenshot 2022-11-27 at 4 25 19 PM" src="https://user-images.githubusercontent.com/5363/204168299-79346fa7-45c7-4b03-b6b5-ff793af2a05e.png">
    - Web Server View Sample
       - <img width="1510" alt="Screenshot 2022-11-27 at 4 26 43 PM" src="https://user-images.githubusercontent.com/5363/204168325-4682c223-39d8-45f6-8065-ce3f2cd02bff.png">
-9. ~~Right click and download `clip.mp4` (or any files you've generated) to your computer. You can share or upload this file wherever you want.~~
-10. If you want to make more clips, continue to edit and run `./scratch_run.sh`, and refresh the web server's tab.
-11. Cleanup is easy. Delete the GitHub Codespace here: https://github.com/codespaces. If you forget, the GitHub Codespace will automatically stop after 30 minutes of inactivity and will automatically be completely deleted after 30 days of idle by default.
+8. ~~Right click and download `clip.mp4` (or any files you've generated) to your computer. You can share or upload this file wherever you want.~~
+9. If you want to make more clips, continue to edit and run `./scratch_run.sh`, and refresh the web server's tab.
+10. Cleanup is easy. Delete the GitHub Codespace here: https://github.com/codespaces. If you forget, the GitHub Codespace will automatically stop after 30 minutes of inactivity and will automatically be completely deleted after 30 days of idle by default.
   - It is also possible to restart a pre-existing codespace and continue where you left off if it wasn't deleted.
 
 ## Self running
@@ -217,7 +273,7 @@ https://user-images.githubusercontent.com/5363/196210351-acc0b235-f87b-4dbc-8b2a
 
 It is possible to upload only a small portion of a long route for the clipper with Comma Connect's GUI.
 
-**You are strongly recommended to select a minute before, and a minute after the incident you want to clip.** This will give a buffer before and after the incident to provide a margin for the clipper to render with. Think of the clipper as a fragile film projector; give it some slack and upload the files for these adjacent segments. If you do not, rendering may not start at all.
+**You are strongly recommended to select a minute before, and a minute after the incident you want to clip.** This will give a buffer before and after the incident to provide a margin for the clipper to render with. Think of the clipper as a fragile film projector; please give it some slack and upload the files for these adjacent segments. If you do not, rendering may not start at all or errors may occur.
 
 The video below shows how to do this with Comma Connect's GUI.
 
@@ -225,7 +281,20 @@ https://user-images.githubusercontent.com/5363/204060281-ed1c2376-498a-45f8-a8ac
 
 ## Architecture
 
-Just a single shell script that runs an X11 server, and tmux commands to control the replay executable. There is `faketime` to make it run reliably without modifications to the pre-built openpilot that is in the image. Docker is used to just make it portable, but also easy to cleanup. Docker-Compose is used to make sure the `/dev/shm` size is correct and to specify the use of already pre-built images for general use or backwards compatibility use.
+* Designed to be run in a Docker container. Running these scripts on your host system may be possible, but is not supported.
+* Container builds `master` openpilot UI and `replay` tool from source with some patches.
+   * Redirected `/dev/shm` to `/var/tmp` to avoid running out of space. Exceptions being the IPC for video data.
+   * Patch `replay`` to download 3 forward segments instead of 5 to settle networking faster and begin rendering for short clips.
+* `faketime` is used to slow down or speed up the replay tool and UI for a choice of flexibility and stability depending on hardware availability/capability or desired clip quality.
+* Most logic is in a single shell script, `clip.sh`.
+* A Replicate Cog `predict.py` is made to wrap `clip.sh` to make it easy to use in Replicate.
+   * A custom version of Cog is currently used to expose more Nvidia driver capabilities on Replicate.
+* `clip.sh` has an option to spins up and sets up an appropriate X11 server for the UI to render to.
+   * Replicate uses a bona-fide Nvidia XOrg server that is configured to provide OpenGL acceleration to the Openpilot UI.
+   * XVnc is used on all other platforms for debugging purposes but has no OpenGL acceleration.
+* `tmux` is used in `clip.sh` to control and send commands to the replay tool and UI.
+* `ffmpeg` is used to capture the UI, edit and encode the video, hardware accelerated if available.
+
 
 ## Credits
 
@@ -236,3 +305,4 @@ https://github.com/commaai/openpilot/blame/master/tools/replay/main.cc
 [do]: https://www.digitalocean.com/
 [op]: https://github.com/commaai/openpilot
 [ghcs]: https://github.com/features/codespaces
+[replicate]: https://replicate.com/nelsonjchen/op-replay-clipper
