@@ -371,7 +371,8 @@ if [ -n "$JWT_AUTH" ]; then
     echo "{\"access_token\": \"$JWT_AUTH\"}" > "$HOME"/.comma/auth.json
 fi
 
-ALLOWED_SERVICES="modelV2,\
+# For reference for high frequency services
+UI_SERVICES="modelV2,\
 controlsState,\
 liveCalibration,\
 radarState,\
@@ -389,6 +390,11 @@ navInstruction,\
 navRoute,\
 uiPlan"
 
+HIGH_FREQ_SERVICES="modelV2,\
+controlsState,\
+carState,\
+uiPlan"
+
 # Accelerate certain msgq queues with /dev/shm
 # Applicable to OP compiled to use msgq at /var/tmp
 pushd /var/tmp
@@ -396,13 +402,13 @@ pushd /var/tmp
 rm -rf /dev/shm/op/* || true
 mkdir -p /dev/shm/op || true
 # Vision
-ln -s /dev/shm/visionipc_camerad_0 visionipc_camerad_0 || true
-ln -s /dev/shm/visionipc_camerad_2 visionipc_camerad_2 || true
-# For each ALLOWED_SERVICES, create a symlink to /dev/shm/<service_name>
+ln -s /dev/shm/op/visionipc_camerad_0 visionipc_camerad_0 || true
+ln -s /dev/shm/op/visionipc_camerad_2 visionipc_camerad_2 || true
+# For each HIGH_FREQ_SERVICES, create a symlink to /dev/shm/<service_name>
 # ln -s /dev/shm/<service_name> <service_name> || true
-# for service in ${ALLOWED_SERVICES//,/ }; do
-#     ln -s /dev/shm/op/"$service" "$service" || true
-# done
+for service in ${HIGH_FREQ_SERVICES//,/ }; do
+    ln -s /dev/shm/op/"$service" "$service" || true
+done
 popd
 
 # Start processes
