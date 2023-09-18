@@ -57,7 +57,7 @@ class Predictor(BasePredictor):
             f"--nv-hardware-rendering",
             f"--output=cog-clip.mp4",
         ]
-        command.append("--nv-fast-encoding")
+        command.append("--nv-direct-encoding")
         # if debugCommand != "":
         #     # Run bash with the command
         #     command = ["bash", "-c", debugCommand]
