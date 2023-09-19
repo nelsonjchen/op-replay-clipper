@@ -29,7 +29,7 @@ Give this project a test with [Replicate](https://replicate.com/nelsonjchen/op-r
 * Replicate is a paid service. You'll probably need to input payment information.
 * It costs about $0.01 per render and you may have multiple renders to do. You really won't notice and it's a small price to pay for the convenience.
 * Replicate is fast. It can render a 30 second clip in about 1 minute or even faster since a GPU is available to accelerate the rendering and encoding.
-* The download portion of the render is slow since it isn't next to the Comma Connect servers like Codespaces is.
+* The download portion of the render is slow since it isn't next to the Comma Connect servers like Codespaces is. It is a costly part of the operation and an [issue](https://github.com/nelsonjchen/op-replay-clipper/issues/40) is open to solve it.
 * You don't need to worry about cleanup. Replicate just cleans up after itself.
 * You'll need to temporarily make your route public for Replicate to access it. You can toggle it back to private after you're done with clip making.
 
@@ -88,7 +88,7 @@ Ensure your openpilot route's files are fully uploaded on https://connect.comma.
 - The driver or interior camera is not required to be enabled for recording or uploading for this. It's easier to just hit that "Upload all" button though. Unfortunately there's no only upload all wide camera, forward camera, and logs button.
   - If this is news to you about recording or uploading driver video, you should be aware of a toggle in the openpilot UI to not record driver video and thus effectively not allowing upload of the driver video. Unfortunately, there's no record but block upload driver videos option.
 - Note: If you do not upload all the forward camera files, the replay will not progress past the starting UI.
-- It is possible to upload only a portion of the route and still render a clip, but it's not recommended if you are new to this clipper. You can find those instructions [in Advanced Tips > Partial Uploads.](#partial-upload).
+- It is possible to upload only a portion of the route and still render a clip, but it's not recommended if you are new to this clipper. You can find those instructions [in Advanced Tips > Partial Uploads](#partial-upload).
 
 ### Setup
 
@@ -237,9 +237,10 @@ You should be able to run the tool with a higher `--speedhack-ratio` value (0.5 
 
 Things that are accelerated by passing in a GPU:
 
-* (Auto) UI rendering occurs in hardware and not CPU.
 * (Nvidia-only/Auto) `replay`'s decoding of the forward video if a NVIDIA GPU is provided and CUDA is available.
 * (Nvidia-only/Manual) Optionally, on NVIDIA GPUs, you can also pass into `clip.sh` the option `--nv-direct-encoding` to encode the captured video directly to a H.264 MP4 via the GPU. Video quality is lower, but it is *quick*.
+
+If a real Nvidia Linux non-WSL2 GPU is passed in, there is also an option to make an X.org server inside the container use it for accelerated OpenGL rendering.
 
 ### Self Running Teardown
 
@@ -281,20 +282,19 @@ https://user-images.githubusercontent.com/5363/204060281-ed1c2376-498a-45f8-a8ac
 
 ## Architecture
 
-* Designed to be run in a Docker container. Running these scripts on your host system may be possible, but is not supported.
+* Designed to be run in a Docker container. Running these scripts on your host system may be possible, but is not supported and may even brick your system.
 * Container builds `master` openpilot UI and `replay` tool from source with some patches.
-   * Redirected `/dev/shm` to `/var/tmp` to avoid running out of space. Exceptions being the IPC for video data.
-   * Patch `replay`` to download 3 forward segments instead of 5 to settle networking faster and begin rendering for short clips.
+   * Redirected `/dev/shm` to `/var/tmp` to avoid running out of space. Exceptions being the IPC for video data and certain high-speed queues which are symlinked to `/dev/shm`.
+   * Patch `replay` to download 3 forward segments instead of 5 to settle networking faster and begin rendering for short clips.
 * `faketime` is used to slow down or speed up the replay tool and UI for a choice of flexibility and stability depending on hardware availability/capability or desired clip quality.
 * Most logic is in a single shell script, `clip.sh`.
 * A Replicate Cog `predict.py` is made to wrap `clip.sh` to make it easy to use in Replicate.
    * A custom version of Cog is currently used to expose more Nvidia driver capabilities on Replicate.
 * `clip.sh` has an option to spins up and sets up an appropriate X11 server for the UI to render to.
-   * Replicate uses a bona-fide Nvidia XOrg server that is configured to provide OpenGL acceleration to the Openpilot UI.
+   * Replicate uses a bona-fide Nvidia XOrg server that is configured to provide OpenGL acceleration to the openpilot UI.
    * XVnc is used on all other platforms for debugging purposes but has no OpenGL acceleration.
 * `tmux` is used in `clip.sh` to control and send commands to the replay tool and UI.
 * `ffmpeg` is used to capture the UI, edit and encode the video, hardware accelerated if available.
-
 
 ## Credits
 
