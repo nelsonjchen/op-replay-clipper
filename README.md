@@ -72,7 +72,7 @@ https://github.com/nelsonjchen/op-replay-clipper/assets/5363/8f970c76-21d1-4209-
 - This has only been tested on data from a Comma 3 and/or Comma 3X. It is unknown if it can work for any other devices.
 - The UI replayed is comma.ai's latest stock UI on their master branch; routes from forks that differ alot from stock may not render correctly. Your experience may and will vary. Please make sure to note these replays are from fork data and may not be representative of the stock behavior. [The comma team really does not like it if you ask them to debug fork code as "it just takes too much time to be sidetracked by hidden and unclear changes"](https://discord.com/channels/469524606043160576/616456819027607567/1042263657851142194).
 - Older routes may not replay correctly or at all on the latest UI in the master branch.
-- I strongly recommend you work on this from a desktop, laptop, or at least a tablet.
+- I strongly recommend you work on this from a desktop, laptop, or at least a tablet for Codespaces. Replicate should works OK on a phone too though.
 - **You are advised to upload all files of the route to Comma Connect servers before attempting to render a route. If you do not upload all files, the replay will not render past the starting UI.**
 
 ## Usage
