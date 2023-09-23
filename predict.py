@@ -40,6 +40,9 @@ class Predictor(BasePredictor):
             le=7.0,
             default=2.0,
         ),
+        fileSize: int = Input(
+            description="Rough size of clip in MB.", ge=25, le=50, default=50
+        ),
         # debugCommand: str = Input(
         #     description="Debug command to run instead of clip", default=""
         # ),
@@ -54,6 +57,7 @@ class Predictor(BasePredictor):
             f"--length-seconds={lengthSeconds}",
             f"--smear-amount={smearAmount}",
             f"--speedhack-ratio={speedhackRatio}",
+            f"--target-mb={fileSize}",
             f"--nv-hardware-rendering",
             f"--output=cog-clip.mp4",
         ]
