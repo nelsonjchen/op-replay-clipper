@@ -48,6 +48,9 @@ class Predictor(BasePredictor):
         # ),
     ) -> Path:
         """Run clip.sh with arguments."""
+        # Safety, remove the last clip
+        if os.path.exists("./shared/cog-clip.mp4"):
+            os.remove("./shared/cog-clip.mp4")
 
         # Start the shell command and capture its output
         command = [
