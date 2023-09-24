@@ -44,6 +44,9 @@ class Predictor(BasePredictor):
         fileSize: int = Input(
             description="Rough size of clip in MB.", ge=25, le=50, default=50
         ),
+        notes: str = Input(
+            description="Notes Text field. Doesn't affect output. For your own reference", default="",
+        ),
         # debugCommand: str = Input(
         #     description="Debug command to run instead of clip", default=""
         # ),
