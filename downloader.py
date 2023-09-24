@@ -93,17 +93,18 @@ def downloadSegments(
     # We find the corresponding URL in the filelist, and download it to the data_dir
     # E.g. https://commadata2.blob.core.windows.net/commadata2/a2a0ccea32023010/2023-07-27--13-01-19/0/fcamera.hevc?se=2023-09-24T04%3A17%3A36Z&sp=r&sv=2018-03-28&sr=b&rscd=attachment%3B%20filename%3Da2a0ccea32023010_2023-07-27--13-01-19--0--fcamera.hevc&sig=a2oLhLvbKY7zlqTbyTmCVOjcN4Is1wQlaSUlZz1wK5U%3D -> data_dir/a2a0ccea32023010_2023-07-27--13-01-19/0/fcamera.hevc
 
-    # Create the skeleton directory structure
-    for segment_id in segment_ids:
-        segment_dir = Path(data_dir) / f"{route}" / f"{segment_id}"
-        segment_dir.mkdir(parents=True, exist_ok=True)
+    # Make the date directory. It's just the route but with the ID stripped off the front.
+    # E.g. a2a0ccea32023010|2023-07-27--13-01-19 -> 2023-07-27--13-01-19
+    route_date = re.sub(r"^[^|]+\|", "", route)
 
     # Generate the list of URLs and paths to download to
-    downloader = parfive.Downloader()
+    downloader = parfive.Downloader(
+        max_conn=20,
+    )
 
     # Download the data
     for segment_id in segment_ids:
-        segment_dir = Path(data_dir) / f"{route}" / f"{segment_id}"
+        segment_dir = Path(data_dir) / f"{route_date}--{segment_id}"
         # Download the forward camera
         for camera_url in filelist["cameras"]:
             if f"/{segment_id}/fcamera.hevc" in camera_url:
@@ -153,7 +154,7 @@ def downloadSegments(
 
     # Decompress the logs
     for segment_id in segment_ids:
-        segment_dir = Path(data_dir) / f"{route}" / f"{segment_id}"
+        segment_dir = Path(data_dir) / f"{route_date}--{segment_id}"
         # Decompress the log if rlog doesn't exist
         if (segment_dir / "rlog").exists():
             print(f"Skipping decompression of {segment_id} because it already exists")
