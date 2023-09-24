@@ -39,7 +39,7 @@ class Predictor(BasePredictor):
             description="Speedhack ratio (Higher ratio renders faster but renders may be more unstable and have artifacts) (Suggestion: 0.3-0.5 for jitter-free, 1-3 for fast renders, 4+ for buggy territory)",
             ge=0.3,
             le=7.0,
-            default=2.0,
+            default=1.0,
         ),
         fileSize: int = Input(
             description="Rough size of clip in MB.", ge=25, le=50, default=50
