@@ -78,10 +78,10 @@ class Predictor(BasePredictor):
             f"--speedhack-ratio={speedhackRatio}",
             f"--target-mb={fileSize}",
             f"--nv-hardware-rendering",
+            f"--nv-hybrid-encoding",
             f"--data-dir={data_dir}",
             f"--output=cog-clip.mp4",
         ]
-        command.append("--nv-direct-encoding")
         # if debugCommand != "":
         #     # Run bash with the command
         #     command = ["bash", "-c", debugCommand]

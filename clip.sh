@@ -546,9 +546,9 @@ if [ "$NVIDIA_DIRECT_ENCODING" = "on" ]; then
 elif [ "$NVIDIA_HYBRID_ENCODING" = "on" ]; then
 	# Directly encode with nvidia hardware to the target file with the smear amount also recorded.
 	# Then lop it off with copy mode.
-	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0  -vcodec h264_nvenc -preset llhp -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -g 20 -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_OUTPUT"
+	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0  -vcodec h264_nvenc -preset llhp -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -g 20 -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
 	cleanup
-	ffmpeg -y -i "$VIDEO_OUTPUT" -ss "$SMEAR_AMOUNT" -c:v copy -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
+	ffmpeg -y -ss "$SMEAR_AMOUNT" -i "$VIDEO_RAW_OUTPUT" -vcodec copy -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 elif [ "$NVIDIA_FAST_ENCODING" = "on" ]; then
 	# Directly save the full video, then reencode with acceleration /cut it so the smear amount is cut off the front.
 	# For some reason, when Nvidia "direct" encoding is used, the first few frames stutter on CPU bound systems.
