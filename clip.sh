@@ -8,6 +8,7 @@
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
 # ARG_OPTIONAL_SINGLE([smear-amount],[],[Amount of seconds to smear the clip start by before recording starts],[3])
 # ARG_OPTIONAL_SINGLE([ntfysh],[n],[ntfy.sh topic to post to when clip has completed rendering])
+# ARG_OPTIONAL_SINGLE([data-dir],[],[data dir to pass into replay for playback instead of having replay download])
 # ARG_OPTIONAL_SINGLE([speedhack-ratio],[r],[speedhack ratio for stable, non-jittery rendering],[0.35])
 # ARG_OPTIONAL_SINGLE([video-cwd],[c],[video working and output directory],[./shared])
 # ARG_OPTIONAL_SINGLE([vnc],[],[VNC Port for debugging, -1 will disable],[0])
@@ -53,6 +54,7 @@ _arg_target_mb="50"
 _arg_jwt_token=
 _arg_smear_amount="3"
 _arg_ntfysh=
+_arg_data_dir=
 _arg_speedhack_ratio="0.35"
 _arg_video_cwd="./shared"
 _arg_vnc="0"
@@ -68,7 +70,7 @@ _arg_nv_direct_encoding="off"
 print_help()
 {
 	printf '%s\n' "See README at https://github.com/nelsonjchen/op-replay-clipper/"
-	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [--(no-)hidden-dongle-id] [--(no-)nv-hardware-rendering] [--(no-)nv-hybrid-encoding] [--(no-)nv-fast-encoding] [--(no-)nv-direct-encoding] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [--data-dir <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [--(no-)hidden-dongle-id] [--(no-)nv-hardware-rendering] [--(no-)nv-hybrid-encoding] [--(no-)nv-fast-encoding] [--(no-)nv-direct-encoding] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
@@ -76,6 +78,7 @@ print_help()
 	printf '\t%s\n' "-j, --jwt-token: JWT Auth token to use (get token from https://jwt.comma.ai) (no default)"
 	printf '\t%s\n' "--smear-amount: Amount of seconds to smear the clip start by before recording starts (default: '3')"
 	printf '\t%s\n' "-n, --ntfysh: ntfy.sh topic to post to when clip has completed rendering (no default)"
+	printf '\t%s\n' "--data-dir: data dir to pass into replay for playback instead of having replay download (no default)"
 	printf '\t%s\n' "-r, --speedhack-ratio: speedhack ratio for stable, non-jittery rendering (default: '0.35')"
 	printf '\t%s\n' "-c, --video-cwd: video working and output directory (default: './shared')"
 	printf '\t%s\n' "--vnc: VNC Port for debugging, -1 will disable (default: '0')"
@@ -159,6 +162,14 @@ parse_commandline()
 				;;
 			-n*)
 				_arg_ntfysh="${_key##-n}"
+				;;
+			--data-dir)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_data_dir="$2"
+				shift
+				;;
+			--data-dir=*)
+				_arg_data_dir="${_key##--data-dir=}"
 				;;
 			-r|--speedhack-ratio)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
@@ -340,6 +351,8 @@ TARGET_BYTES=$((($TARGET_MB - 5) * 1024 * 1024))
 TARGET_BITRATE=$(($TARGET_BYTES * 8 / $RECORDING_LENGTH))
 TARGET_BITRATE_PLUS_SMEAR=$(($TARGET_BYTES * 8 / $RECORDING_LENGTH_PLUS_SMEAR))
 VNC_PORT=$_arg_vnc
+# Data dir is used to pass in a pre-downloaded data dir to replay
+DATA_DIR=$_arg_data_dir
 
 # URL Encode Route
 URL_ROUTE=$(echo "$ROUTE" | sed 's/|/%7C/g')
@@ -458,24 +471,40 @@ else
 	# Non-accelerated UI rendering
 	tmux new-session -d -s clipper -n x11 "Xtigervnc :0 -geometry 1920x1080 -SecurityTypes None -rfbport $VNC_PORT"
 fi
+
+if [ -n "$DATA_DIR" ]; then
+	# If data dir is passed in, use it
+	REPLAY_CMD="./tools/replay/replay --ecam --start \"$SMEARED_STARTING_SEC\" --data_dir \"$DATA_DIR\" \"$ROUTE\""
+else
+	# Otherwise, have replay download/decompress the route on demand
+	REPLAY_CMD="./tools/replay/replay --ecam --start \"$SMEARED_STARTING_SEC\" \"$ROUTE\""
+fi
+
 # TODO: ALLOWED_SERVICES is killing too much for some reason. Need to figure out what is the actual minimal set of services to run. Or just don't care.
-tmux new-window -n replay -t clipper: "TERM=xterm-256color faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./tools/replay/replay --ecam --start \"$SMEARED_STARTING_SEC\" \"$ROUTE\""
+tmux new-window -n replay -t clipper: "TERM=xterm-256color faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" $REPLAY_CMD"
 tmux new-window -n ui -t clipper: "faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./selfdrive/ui/ui"
 
-# Pause replay and let it download the route
-tmux send-keys -t clipper:replay Space
+# If it's not a local replay with data dir, then we need to wait for the route to download
+if [ -z "$DATA_DIR" ]; then
+	# Pause replay and let it download the route
+	tmux send-keys -t clipper:replay Space
 
-sleep 2
-# Wait until netstat shows less than 2 connections from ./tools/replay process
-while [ "$(netstat -tuplan | grep -E '443.*repl' | wc -l)" -gt 1 ]; do
-		echo "Waiting for segments to download..."
-		sleep 3
-done
+	sleep 2
+	# Wait until netstat shows less than 2 connections from ./tools/replay process
+	while [ "$(netstat -tuplan | grep -E '443.*repl' | wc -l)" -gt 1 ]; do
+			echo "Waiting for segments to download..."
+			sleep 3
+	done
+fi
 
+# Set back to smeared starting sec and immediately pause
 tmux send-keys -t clipper:replay Enter "$SMEARED_STARTING_SEC" Enter
 tmux send-keys -t clipper:replay Space
+# Wait for settle
 sleep 1
+# Play the route
 tmux send-keys -t clipper:replay Space
+# Continue on with recording.
 
 popd
 

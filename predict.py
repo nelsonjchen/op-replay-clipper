@@ -7,6 +7,7 @@ import subprocess
 
 from typing import Iterator, Optional
 import os
+import downloader
 
 
 class Predictor(BasePredictor):
@@ -52,6 +53,18 @@ class Predictor(BasePredictor):
         if os.path.exists("./shared/cog-clip.mp4"):
             os.remove("./shared/cog-clip.mp4")
 
+        # Download the route data
+        downloader.downloadSegments(
+            route_or_segment=route,
+            start_seconds=startSeconds,
+            length=lengthSeconds,
+            smear_seconds=smearAmount,
+            data_dir="./shared/data_dir",
+        )
+
+        # Get the full absolute path of `./shared/data_dir`
+        data_dir = os.path.abspath("./shared/data_dir")
+
         # Start the shell command and capture its output
         command = [
             "./clip.sh",
@@ -62,6 +75,7 @@ class Predictor(BasePredictor):
             f"--speedhack-ratio={speedhackRatio}",
             f"--target-mb={fileSize}",
             f"--nv-hardware-rendering",
+            f"--data-dir={data_dir}",
             f"--output=cog-clip.mp4",
         ]
         command.append("--nv-direct-encoding")
