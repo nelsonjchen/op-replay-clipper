@@ -18,8 +18,8 @@ class Predictor(BasePredictor):
     def predict(
         self,
         route: str = Input(
-            description="Route/Segment ID "
-            " (⚠️ ROUTE MUST BE PUBLIC! You can set this temporarily in Connect)"
+            description="Route ID (w/ Segment Number OK but the segment number will be ignored in favor of start seconds) "
+            " (⚠️ ROUTE MUST BE PUBLIC! You can set this temporarily in Connect.)"
             ' (⚠️ Ensure all data from forward and wide cameras and "Logs" to be rendered have been uploaded; See README for more info)',
             default="a2a0ccea32023010|2023-07-27--13-01-19",
         ),
@@ -31,9 +31,9 @@ class Predictor(BasePredictor):
         ),
         smearAmount: int = Input(
             description="Smear amount (Let the video start this time before beginning recording, useful for making sure the radar △, if present, is rendered at the start if necessary)",
-            ge=6,
+            ge=5,
             le=40,
-            default=10,
+            default=5,
         ),
         speedhackRatio: float = Input(
             description="Speedhack ratio (Higher ratio renders faster but renders may be more unstable and have artifacts) (Suggestion: 0.3-0.5 for jitter-free, 1-3 for fast renders, 4+ for buggy territory)",
@@ -45,7 +45,7 @@ class Predictor(BasePredictor):
             description="Rough size of clip in MB.", ge=25, le=50, default=50
         ),
         notes: str = Input(
-            description="Notes Text field. Doesn't affect output. For your own reference", default="",
+            description="Notes Text field. Doesn't affect output. For your own reference.", default="",
         ),
         # debugCommand: str = Input(
         #     description="Debug command to run instead of clip", default=""
@@ -55,6 +55,9 @@ class Predictor(BasePredictor):
         # Safety, remove the last clip
         if os.path.exists("./shared/cog-clip.mp4"):
             os.remove("./shared/cog-clip.mp4")
+
+        # Print the notes
+        print(notes)
 
         # Download the route data
         downloader.downloadSegments(
