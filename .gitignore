@@ -5,3 +5,4 @@ out.mp4
 cog.yaml
 __pycache__/
 output.mp4
+.venv/
