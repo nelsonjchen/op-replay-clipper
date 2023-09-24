@@ -67,6 +67,9 @@ class Predictor(BasePredictor):
 
         # Start the shell command and capture its output
         command = [
+            # Run with GNU timeout to prevent runaway processes
+            "timeout",
+            "10m",
             "./clip.sh",
             route,
             f"--start-seconds={startSeconds}",
