@@ -11,6 +11,7 @@ apt-get update -y && apt-get install -y \
     tigervnc-standalone-server \
     ffmpeg \
     faketime \
+    eatmydata \
     tmux \
     `# For Debugging stuff` \
     htop \

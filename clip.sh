@@ -466,7 +466,7 @@ EndSection
 
 EOT
 
-	tmux new-session -d -s clipper -n x11 "Xorg -noreset +extension GLX +extension RANDR +extension RENDER -logfile /tmp/xserver.log vt1 $DISPLAY"
+	tmux new-session -d -s clipper -n x11 "Xorg -noreset +extension GLX +extension RANDR +extension RENDER -logfile /tmp/xserver.log -logverbose 0 vt1 $DISPLAY"
 else
 	# Non-accelerated UI rendering
 	tmux new-session -d -s clipper -n x11 "Xtigervnc :0 -geometry 1920x1080 -SecurityTypes None -rfbport $VNC_PORT"
@@ -481,8 +481,8 @@ else
 fi
 
 # TODO: ALLOWED_SERVICES is killing too much for some reason. Need to figure out what is the actual minimal set of services to run. Or just don't care.
-tmux new-window -n replay -t clipper: "TERM=xterm-256color faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" $REPLAY_CMD"
-tmux new-window -n ui -t clipper: "faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./selfdrive/ui/ui"
+tmux new-window -n replay -t clipper: "TERM=xterm-256color eatmydata faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" $REPLAY_CMD"
+tmux new-window -n ui -t clipper: "eatmydata faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./selfdrive/ui/ui"
 
 # If it's not a local replay with data dir, then we need to wait for the route to download
 if [ -z "$DATA_DIR" ]; then
@@ -541,12 +541,12 @@ DRAW_TEXT_FILTER="drawtext=textfile=/tmp/overlay.txt:reload=1:fontcolor=white:fo
 if [ "$NVIDIA_DIRECT_ENCODING" = "on" ]; then
 	# Directly encode with nvidia hardware to the target file
 	# Good for setups where the video renders fast.
-	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec h264_nvenc -preset llhp -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_OUTPUT"
+	eatmydata ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec h264_nvenc -preset llhp -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_OUTPUT"
 	cleanup
 elif [ "$NVIDIA_HYBRID_ENCODING" = "on" ]; then
 	# Directly encode with nvidia hardware to the target file with the smear amount also recorded.
 	# Then lop it off with copy mode.
-	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0  -vcodec h264_nvenc -preset llhp -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -g 20 -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
+	eatmydata ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0  -vcodec h264_nvenc -preset llhp -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -g 20 -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
 	cleanup
 	ffmpeg -y -ss "$SMEAR_AMOUNT" -i "$VIDEO_RAW_OUTPUT" -vcodec copy -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 elif [ "$NVIDIA_FAST_ENCODING" = "on" ]; then
