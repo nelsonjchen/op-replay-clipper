@@ -26,12 +26,12 @@ Give this project a test with [Replicate](https://replicate.com/nelsonjchen/op-r
 ### Replicate
 
 * The GUI is really easy to use compared to GitHub Codespaces.
-* Replicate is a paid service. You'll probably need to input payment information.
+* Replicate is a paid service. You might need to input payment information at some point.
 * It costs about $0.01 per render and you may have multiple renders to do. You really won't notice and it's a small price to pay for the convenience.
 * Replicate is fast. It can render a 30 second clip in about 1 minute or even faster since a GPU is available to accelerate the rendering and encoding.
-* The download portion of the render is slow since it isn't next to the Comma Connect servers like Codespaces is. It is a costly part of the operation and an [issue](https://github.com/nelsonjchen/op-replay-clipper/issues/40) is open to solve it.
+* You can run and queue up multiple jobs at a time. Replicate might even spin up multiple renderers if you're lucky and complete them faster.
 * You don't need to worry about cleanup. Replicate just cleans up after itself.
-* You'll need to temporarily make your route public for Replicate to access it. You can toggle it back to private after you're done with clip making.
+* You'll need to temporarily make your route public for Replicate to access it. You can toggle it back to non-Public after you're done with clip making.
 
 ### Codespaces
 
