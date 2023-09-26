@@ -44,6 +44,9 @@ class Predictor(BasePredictor):
         fileSize: int = Input(
             description="Rough size of clip in MB.", ge=25, le=50, default=50
         ),
+        metric: bool = Input(
+            description="Render in metric units (km/h)", default=True
+        ),
         notes: str = Input(
             description="Notes Text field. Doesn't affect output. For your own reference.", default="",
         ),
@@ -88,6 +91,8 @@ class Predictor(BasePredictor):
             f"--data-dir={data_dir}",
             f"--output=cog-clip.mp4",
         ]
+        if metric:
+            command.append("--metric")
         # if debugCommand != "":
         #     # Run bash with the command
         #     command = ["bash", "-c", debugCommand]
