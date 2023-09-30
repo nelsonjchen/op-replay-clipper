@@ -482,7 +482,7 @@ fi
 
 # TODO: ALLOWED_SERVICES is killing too much for some reason. Need to figure out what is the actual minimal set of services to run. Or just don't care.
 tmux new-window -n replay -t clipper: "TERM=xterm-256color eatmydata faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" $REPLAY_CMD"
-tmux new-window -n ui -t clipper: "eatmydata faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./selfdrive/ui/ui"
+tmux new-window -n ui -t clipper: "eatmydata faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" strangle 20 ./selfdrive/ui/ui"
 
 # If it's not a local replay with data dir, then we need to wait for the route to download
 if [ -z "$DATA_DIR" ]; then
