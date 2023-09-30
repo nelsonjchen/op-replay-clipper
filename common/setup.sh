@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -xe
+
 # Shared script to setup OP environment for DevContainers and Cog
 
 # Set Debian noninteractive mode
