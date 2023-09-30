@@ -24,7 +24,11 @@ apt-get update -y && apt-get install -y \
     net-tools \
     `# Missing in the base cog image` \
     sudo \
+    git-lfs \
     git
+
+# Setup git lfs
+git lfs install
 
 # Blow away existing openpilot folder if it exists
 rm -rf /home/batman/openpilot || true
