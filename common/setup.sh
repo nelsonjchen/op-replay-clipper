@@ -82,3 +82,12 @@ mv /home/batman/openpilot_min /home/batman/openpilot
 
 # Blow away pyenv used to build openpilot
 rm -rf /root/.pyenv_openpilot
+
+# Compile libstrangle for FPS cap tool, install it, and then remove the source
+cd / || exit
+rm -rf /home/robin/libstrangle || true
+git clone --depth 1 https://gitlab.com/torkel104/libstrangle /home/robin/libstrangle
+cd /home/robin/libstrangle
+make install-common install-native install-ld
+cd / || exit
+rm -rf /home/robin/libstrangle
