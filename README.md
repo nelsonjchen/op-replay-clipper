@@ -67,6 +67,10 @@ Nav-assisted follow the road instead of taking the side road.
 
 https://github.com/nelsonjchen/op-replay-clipper/assets/5363/8f970c76-21d1-4209-b0e1-3eb6989feea8
 
+Copying the car in front to get around someone waiting for the left turn
+
+https://github.com/nelsonjchen/op-replay-clipper/assets/5363/9f845b8d-e4aa-4ab3-8785-8d09b83c9d8b
+
 ## Limitations
 
 - This has only been tested on data from a Comma 3 and/or Comma 3X. It is unknown if it can work for any other devices.
