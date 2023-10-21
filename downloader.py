@@ -9,6 +9,7 @@ import re
 
 # Filelist type
 
+
 class FileListDict(TypedDict):
     # Each str is like:
     # https://commadata2.blob.core.windows.net/commadata2/a2a0ccea32023010/2023-07-27--13-01-19/0/fcamera.hevc?se=2023-09-24T04%3A17%3A36Z&sp=r&sv=2018-03-28&sr=b&rscd=attachment%3B%20filename%3Da2a0ccea32023010_2023-07-27--13-01-19--0--fcamera.hevc&sig=a2oLhLvbKY7zlqTbyTmCVOjcN4Is1wQlaSUlZz1wK5U%3D
@@ -29,11 +30,17 @@ def downloadSegments(
     smear_seconds: int,
     start_seconds: int,
     length: int,
+    file_types: Optional[List[str]] = [
+        "cameras",
+        "ecameras",
+        "logs",
+    ],
 ):
     """
     Handle downloading segments and throwing up errors if something goes wrong.
 
     Also pre-decompresses the logs for performance reasons.
+
     """
     # Get the route/segment name from the route/segment ID.
     # Just strip off the segment ID if it exists with regex
@@ -41,6 +48,8 @@ def downloadSegments(
     # a2a0ccea32023010|2023-07-27--13-01-19 -> a2a0ccea32023010|2023-07-27--13-01-19
     # a2a0ccea32023010|2023-07-27--13-01-19--5 -> a2a0ccea32023010|2023-07-27--13-01-19
     route = re.sub(r"--\d+$", "", route_or_segment)
+    # Dongle ID is the part before the |
+    dongle_id = route.split("|")[0]
 
     # Figure out which segments we're going to be downloading. Think of it like a sliding window that needs to cover minutes.
     # Segments start from index 0 and are 60 seconds long
@@ -59,12 +68,19 @@ def downloadSegments(
     route_url = route.replace("|", "%7C")
     filelist_url = f"https://api.commadotai.com/v1/route/{route_url}/files"
     print(f"Downloading file list from {filelist_url}")
-    filelist: FileListDict = requests.get(filelist_url).json()
+
+    # Check if the route is accessible
+    # If it isn't, throw an error
+    route_response = requests.get(filelist_url)
+    if route_response.status_code != 200:
+        raise ValueError(f"Route {route} is not accessible. You may need to set the route to be public. Visit https://connect.comma.ai/{dongle_id}, view the route, dropdown the \"More Info\" button, and toggle \"Public\".")
+    filelist: FileListDict = route_response.json()
     # For every segment_id check if the file exists in the filelist
     # If it doesn't, throw an error
     for segment_id in segment_ids:
         camera_exists = False
         ecamera_exists = False
+        dcamera_exists = False
         log_exists = False
         for camera_url in filelist["cameras"]:
             if f"/{segment_id}/fcamera.hevc" in camera_url:
@@ -74,16 +90,27 @@ def downloadSegments(
             if f"/{segment_id}/ecamera.hevc" in ecamera_url:
                 ecamera_exists = True
                 break
+        for dcamera_url in filelist["dcameras"]:
+            if f"/{segment_id}/dcamera.hevc" in dcamera_url:
+                dcamera_exists = True
+                break
         for log_url in filelist["logs"]:
             if f"/{segment_id}/rlog.bz2" in log_url:
                 log_exists = True
                 break
-        if not camera_exists:
-            raise ValueError(f"Segment {segment_id} does not have a forward camera upload")
-        if not ecamera_exists:
+        if not camera_exists and "cameras" in file_types:
+            raise ValueError(
+                f"Segment {segment_id} does not have a forward camera upload"
+            )
+        if not ecamera_exists and "ecameras" in file_types:
             raise ValueError(f"Segment {segment_id} does not have a wide camera upload")
-        if not log_exists:
+        if not dcamera_exists and "dcameras" in file_types:
+            raise ValueError(
+                f"Segment {segment_id} does not have a driver camera upload"
+            )
+        if not log_exists and "logs" in file_types:
             raise ValueError(f"Segment {segment_id} does not have a log upload")
+
 
     # Download the files
     # We use parfive to download the files
@@ -107,42 +134,35 @@ def downloadSegments(
         segment_dir = Path(data_dir) / f"{route_date}--{segment_id}"
         # Download the forward camera
         for camera_url in filelist["cameras"]:
-            if f"/{segment_id}/fcamera.hevc" in camera_url:
-                # Check if the file already exists
-                if (segment_dir / "fcamera.hevc").exists():
-                    print(f"Skipping {camera_url} because it already exists")
-                    break
+            if f"/{segment_id}/fcamera.hevc" in camera_url and "cameras" in file_types:
                 downloader.enqueue_file(
-                    camera_url,
-                    path=segment_dir,
-                    filename= "fcamera.hevc"
+                    camera_url, path=segment_dir, filename="fcamera.hevc", overwrite=False
                 )
                 break
         # Download the wide camera
         for ecamera_url in filelist["ecameras"]:
-            if f"/{segment_id}/ecamera.hevc" in ecamera_url:
-                # Check if the file already exists
-                if (segment_dir / "ecamera.hevc").exists():
-                    print(f"Skipping {ecamera_url} because it already exists")
-                    break
+            if f"/{segment_id}/ecamera.hevc" in ecamera_url and "ecameras" in file_types:
                 downloader.enqueue_file(
-                    ecamera_url,
-                    path=segment_dir,
-                    filename= "ecamera.hevc"
+                    ecamera_url, path=segment_dir, filename="ecamera.hevc", overwrite=False
+                )
+                break
+        # Download the driver camera
+        for dcamera_url in filelist["dcameras"]:
+            if f"/{segment_id}/dcamera.hevc" in dcamera_url and "dcameras" in file_types:
+                downloader.enqueue_file(
+                    dcamera_url, path=segment_dir, filename="dcamera.hevc", overwrite=False
                 )
                 break
         # Download the log
         for log_url in filelist["logs"]:
-            if f"/{segment_id}/rlog.bz2" in log_url:
+            if f"/{segment_id}/rlog.bz2" in log_url and "logs" in file_types:
                 # Check if the file already exists
-                if (segment_dir / "rlog.bz2").exists() or (segment_dir / "rlog").exists():
+                if (segment_dir / "rlog.bz2").exists() or (
+                    segment_dir / "rlog"
+                ).exists():
                     print(f"Skipping {log_url} because it already exists")
                     break
-                downloader.enqueue_file(
-                    log_url,
-                    path=segment_dir,
-                    filename= "rlog.bz2"
-                )
+                downloader.enqueue_file(log_url, path=segment_dir, filename="rlog.bz2")
                 break
 
     # Start the download
@@ -166,15 +186,31 @@ def downloadSegments(
             raise ValueError(f"Segment {segment_id} does not have a log upload")
 
 
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Download openpilot routes/segments.')
-    parser.add_argument('data_dir', type=str, help='Directory to download files to')
-    parser.add_argument('route_or_segment', type=str, help='Name of the route or segment to download')
-    parser.add_argument('smear_seconds', type=int, help='Number of seconds to smear the start time')
-    parser.add_argument('start_seconds', type=int, help='Start time in seconds')
-    parser.add_argument('length', type=int, help='Length of the segment to download')
+    parser = argparse.ArgumentParser(description="Download openpilot routes/segments.")
+    parser.add_argument("data_dir", type=str, help="Directory to download files to")
+    parser.add_argument(
+        "route_or_segment", type=str, help="Name of the route or segment to download"
+    )
+    parser.add_argument(
+        "smear_seconds", type=int, help="Number of seconds to smear the start time"
+    )
+    parser.add_argument("start_seconds", type=int, help="Start time in seconds")
+    parser.add_argument("length", type=int, help="Length of the segment to download")
+    parser.add_argument(
+        "--file_types",
+        type=str,
+        nargs="+",
+        help="List of file types to download",
+        default=["cameras", "ecameras", "logs"],
+    )
     args = parser.parse_args()
     # All arguments are required
 
-    downloadSegments(args.data_dir, args.route_or_segment, args.smear_seconds, args.start_seconds, args.length)
+    downloadSegments(
+        args.data_dir,
+        args.route_or_segment,
+        args.smear_seconds,
+        args.start_seconds,
+        args.length,
+    )
