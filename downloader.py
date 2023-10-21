@@ -23,6 +23,9 @@ class FileListDict(TypedDict):
     # Filename are `rlog.bz2`
     logs: List[str]
 
+class RouteInfoDict(TypedDict):
+    segment_end_times: List[int]
+    segment_start_times: List[int]
 
 def downloadSegments(
     data_dir: Union[str, Path],
@@ -42,6 +45,12 @@ def downloadSegments(
     Also pre-decompresses the logs for performance reasons.
 
     """
+    # Validate file_types are valid
+    valid_file_types = ["cameras", "ecameras", "dcameras", "logs"]
+    for file_type in file_types:
+        if file_type not in valid_file_types:
+            raise ValueError(f"Invalid file type argument: {file_type}. Valid file types are {valid_file_types}")
+
     # Get the route/segment name from the route/segment ID.
     # Just strip off the segment ID if it exists with regex
     # Examples:
@@ -71,10 +80,25 @@ def downloadSegments(
 
     # Check if the route is accessible
     # If it isn't, throw an error
-    route_response = requests.get(filelist_url)
-    if route_response.status_code != 200:
+    route_files_response = requests.get(filelist_url)
+    if route_files_response.status_code != 200:
         raise ValueError(f"Route {route} is not accessible. You may need to set the route to be public. Visit https://connect.comma.ai/{dongle_id}, view the route, dropdown the \"More Info\" button, and toggle \"Public\".")
-    filelist: FileListDict = route_response.json()
+    filelist: FileListDict = route_files_response.json()
+
+    # Get beginning and end times of the route for error message reasons
+    # Find the segment_start_time and segment_end_time with the first and last segment_id
+    routeinfo_url = f"https://api.commadotai.com/v1/route/{route_url}"
+    print(f"Downloading route info from {routeinfo_url}")
+    route_info_response = requests.get(routeinfo_url)
+    route_info: RouteInfoDict = route_info_response.json()
+    route_start_time = route_info["segment_start_times"][start_segment]
+    route_end_time = route_info["segment_end_times"][end_segment]
+    print(f"Route {route} starts at {route_start_time} and ends at {route_end_time}")
+    comma_connect_url = f"https://connect.comma.ai/{dongle_id}/{route_start_time}/{route_end_time}"
+    print(f"View the route at {comma_connect_url}")
+
+    call_to_action_upload_message = f"Visit {comma_connect_url} , dropdown the \"Files\" button, and next to \"All files\", select \"Upload ## Files\". After all files have completed uploading, try again."
+
     # For every segment_id check if the file exists in the filelist
     # If it doesn't, throw an error
     for segment_id in segment_ids:
@@ -100,16 +124,16 @@ def downloadSegments(
                 break
         if not camera_exists and "cameras" in file_types:
             raise ValueError(
-                f"Segment {segment_id} does not have a forward camera upload"
+                f"Segment {segment_id} does not have a forward camera upload. {call_to_action_upload_message}"
             )
         if not ecamera_exists and "ecameras" in file_types:
-            raise ValueError(f"Segment {segment_id} does not have a wide camera upload")
+            raise ValueError(f"Segment {segment_id} does not have a wide camera upload. {call_to_action_upload_message}")
         if not dcamera_exists and "dcameras" in file_types:
             raise ValueError(
-                f"Segment {segment_id} does not have a driver camera upload"
+                f"Segment {segment_id} does not have a driver camera upload. {call_to_action_upload_message}"
             )
         if not log_exists and "logs" in file_types:
-            raise ValueError(f"Segment {segment_id} does not have a log upload")
+            raise ValueError(f"Segment {segment_id} does not have a log upload. {call_to_action_upload_message}")
 
 
     # Download the files
@@ -174,6 +198,8 @@ def downloadSegments(
 
     # Decompress the logs
     for segment_id in segment_ids:
+        if "logs" not in file_types:
+            break
         segment_dir = Path(data_dir) / f"{route_date}--{segment_id}"
         # Decompress the log if rlog doesn't exist
         if (segment_dir / "rlog").exists():
@@ -213,4 +239,5 @@ if __name__ == "__main__":
         args.smear_seconds,
         args.start_seconds,
         args.length,
+        args.file_types,
     )
