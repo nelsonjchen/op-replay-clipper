@@ -127,7 +127,7 @@ class Predictor(BasePredictor):
             if renderType == "360":
                 file_types = ["ecameras", "dcameras"]
             elif renderType == "forward":
-                file_types = ["fcameras"]
+                file_types = ["cameras"]
             elif renderType == "wide":
                 file_types = ["ecameras"]
             elif renderType == "driver":
