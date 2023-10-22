@@ -4,6 +4,8 @@ Capture and develop short clips of [openpilot][op] with the openpilot UI (path, 
 
 Show the bad and the good of openpilot! Very useful for [making outstanding bug reports](https://github.com/commaai/openpilot/wiki/FAQ#how-do-i-report-a-bug) or [posting UI video in interesting situations on X](https://twitter.com/yassineyousfi_/status/1590473942439198720)!
 
+Additionally, on Replicate, this tool can be used to make raw video clips of the forward cameras, the driver camera, and can render a 360 video.
+
 ## Platforms
 
 The replay clipper is packaged to run on two platforms for ease of use:
@@ -32,6 +34,7 @@ Give this project a test with [Replicate](https://replicate.com/nelsonjchen/op-r
 * You can run and queue up multiple jobs at a time. Replicate might even spin up multiple renderers if you're lucky and complete them faster.
 * You don't need to worry about cleanup. Replicate just cleans up after itself.
 * You'll need to temporarily make your route public for Replicate to access it. You can toggle it back to non-Public after you're done with clip making.
+* This platform can render from the raw videos for the forward cameras and the driver camera. It can also render a 360 video.
 
 ### Codespaces
 
