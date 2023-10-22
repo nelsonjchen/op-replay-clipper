@@ -82,7 +82,7 @@ def downloadSegments(
     # If it isn't, throw an error
     route_files_response = requests.get(filelist_url)
     if route_files_response.status_code != 200:
-        raise ValueError(f"Route {route} is not accessible. You may need to set the route to be public. Visit https://connect.comma.ai/{dongle_id}, view the route, dropdown the \"More Info\" button, and toggle \"Public\".")
+        raise ValueError(f"Route {route} is not accessible. You may need to set the route to be public. Visit https://connect.comma.ai/{dongle_id}, view the route, dropdown the \"More Info\" button, and toggle \"Public\". You can set \"Public\" back to off after using this tool.")
     filelist: FileListDict = route_files_response.json()
 
     # Get beginning and end times of the route for error message reasons
