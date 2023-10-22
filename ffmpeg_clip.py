@@ -21,6 +21,7 @@ import os
 import re
 import subprocess
 from typing import List
+import spatialmedia
 
 # https://docs.nvidia.com/video-technologies/video-codec-sdk/12.0/ffmpeg-with-nvidia-gpu/index.html#command-line-for-latency-tolerant-high-quality-transcoding
 hq_nvc_flags = [
@@ -129,12 +130,16 @@ def make_ffmpeg_clip(
     command += [output]
     print(command)
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
-    while True:
-      output = process.stdout.readline()
-      if output == b"" and process.poll() is not None:
-          break
-      if output:
-          print(output)
+    try:
+        while True:
+            proc_output = process.stdout.readline()
+            if proc_output == b"" and process.poll() is not None:
+                break
+            if proc_output:
+                print(proc_output)
+    except KeyboardInterrupt:
+        process.kill()
+        raise
 
   elif render_type == "360":
     # Need to make two concat strings
@@ -183,14 +188,36 @@ def make_ffmpeg_clip(
     ]
     command += [output]
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
-    while True:
-      output = process.stdout.readline()
-      if output == b"" and process.poll() is not None:
-          break
-      if output:
-          print(output)
 
+    try:
+        while True:
+            proc_output = process.stdout.readline()
+            if proc_output == b"" and process.poll() is not None:
+                break
+            if proc_output:
+                print(proc_output)
+    except KeyboardInterrupt:
+        process.kill()
+        raise
 
+    # Add spherical projection to the output
+    # Move the old output to a temp file
+    # Print type(output)
+    temp_output = output + ".temp.mp4"
+    if os.path.exists(temp_output):
+        os.remove(temp_output)
+    os.replace(output, temp_output)
+
+    metadata = spatialmedia.metadata_utils.Metadata()
+    metadata.video = spatialmedia.metadata_utils.generate_spherical_xml(
+       "none",
+        None
+    )
+    spatialmedia.metadata_utils.inject_metadata(
+       temp_output, output, metadata, print
+    )
+    # Delete the temp file
+    os.remove(temp_output)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="render segments with ffmpeg")
