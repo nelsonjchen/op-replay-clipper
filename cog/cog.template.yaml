@@ -5,6 +5,7 @@ build:
   python_packages:
     - "parfive==2.0.2"
     - "requests==2.31.0"
+    - "spatialmedia @ git+https://github.com/google/spatial-media.git@57c85bb5691518406408b675e52f430e0c62798c"
   # variable to be replaced by the base64 encoded script
   run:
     - "echo ENCODED_SCRIPT | base64 -d > setup.sh && bash setup.sh"
