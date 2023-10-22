@@ -109,12 +109,16 @@ class Predictor(BasePredictor):
             process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE)
 
             # Read the output as it becomes available and yield it to the caller
-            while True:
-                output = process.stdout.readline()
-                if output == b"" and process.poll() is not None:
-                    break
-                if output:
-                    print(output)
+            try:
+                while True:
+                    proc_output = process.stdout.readline()
+                    if proc_output == b"" and process.poll() is not None:
+                        break
+                    if proc_output:
+                        print(proc_output)
+            except KeyboardInterrupt:
+                process.kill()
+                raise
 
             return Path("./shared/cog-clip.mp4")
 
