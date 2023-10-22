@@ -25,32 +25,7 @@ import spatialmedia
 
 # https://docs.nvidia.com/video-technologies/video-codec-sdk/12.0/ffmpeg-with-nvidia-gpu/index.html#command-line-for-latency-tolerant-high-quality-transcoding
 hq_nvc_flags = [
-    "-preset",
-    "p6",
-    "-tune",
-    "hq",
-    "-b:v",
-    "5M",
-    "-bufsize",
-    "5M",
-    "-maxrate",
-    "10M",
-    "-qmin",
-    "0",
-    "-g",
-    "250",
-    "-bf",
-    "3",
-    "-b_ref_mode",
-    "middle",
-    "-temporal-aq",
-    "1",
-    "-rc-lookahead",
-    "20",
-    "-i_qfactor",
-    "0.75",
-    "-b_qfactor",
-    "1.1",
+
 ]
 
 def make_ffmpeg_clip(
@@ -102,6 +77,8 @@ def make_ffmpeg_clip(
     # Run the ffmpeg command
     command = [
         "ffmpeg",
+        "-vsync",
+        "0",
         "-y",
         "-hwaccel",
         "auto",
@@ -156,6 +133,8 @@ def make_ffmpeg_clip(
     # Run the ffmpeg command that has two inputs and fisheye
     command = [
         "ffmpeg",
+        "-vsync",
+        "0",
         "-y",
         "-hwaccel",
         "auto",
