@@ -39,6 +39,11 @@ def make_ffmpeg_clip(
   route = re.sub(r"--\d+$", "", route_or_segment)
   route_date = re.sub(r"^[^|]+\|", "", route)
 
+  # Target bitrate in bits per second (bps). Try to get close to the target file size.
+  target_bps = (target_mb - 5) * 8 * 1024 * 1024 // length_seconds
+  # Start seconds relative to the start of the concatenated video
+  start_seconds_relative = start_seconds % 60
+
   # Figure out the segments we'll be operating over
   # The first segment is start_seconds // 60
   # The last segment is (start_seconds + length_seconds) // 60
@@ -67,16 +72,59 @@ def make_ffmpeg_clip(
     command = [
         "ffmpeg",
         "-y",
+        "-hwaccel",
+        "auto",
+        "-probesize",
+        "100M",
         "-i",
         ffmpeg_concat_string,
-        "-c",
-        "copy",
+        "-t",
+        str(length_seconds),
+        "-ss",
+        str(start_seconds_relative),
         "-f",
         "mp4",
         "-movflags",
         "+faststart",
-        output,
     ]
+    if nvidia_hardware_rendering:
+        command += ["-c:v", "h264_nvenc"]
+        # https://docs.nvidia.com/video-technologies/video-codec-sdk/12.0/ffmpeg-with-nvidia-gpu/index.html#command-line-for-latency-tolerant-high-quality-transcoding
+        command += [
+            "-preset",
+            "p6",
+            "-tune",
+            "hq",
+            "-b:v",
+            "5M",
+            "-bufsize",
+            "5M",
+            "-maxrate",
+            "10M",
+            "-qmin",
+            "0",
+            "-g",
+            "250",
+            "-bf",
+            "3",
+            "-b_ref_mode",
+            "middle",
+            "-temporal-aq",
+            "1",
+            "-rc-lookahead",
+            "20",
+            "-i_qfactor",
+            "0.75",
+            "-b_qfactor",
+            "1.1",
+        ]
+    # Target bitrate
+    command += [
+        "-b:v",
+        str(target_bps),
+    ]
+    command += [output]
+    print(command)
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
     while True:
       output = process.stdout.readline()
@@ -101,6 +149,12 @@ def make_ffmpeg_clip(
     command = [
         "ffmpeg",
         "-y",
+        "-hwaccel",
+        "auto",
+        "-t",
+        str(length_seconds),
+        "-ss",
+        str(start_seconds_relative),
         "-i",
         wide_concat_string,
         "-i",
@@ -125,7 +179,7 @@ def make_ffmpeg_clip(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="render segments with ffmpeg")
-    parser.add_argument("--render_type", type=str, help="Render type to do", default="forward")
+    parser.add_argument("--render_type", "-t", type=str, help="Render type to do", default="forward")
     parser.add_argument("--data_dir", type=str, help="Directory to read from", default="shared/data_dir")
     parser.add_argument(
         "route_or_segment", type=str, help="Name of the route or segment to process"
@@ -133,10 +187,11 @@ if __name__ == "__main__":
     parser.add_argument("start_seconds", type=int, help="Start time in seconds")
     parser.add_argument("length_seconds", type=int, help="Length of the segment to render")
     parser.add_argument(
-        "--target_mb", type=int, help="Target file size in megabytes", default=20
+        "--target_mb", type=int, help="Target file size in megabytes", default=25
     )
     parser.add_argument(
         "--nvidia-hardware-rendering",
+        "-nv",
         action="store_true",
         help="Use NVENC hardware rendering",
     )
