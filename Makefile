@@ -5,6 +5,17 @@ build: cog/cog.template.yaml cog/generate.sh
 	./cog/generate.sh
 	cog build
 
+# Test downloader by itself
+downloader:
+	python downloader.py shared/data_dir "a2a0ccea32023010|2023-07-27--13-01-19" 5 300 60
+
+# Test the ffmpeg_clip by itself
+ffmpeg_clip:
+	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 10 -nv -t driver
+
+ffmpeg_clip_360:
+	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 10 -nv -t 360
+
 # These uses a modified cog up one directory.
 predict:
 	./cog/generate.sh
