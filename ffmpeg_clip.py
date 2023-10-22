@@ -151,22 +151,60 @@ def make_ffmpeg_clip(
         "-y",
         "-hwaccel",
         "auto",
+        "-probesize",
+        "100M",
+        "-i",
+        wide_concat_string,
+        "-probesize",
+        "100M",
+        "-i",
+        driver_concat_string,
         "-t",
         str(length_seconds),
         "-ss",
         str(start_seconds_relative),
-        "-i",
-        wide_concat_string,
-        "-i",
-        driver_concat_string,
         "-filter_complex",
         f"[0:v][1:v]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
         "-map",
         "[vout]",
-        "-c:v",
-        "libx264",
-        output,
     ]
+    if nvidia_hardware_rendering:
+        command += ["-c:v", "h264_nvenc"]
+        # https://docs.nvidia.com/video-technologies/video-codec-sdk/12.0/ffmpeg-with-nvidia-gpu/index.html#command-line-for-latency-tolerant-high-quality-transcoding
+        command += [
+            "-preset",
+            "p6",
+            "-tune",
+            "hq",
+            "-b:v",
+            "5M",
+            "-bufsize",
+            "5M",
+            "-maxrate",
+            "10M",
+            "-qmin",
+            "0",
+            "-g",
+            "250",
+            "-bf",
+            "3",
+            "-b_ref_mode",
+            "middle",
+            "-temporal-aq",
+            "1",
+            "-rc-lookahead",
+            "20",
+            "-i_qfactor",
+            "0.75",
+            "-b_qfactor",
+            "1.1",
+        ]
+    # Target bitrate
+    command += [
+        "-b:v",
+        str(target_bps),
+    ]
+    command += [output]
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
     while True:
       output = process.stdout.readline()

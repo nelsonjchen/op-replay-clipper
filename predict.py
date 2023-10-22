@@ -69,7 +69,7 @@ class Predictor(BasePredictor):
         print(notes)
 
         # Get the full absolute path of `./shared/data_dir`
-        data_dir = os.path.abspath("./shared/data_dir")
+        data_dir = "./shared/data_dir"
 
         if renderType == "ui":
             # Download the route data
@@ -94,7 +94,7 @@ class Predictor(BasePredictor):
                 f"--target-mb={fileSize}",
                 f"--nv-hardware-rendering",
                 f"--nv-hybrid-encoding",
-                f"--data-dir={data_dir}",
+                f"--data-dir={os.path.abspath(data_dir)}",
                 f"--output=cog-clip.mp4",
             ]
             if metric:
