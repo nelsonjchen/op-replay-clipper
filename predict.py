@@ -20,7 +20,7 @@ class Predictor(BasePredictor):
     def predict(
         self,
         renderType: str = Input(
-            description="Render Type",
+            description="Render Type. UI is very slow but has the UI. 360 is slow too. The rest are quite fast transcodes. Note: 🌐 360 requires viewing the video file in VLC or uploading to YouTube to see the 360 effect.",
             choices=["ui", "forward", "wide", "driver", "360"],
             default="ui",
         ),
