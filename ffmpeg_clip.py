@@ -206,7 +206,10 @@ def make_ffmpeg_clip(
     temp_output = output + ".temp.mp4"
     if os.path.exists(temp_output):
         os.remove(temp_output)
-    os.replace(output, temp_output)
+        # Print working directory
+
+    print(os.getcwd())
+    os.rename(output, temp_output)
 
     metadata = spatialmedia.metadata_utils.Metadata()
     metadata.video = spatialmedia.metadata_utils.generate_spherical_xml(

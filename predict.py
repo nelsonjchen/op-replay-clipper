@@ -124,12 +124,22 @@ class Predictor(BasePredictor):
 
         else:
             # Download the route data
+            if renderType == "360":
+                file_types = ["ecameras", "dcameras"]
+            elif renderType == "forward":
+                file_types = ["fcameras"]
+            elif renderType == "wide":
+                file_types = ["ecameras"]
+            elif renderType == "driver":
+                file_types = ["dcameras"]
+
             downloader.downloadSegments(
                 route_or_segment=route,
                 start_seconds=startSeconds,
                 length=lengthSeconds,
                 smear_seconds=0,
                 data_dir=data_dir,
+                file_types=file_types,
             )
 
             # Start the shell command and capture its output
