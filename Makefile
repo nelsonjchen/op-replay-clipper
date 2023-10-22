@@ -11,10 +11,10 @@ downloader:
 
 # Test the ffmpeg_clip by itself
 ffmpeg_clip:
-	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 10 -nv -t driver
+	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 -nv -t driver
 
 ffmpeg_clip_360:
-	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 10 -nv -t 360
+	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 -nv -t 360
 
 # These uses a modified cog up one directory.
 predict:
