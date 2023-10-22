@@ -22,6 +22,36 @@ import re
 import subprocess
 from typing import List
 
+# https://docs.nvidia.com/video-technologies/video-codec-sdk/12.0/ffmpeg-with-nvidia-gpu/index.html#command-line-for-latency-tolerant-high-quality-transcoding
+hq_nvc_flags = [
+    "-preset",
+    "p6",
+    "-tune",
+    "hq",
+    "-b:v",
+    "5M",
+    "-bufsize",
+    "5M",
+    "-maxrate",
+    "10M",
+    "-qmin",
+    "0",
+    "-g",
+    "250",
+    "-bf",
+    "3",
+    "-b_ref_mode",
+    "middle",
+    "-temporal-aq",
+    "1",
+    "-rc-lookahead",
+    "20",
+    "-i_qfactor",
+    "0.75",
+    "-b_qfactor",
+    "1.1",
+]
+
 def make_ffmpeg_clip(
     render_type: str,
     data_dir: str,
@@ -89,35 +119,8 @@ def make_ffmpeg_clip(
     ]
     if nvidia_hardware_rendering:
         command += ["-c:v", "h264_nvenc"]
-        # https://docs.nvidia.com/video-technologies/video-codec-sdk/12.0/ffmpeg-with-nvidia-gpu/index.html#command-line-for-latency-tolerant-high-quality-transcoding
-        command += [
-            "-preset",
-            "p6",
-            "-tune",
-            "hq",
-            "-b:v",
-            "5M",
-            "-bufsize",
-            "5M",
-            "-maxrate",
-            "10M",
-            "-qmin",
-            "0",
-            "-g",
-            "250",
-            "-bf",
-            "3",
-            "-b_ref_mode",
-            "middle",
-            "-temporal-aq",
-            "1",
-            "-rc-lookahead",
-            "20",
-            "-i_qfactor",
-            "0.75",
-            "-b_qfactor",
-            "1.1",
-        ]
+        command += hq_nvc_flags
+
     # Target bitrate
     command += [
         "-b:v",
@@ -171,34 +174,8 @@ def make_ffmpeg_clip(
     if nvidia_hardware_rendering:
         command += ["-c:v", "h264_nvenc"]
         # https://docs.nvidia.com/video-technologies/video-codec-sdk/12.0/ffmpeg-with-nvidia-gpu/index.html#command-line-for-latency-tolerant-high-quality-transcoding
-        command += [
-            "-preset",
-            "p6",
-            "-tune",
-            "hq",
-            "-b:v",
-            "5M",
-            "-bufsize",
-            "5M",
-            "-maxrate",
-            "10M",
-            "-qmin",
-            "0",
-            "-g",
-            "250",
-            "-bf",
-            "3",
-            "-b_ref_mode",
-            "middle",
-            "-temporal-aq",
-            "1",
-            "-rc-lookahead",
-            "20",
-            "-i_qfactor",
-            "0.75",
-            "-b_qfactor",
-            "1.1",
-        ]
+        command += hq_nvc_flags
+
     # Target bitrate
     command += [
         "-b:v",
