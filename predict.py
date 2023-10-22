@@ -9,6 +9,8 @@ from typing import Iterator, Optional
 import os
 import downloader
 
+import ffmpeg_clip
+
 
 class Predictor(BasePredictor):
     def setup(self) -> None:
@@ -17,6 +19,11 @@ class Predictor(BasePredictor):
 
     def predict(
         self,
+        renderType: str = Input(
+            description="Render Type",
+            choices=["ui", "forward", "wide", "driver", "360"],
+            default="ui",
+        ),
         route: str = Input(
             description="Route ID (w/ Segment Number OK but the segment number will be ignored in favor of start seconds) "
             " (⚠️ ROUTE MUST BE PUBLIC! You can set this temporarily in Connect.)"
@@ -27,25 +34,25 @@ class Predictor(BasePredictor):
             description="Start time in seconds", ge=0, default=50
         ),
         lengthSeconds: int = Input(
-            description="Length of clip in seconds", ge=5, le=60, default=20
+            description="Length of clip in seconds", ge=5, le=120, default=20
         ),
         smearAmount: int = Input(
-            description="Smear amount (Let the video start this time before beginning recording, useful for making sure the radar △, if present, is rendered at the start if necessary)",
+            description="(UI Render only) Smear amount (Let the video start this time before beginning recording, useful for making sure the radar △, if present, is rendered at the start if necessary)",
             ge=5,
             le=40,
             default=5,
         ),
         speedhackRatio: float = Input(
-            description="Speedhack ratio (Higher ratio renders faster but renders may be more unstable and have artifacts) (Suggestion: 0.3-0.5 for jitter-free, 1-3 for fast renders, 4+ for buggy territory)",
+            description="(UI Render only) Speedhack ratio (Higher ratio renders faster but renders may be more unstable and have artifacts) (Suggestion: 0.3-0.5 for jitter-free, 1-3 for fast renders, 4+ for buggy territory)",
             ge=0.3,
             le=7.0,
             default=1.0,
         ),
-        fileSize: int = Input(
-            description="Rough size of clip in MB.", ge=25, le=50, default=50
-        ),
         metric: bool = Input(
-            description="Render in metric units (km/h)", default=False
+            description="(UI Render only) Render in metric units (km/h)", default=False
+        ),
+        fileSize: int = Input(
+            description="Rough size of clip output in MB.", ge=25, le=100, default=50
         ),
         notes: str = Input(
             description="Notes Text field. Doesn't affect output. For your own reference.", default="",
@@ -54,7 +61,6 @@ class Predictor(BasePredictor):
         #     description="Debug command to run instead of clip", default=""
         # ),
     ) -> Path:
-        """Run clip.sh with arguments."""
         # Safety, remove the last clip
         if os.path.exists("./shared/cog-clip.mp4"):
             os.remove("./shared/cog-clip.mp4")
@@ -62,52 +68,76 @@ class Predictor(BasePredictor):
         # Print the notes
         print(notes)
 
-        # Download the route data
-        downloader.downloadSegments(
-            route_or_segment=route,
-            start_seconds=startSeconds,
-            length=lengthSeconds,
-            smear_seconds=smearAmount,
-            data_dir="./shared/data_dir",
-        )
-
         # Get the full absolute path of `./shared/data_dir`
         data_dir = os.path.abspath("./shared/data_dir")
 
-        # Start the shell command and capture its output
-        command = [
-            # Run with GNU timeout to prevent runaway processes
-            "timeout",
-            "10m",
-            "./clip.sh",
-            route,
-            f"--start-seconds={startSeconds}",
-            f"--length-seconds={lengthSeconds}",
-            f"--smear-amount={smearAmount}",
-            f"--speedhack-ratio={speedhackRatio}",
-            f"--target-mb={fileSize}",
-            f"--nv-hardware-rendering",
-            f"--nv-hybrid-encoding",
-            f"--data-dir={data_dir}",
-            f"--output=cog-clip.mp4",
-        ]
-        if metric:
-            command.append("--metric")
-        # if debugCommand != "":
-        #     # Run bash with the command
-        #     command = ["bash", "-c", debugCommand]
-        env = {}
-        env.update(os.environ)
-        env.update({"DISPLAY": ":0", "SCALE": "1"})
+        if renderType == "ui":
+            # Download the route data
+            downloader.downloadSegments(
+                route_or_segment=route,
+                start_seconds=startSeconds,
+                length=lengthSeconds,
+                smear_seconds=smearAmount,
+                data_dir=data_dir,
+            )
+            # Start the shell command and capture its output
+            command = [
+                # Run with GNU timeout to prevent runaway processes
+                "timeout",
+                "10m",
+                "./clip.sh",
+                route,
+                f"--start-seconds={startSeconds}",
+                f"--length-seconds={lengthSeconds}",
+                f"--smear-amount={smearAmount}",
+                f"--speedhack-ratio={speedhackRatio}",
+                f"--target-mb={fileSize}",
+                f"--nv-hardware-rendering",
+                f"--nv-hybrid-encoding",
+                f"--data-dir={data_dir}",
+                f"--output=cog-clip.mp4",
+            ]
+            if metric:
+                command.append("--metric")
+            # if debugCommand != "":
+            #     # Run bash with the command
+            #     command = ["bash", "-c", debugCommand]
+            env = {}
+            env.update(os.environ)
+            env.update({"DISPLAY": ":0", "SCALE": "1"})
 
-        process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE)
+            process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE)
 
-        # Read the output as it becomes available and yield it to the caller
-        while True:
-            output = process.stdout.readline()
-            if output == b"" and process.poll() is not None:
-                break
-            if output:
-                print(output)
+            # Read the output as it becomes available and yield it to the caller
+            while True:
+                output = process.stdout.readline()
+                if output == b"" and process.poll() is not None:
+                    break
+                if output:
+                    print(output)
 
-        return Path("./shared/cog-clip.mp4")
+            return Path("./shared/cog-clip.mp4")
+
+        else:
+            # Download the route data
+            downloader.downloadSegments(
+                route_or_segment=route,
+                start_seconds=startSeconds,
+                length=lengthSeconds,
+                smear_seconds=0,
+                data_dir=data_dir,
+            )
+
+            # Start the shell command and capture its output
+            ffmpeg_clip.make_ffmpeg_clip(
+                render_type=renderType,
+                data_dir=data_dir,
+                route_or_segment=route,
+                start_seconds=startSeconds,
+                length_seconds=lengthSeconds,
+                target_mb=fileSize,
+                nvidia_hardware_rendering=True,
+                output="./shared/cog-clip.mp4",
+            )
+
+            return Path("./shared/cog-clip.mp4")
