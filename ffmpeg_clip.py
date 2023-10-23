@@ -42,7 +42,7 @@ def make_ffmpeg_clip(
     route_date = re.sub(r"^[^|]+\|", "", route)
 
     # Target bitrate in bits per second (bps). Try to get close to the target file size.
-    target_bps = (target_mb - 5) * 8 * 1024 * 1024 // length_seconds
+    target_bps = (target_mb) * 8 * 1024 * 1024 // length_seconds
     # Start seconds relative to the start of the concatenated video
     start_seconds_relative = start_seconds % 60
 

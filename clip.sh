@@ -346,8 +346,7 @@ VIDEO_RAW_OUTPUT=clip_raw.mkv
 VIDEO_OUTPUT=$_arg_output
 # Target an appropiate bitrate of filesize of 8MB for the video length
 TARGET_MB=$_arg_target_mb
-# Subtract a few megabyte to give some leeway for uploader limits
-TARGET_BYTES=$((($TARGET_MB - 5) * 1024 * 1024))
+TARGET_BYTES=$((($TARGET_MB) * 1024 * 1024))
 TARGET_BITRATE=$(($TARGET_BYTES * 8 / $RECORDING_LENGTH))
 TARGET_BITRATE_PLUS_SMEAR=$(($TARGET_BYTES * 8 / $RECORDING_LENGTH_PLUS_SMEAR))
 VNC_PORT=$_arg_vnc
