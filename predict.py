@@ -52,7 +52,7 @@ class Predictor(BasePredictor):
             description="(UI Render only) Render in metric units (km/h)", default=False
         ),
         fileSize: int = Input(
-            description="Rough size of clip output in MB.", ge=25, le=100, default=50
+            description="Rough size of clip output in MB.", ge=10, le=100, default=25
         ),
         notes: str = Input(
             description="Notes Text field. Doesn't affect output. For your own reference.", default="",
