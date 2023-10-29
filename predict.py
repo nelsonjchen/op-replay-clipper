@@ -68,8 +68,11 @@ class Predictor(BasePredictor):
         # Print the notes
         print(notes)
 
-        # Get the full absolute path of `./shared/data_dir`
-        data_dir = "./shared/data_dir"
+        # Get the dongle ID from the route. It's everything before the first pipe.
+        dongleID = route.split("|")[0]
+
+        # Partition the data dir by the dongle ID from the route
+        data_dir = os.path.join("./shared/data_dir", dongleID)
 
         if renderType == "ui":
             # Download the route data
