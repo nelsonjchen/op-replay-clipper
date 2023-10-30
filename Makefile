@@ -21,6 +21,10 @@ predict:
 	./cog/generate.sh
 	../cog/cog predict
 
+predict-url-wide:
+	./cog/generate.sh
+	../cog/cog predict -i route="https://connect.comma.ai/a2a0ccea32023010/1690488163535/1690488170140" -i renderType=wide
+
 predict-wide:
 	./cog/generate.sh
 	../cog/cog predict -i renderType=wide
