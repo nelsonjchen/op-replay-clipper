@@ -10,6 +10,10 @@ import os
 import downloader
 
 import ffmpeg_clip
+import route_or_url
+
+MIN_LENGTH_SECONDS = 5
+MAX_LENGTH_SECONDS = 120
 
 
 class Predictor(BasePredictor):
@@ -20,21 +24,26 @@ class Predictor(BasePredictor):
     def predict(
         self,
         renderType: str = Input(
-            description="Render Type. UI is very slow but has the UI. 360 is slow too. The rest are quite fast transcodes. Note: 🌐 360 requires viewing the video file in VLC or uploading to YouTube to see the 360 effect.",
+            description="Render Type. UI is very slow but has the UI burned in. Forward, Wide, and Driver are fast transcodes; you may want to use them to do quick previews. 360 is slow due to CPU processing. Note: 🌐 360 requires viewing the video file in VLC or uploading to YouTube to pan around in a sphere.",
             choices=["ui", "forward", "wide", "driver", "360"],
             default="ui",
         ),
         route: str = Input(
-            description="Route ID (w/ Segment Number OK but the segment number will be ignored in favor of start seconds) "
+            description="Route ID (w/ Segment Number OK but the segment number will be ignored in favor of start seconds) OR comma connect URL (e.g. https://connect.comma.ai/fe18f736cb0d7813/1698620773416/1698620855707 )"
             " (⚠️ ROUTE MUST BE PUBLIC! You can set this temporarily in Connect.)"
-            ' (⚠️ Ensure all data from forward and wide cameras and "Logs" to be rendered have been uploaded; See README for more info)',
+            ' (⚠️ Ensure all necessary data for the render type is uploaded. UI requires forward, wide, and log. 360 requires wide and driver. Forward, Wide, and Driver require their respective camera files uploaded. If you aren\'t sure, upload all files. Please see the README for more info.)',
             default="a2a0ccea32023010|2023-07-27--13-01-19",
         ),
         startSeconds: int = Input(
-            description="Start time in seconds", ge=0, default=50
+            description=
+            "Start time in seconds (Ignored if comma connect URL input is used)",
+            ge=0,
+            default=50
         ),
         lengthSeconds: int = Input(
-            description="Length of clip in seconds", ge=5, le=120, default=20
+            description="Length of clip in seconds (Ignored if comma connect URL input is used, however the minimum and maximum lengths are still enforced)", ge=MIN_LENGTH_SECONDS,
+            le=MAX_LENGTH_SECONDS,
+            default=20
         ),
         smearAmount: int = Input(
             description="(UI Render only) Smear amount (Let the video start this time before beginning recording, useful for making sure the radar △, if present, is rendered at the start if necessary)",
@@ -66,7 +75,26 @@ class Predictor(BasePredictor):
             os.remove("./shared/cog-clip.mp4")
 
         # Print the notes
+        print("NOTES:")
         print(notes)
+        print("")
+
+        parsed_input_route_or_url = route_or_url.parseRouteOrUrl(
+            route_or_url=route, start_seconds=startSeconds, length_seconds=lengthSeconds
+        )
+        route = parsed_input_route_or_url.route
+        startSeconds = parsed_input_route_or_url.start_seconds
+        lengthSeconds = parsed_input_route_or_url.length_seconds
+
+        # Enforce the minimum and maximum lengths
+        if lengthSeconds < MIN_LENGTH_SECONDS:
+            raise ValueError(
+                f"Length must be at least {MIN_LENGTH_SECONDS} seconds. Got {lengthSeconds} seconds."
+            )
+        if lengthSeconds > MAX_LENGTH_SECONDS:
+            raise ValueError(
+                f"Length must be at most {MAX_LENGTH_SECONDS} seconds. Got {lengthSeconds} seconds."
+            )
 
         # Get the dongle ID from the route. It's everything before the first pipe.
         dongleID = route.split("|")[0]
