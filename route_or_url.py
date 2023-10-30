@@ -149,7 +149,7 @@ def parseRouteOrUrl(
 
     # If we didn't find a match, throw an exception
     if matched_route is None:
-        raise ValueError(f"Route not found from URL. Route is possibly private. Visit the URL {route_or_url} and make sure Public is toggled under the \"More Info\" drop-down.")
+        raise ValueError(f"Route not found from URL. Route is possibly not set to Public. Visit the URL {route_or_url} and make sure Public is toggled under the \"More Info\" drop-down. You can always make it not Public after you're done rendering a clip.")
 
     # Get the route name
     route_name = matched_route["fullname"]
