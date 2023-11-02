@@ -14,6 +14,18 @@ ChatGPT combined:
 
 ffmpeg -i clip.ecam.clipped.mp4 -i clip.dcam.clipped.mp4 -filter_complex "[0:v][1:v]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=185:iv_fov=185[vout]" -map "[vout]" -c:v libx265 clip.equirect.mp4
 
+Note that the above is not a complete command, it's missing some pre-processing of the driver camera file that comma does and has not been disclosed. More reverse engineering was done to figure out a command that's much closer but not quite identical.
+
+Discovered:
+
+* Driver camera might be shifted down and padded with a dark red color
+* Forward camera is initial view
+
+Unresolved Differences:
+
+* The curving is a bit different in the padded and final result. The padded result is a bit more curved somehow.
+* Is it possible there's lens correction going on in the driver camera? This would explain the difference in curving.
+
 """
 
 import argparse
@@ -141,19 +153,19 @@ def make_ffmpeg_clip(
             "-r",
             "20",
             "-i",
-            wide_concat_string,
+            driver_concat_string,
             "-probesize",
             "100M",
             "-r",
             "20",
             "-i",
-            driver_concat_string,
+            wide_concat_string,
             "-t",
             str(length_seconds),
             "-ss",
             str(start_seconds_relative),
             "-filter_complex",
-            f"[0:v][1:v]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
+            f"[0:v]pad=iw:ih+290:0:290:color=#160000,crop=iw:1208[driver];[driver][1:v]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
             "-map",
             "[vout]",
         ]
@@ -182,6 +194,9 @@ def make_ffmpeg_clip(
         except KeyboardInterrupt:
             process.kill()
             raise
+
+        # Debug return to not do the spherical projection
+        # return
 
         # Add spherical projection to the output
         # Move the old output to a temp file
