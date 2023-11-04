@@ -13,8 +13,14 @@ downloader:
 ffmpeg_clip:
 	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 -nv -t driver
 
+ffmpeg_clip_fuw:
+	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 -nv -t forward_upon_wide
+
 ffmpeg_clip_360:
 	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 -nv -t 360
+
+ffmpeg_clip_360_fuw:
+	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 -nv -t 360_forward_upon_wide
 
 # These uses a modified cog up one directory.
 predict:
@@ -32,6 +38,14 @@ predict-wide:
 predict-360:
 	./cog/generate.sh
 	../cog/cog predict -i renderType=360
+
+predict-fuw:
+	./cog/generate.sh
+	../cog/cog predict -i renderType=forward_upon_wide
+
+predict-360-fuw:
+	./cog/generate.sh
+	../cog/cog predict -i renderType=360_forward_upon_wide
 
 # Push using modified cog
 push:
