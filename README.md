@@ -14,6 +14,8 @@ The clipper can produce clips of:
   * Cut, convert, and concatenate the raw, low-compatibility, and separated HEVC files to one highly compatible H.264 MP4 for easy sharing.
 * 360 Video
   * Rendered from Wide and Driver Camera. Uploadable to YouTube, viewable in VLC, and accepted by any video players or web services that take 360 videos.
+* Forward Upon Wide and 360 Forward Upon Wide
+  * Forward video is overlayed atop the wide video. Not perfect, but usable.
 
 Most users use the [Replicate](https://replicate.com) web service version of the clipper:
 
@@ -110,7 +112,7 @@ https://github.com/commaai/openpilot/blame/master/tools/replay/main.cc
 
 ### Video / UI-only
 
-A lot of the FFmpeg commands is based off of [@ntegan1](https://github.com/ntegan1)'s research and documentation including a small disclosure of some but not all details by [@incognitojam](https://github.com/incognitojam) when [@incognitojam](https://github.com/incognitojam) was at comma. 
+A lot of the FFmpeg commands is based off of [@ntegan1](https://github.com/ntegan1)'s research and documentation including a small disclosure of some but not all details by [@incognitojam](https://github.com/incognitojam) when [@incognitojam](https://github.com/incognitojam) was at comma.
 
 https://discord.com/channels/469524606043160576/819046761287909446/1068406169317675078
 
