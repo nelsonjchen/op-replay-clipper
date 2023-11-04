@@ -24,13 +24,13 @@ class Predictor(BasePredictor):
     def predict(
         self,
         renderType: str = Input(
-            description="Render Type. UI is slow. Forward, Wide, and Driver are fast transcodes; they are great for quick previews. 360 is slow and requires downloadin the video file in VLC or uploading to YouTube to pan around in a 🌐 sphere.",
+            description="Render Type. UI is slow. Forward, Wide, and Driver are fast transcodes; they are great for quick previews. 360 is slow and requires viewing/uploading the video file in VLC or YouTube to pan around in a 🌐 sphere.",
             choices=["ui", "forward", "wide", "driver", "360"],
             default="ui",
         ),
         route: str = Input(
             description="comma connect URL (e.g. https://connect.comma.ai/fe18f736cb0d7813/1698620773416/1698620855707 ) OR route/segment ID (e.g. a2a0ccea32023010|2023-07-27--13-01-19)"
-            " (⚠️ \"Public Access\" must be enabled and All Files must be uploaded. Please see the README for more info.)",
+            " (⚠️ \"Public Access\" must be enabled and All Files must be uploaded. Please see the README on GitHub for more info.)",
             default="a2a0ccea32023010|2023-07-27--13-01-19",
         ),
         startSeconds: int = Input(
@@ -45,7 +45,7 @@ class Predictor(BasePredictor):
             default=20
         ),
         smearAmount: int = Input(
-            description="(UI Render only) Smear amount (Let the video start this time before beginning recording, useful for making sure the radar △, if present, is rendered at the start if necessary)",
+            description="(UI Render only) Smear amount (Let the video start this time before beginning recording, useful for making sure the radar triangle (△), if present, is rendered at the start if necessary)",
             ge=5,
             le=40,
             default=5,
