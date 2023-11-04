@@ -102,9 +102,19 @@ https://github.com/nelsonjchen/op-replay-clipper/assets/5363/9f845b8d-e4aa-4ab3-
 
 ## Credits
 
+### UI
+
 The real MVP is [@deanlee](https://github.com/deanlee) for the replay tool in the openpilot project. The level of effort to develop the replay tool is far beyond this script. The script is just a wrapper around the replay tool to make it easy to use for clipping videos.
 
 https://github.com/commaai/openpilot/blame/master/tools/replay/main.cc
+
+### Video / UI-only
+
+A lot of the FFmpeg commands is based off of [@ntegan1](https://github.com/ntegan1)'s research and documentation including a small disclosure of some but not all details by [@incognitojam](https://github.com/incognitojam) when [@incognitojam](https://github.com/incognitojam) was at comma. 
+
+https://discord.com/channels/469524606043160576/819046761287909446/1068406169317675078
+
+[@morrislee](https://github.com/morrislee) provided original data suitable to try to reverse engineer 360 clips.
 
 [do]: https://www.digitalocean.com/
 [op]: https://github.com/commaai/openpilot
