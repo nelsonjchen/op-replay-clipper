@@ -47,7 +47,9 @@ We assume you've already paired your device and have access to the device with y
    * See how I drag and select a portion.
    * You can see me make a mistake but pressing the left arrow (←) in the top-left corner lets me re-expand and try to trim again.
    * The clipper has a maximum length of two minutes. Try to select a portion that's less than two minutes. Try to aim for 20 seconds to a minute.
-   * https://github.com/commaai/openpilot/assets/5363/504665de-9222-4e6b-b090-c26cdcc7137a
+   * Video:
+
+     https://github.com/commaai/openpilot/assets/5363/504665de-9222-4e6b-b090-c26cdcc7137a
 4. Once satisified with the selected portion, prepare the route and files for rendering.
    * Make sure all files are uploaded. Select "Upload All" under Files if you haven't already and make sure it says `uploaded`. You may need to wait and your device may need to be on for a while for all files to upload.
       * The clipper only works with high-resolution files and needs all files that are part of the clip to be uploaded.
