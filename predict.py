@@ -13,7 +13,7 @@ import ffmpeg_clip
 import route_or_url
 
 MIN_LENGTH_SECONDS = 5
-MAX_LENGTH_SECONDS = 120
+MAX_LENGTH_SECONDS = 180
 
 
 class Predictor(BasePredictor):
@@ -24,14 +24,13 @@ class Predictor(BasePredictor):
     def predict(
         self,
         renderType: str = Input(
-            description="Render Type. UI is very slow but has the UI burned in. Forward, Wide, and Driver are fast transcodes; you may want to use them to do quick previews. 360 is slow due to CPU processing. Note: 🌐 360 requires viewing the video file in VLC or uploading to YouTube to pan around in a sphere.",
+            description="Render Type. UI is slow. Forward, Wide, and Driver are fast transcodes; they are great for quick previews. 360 is slow and requires downloadin the video file in VLC or uploading to YouTube to pan around in a 🌐 sphere.",
             choices=["ui", "forward", "wide", "driver", "360"],
             default="ui",
         ),
         route: str = Input(
-            description="Route ID (w/ Segment Number OK but the segment number will be ignored in favor of start seconds) OR comma connect URL (e.g. https://connect.comma.ai/fe18f736cb0d7813/1698620773416/1698620855707 )"
-            " (⚠️ ROUTE MUST BE PUBLIC! You can set this temporarily in Connect.)"
-            ' (⚠️ Ensure all necessary data for the render type is uploaded. UI requires forward, wide, and log. 360 requires wide and driver. Forward, Wide, and Driver require their respective camera files uploaded. If you aren\'t sure, upload all files. Please see the README for more info.)',
+            description="comma connect URL (e.g. https://connect.comma.ai/fe18f736cb0d7813/1698620773416/1698620855707 ) OR route/segment ID (e.g. a2a0ccea32023010|2023-07-27--13-01-19)"
+            " (⚠️ \"Public Access\" must be enabled and All Files must be uploaded. Please see the README for more info.)",
             default="a2a0ccea32023010|2023-07-27--13-01-19",
         ),
         startSeconds: int = Input(
