@@ -51,10 +51,10 @@ We assume you've already paired your device and have access to the device with y
 
      https://github.com/commaai/openpilot/assets/5363/504665de-9222-4e6b-b090-c26cdcc7137a
 4. Once satisified with the selected portion, prepare the route and files for rendering.
-   * Make sure all files are uploaded. Select "Upload All" under Files if you haven't already and make sure it says `uploaded`. You may need to wait and your device may need to be on for a while for all files to upload.
+   * Make sure all files are uploaded. Select "Upload All" under the "Files" dropdown if you haven't already and make sure it says `uploaded`. You may need to wait and your device may need to be on for a while for all files to upload.
       * The clipper only works with high-resolution files and needs all files that are part of the clip to be uploaded.
       * ![image](https://github.com/commaai/openpilot/assets/5363/ce997a7b-9a93-4f67-944b-95d09ae68b02)
-   * Make sure the route has "Public access" turned on. You can set this to off after you're done with clip making.
+   * Make sure the route has "Public access" under "More info" turned on. You can set this to off after you're done with clip making.
       * ![image](https://github.com/commaai/openpilot/assets/5363/6a55c181-d93f-4db5-9513-ff6a1d370757)
 5. Copy the URL in the address bar to your clipboard. In the case above, I've copied "https://connect.comma.ai/fe18f736cb0d7813/1698203405863/1698203460702" to my clipboard.
 6. Visit https://replicate.com/nelsonjchen/op-replay-clipper
