@@ -24,8 +24,16 @@ class Predictor(BasePredictor):
     def predict(
         self,
         renderType: str = Input(
-            description="Render Type. UI is slow. Forward, Wide, and Driver are fast transcodes; they are great for quick previews. 360 is slow and requires viewing/uploading the video file in VLC or YouTube to pan around in a 🌐 sphere.",
-            choices=["ui", "forward", "wide", "driver", "360"],
+            description="Render Type. UI is slow. Forward, Wide, and Driver are fast transcodes; they are great for quick previews. 360 is slow and requires viewing/uploading the video file in VLC or YouTube to pan around in a 🌐 sphere. Forward Upon Wide roughly overlays Forward on Wide. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video.",
+            choices=[
+                "ui",
+                "forward",
+                "wide",
+                "driver",
+                "360",
+                "forward_upon_wide",
+                "360_forward_upon_wide",
+            ],
             default="ui",
         ),
         route: str = Input(
@@ -58,6 +66,9 @@ class Predictor(BasePredictor):
         ),
         metric: bool = Input(
             description="(UI Render only) Render in metric units (km/h)", default=False
+        ),
+        forwardUponWideH: float = Input(
+            description="(Forward Upon Wide Renders only) H-position of the forward video overlay on wide. Different devices can have different offsets from the factory.", ge=1.9, le=2.3, default=2.2
         ),
         fileSize: int = Input(
             description="Rough size of clip output in MB.", ge=10, le=100, default=25
@@ -162,6 +173,11 @@ class Predictor(BasePredictor):
                 file_types = ["ecameras"]
             elif renderType == "driver":
                 file_types = ["dcameras"]
+            # Non-comma.ai origin render types
+            elif renderType == "forward_upon_wide":
+                file_types = ["ecameras", "cameras"]
+            elif renderType == "360_forward_upon_wide":
+                file_types = ["ecameras", "dcameras", "cameras"]
 
             downloader.downloadSegments(
                 route_or_segment=route,
@@ -181,6 +197,7 @@ class Predictor(BasePredictor):
                 length_seconds=lengthSeconds,
                 target_mb=fileSize,
                 nvidia_hardware_rendering=True,
+                forward_upon_wide_h=forwardUponWideH,
                 output="./shared/cog-clip.mp4",
             )
 

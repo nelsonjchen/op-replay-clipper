@@ -44,9 +44,17 @@ def make_ffmpeg_clip(
     length_seconds: int,
     target_mb: int,
     nvidia_hardware_rendering: bool,
+    forward_upon_wide_h: float,
     output: str,
 ):
-    if render_type not in ["forward", "wide", "driver", "360"]:
+    if render_type not in [
+        "forward",
+        "wide",
+        "driver",
+        "360",
+        "forward_upon_wide",
+        "360_forward_upon_wide",
+    ]:
         raise ValueError(f"Invalid choice: {render_type}")
     if not os.path.exists(data_dir):
         raise ValueError(f"Invalid data_dir: {data_dir}")
@@ -65,25 +73,35 @@ def make_ffmpeg_clip(
         range(start_seconds // 60, (start_seconds + length_seconds) // 60 + 1)
     )
 
+    # Generate concat strings for clip to use
+    forward_concat_string_input = "|".join(
+        [f"{data_dir}/{route_date}--{segment}/fcamera.hevc" for segment in segments]
+    )
+    forward_concat_string = f"concat:{forward_concat_string_input}"
+    wide_concat_string_input = "|".join(
+            [f"{data_dir}/{route_date}--{segment}/ecamera.hevc" for segment in segments]
+        )
+    wide_concat_string = f"concat:{wide_concat_string_input}"
+    driver_concat_string_input = "|".join(
+        [f"{data_dir}/{route_date}--{segment}/dcamera.hevc" for segment in segments]
+    )
+    driver_concat_string = f"concat:{driver_concat_string_input}"
+
     # Figure out what segments we'll need to concat
     # .hevc files can be concatenated with the concat protocol demuxer
 
     # Split processing into two types:
     # Simple processing: forward, wide, driver
-    # Complex processing: 360
+    # Complex processing: 360, forward_upon_wide, 360_forward_upon_wide
     if render_type in ["forward", "wide", "driver"]:
         #  Map render_type to appropriate filename
         if render_type == "forward":
-            filename = "fcamera.hevc"
+            ffmpeg_concat_string = forward_concat_string
         elif render_type == "wide":
-            filename = "ecamera.hevc"
+            ffmpeg_concat_string = wide_concat_string
         elif render_type == "driver":
-            filename = "dcamera.hevc"
-        # Concat the segments
-        ffmpeg_concat_string_input = "|".join(
-            [f"{data_dir}/{route_date}--{segment}/{filename}" for segment in segments]
-        )
-        ffmpeg_concat_string = f"concat:{ffmpeg_concat_string_input}"
+            ffmpeg_concat_string = driver_concat_string
+
         # Run the ffmpeg command
         command = [
             "ffmpeg",
@@ -130,19 +148,8 @@ def make_ffmpeg_clip(
             process.kill()
             raise
 
-    elif render_type == "360":
-        # Need to make two concat strings
-        # One for wide, one for driver
-        wide_concat_string_input = "|".join(
-            [f"{data_dir}/{route_date}--{segment}/ecamera.hevc" for segment in segments]
-        )
-        wide_concat_string = f"concat:{wide_concat_string_input}"
-        driver_concat_string_input = "|".join(
-            [f"{data_dir}/{route_date}--{segment}/dcamera.hevc" for segment in segments]
-        )
-        driver_concat_string = f"concat:{driver_concat_string_input}"
-
-        # Run the ffmpeg command that has two inputs and fisheye
+    elif render_type in ["forward_upon_wide"]:
+        # Run the ffmpeg command
         command = [
             "ffmpeg",
             "-y",
@@ -153,22 +160,110 @@ def make_ffmpeg_clip(
             "-r",
             "20",
             "-i",
-            driver_concat_string,
+            wide_concat_string,
             "-probesize",
             "100M",
             "-r",
             "20",
             "-i",
-            wide_concat_string,
+            forward_concat_string,
             "-t",
             str(length_seconds),
             "-ss",
             str(start_seconds_relative),
             "-filter_complex",
-            f"[0:v]pad=iw:ih+290:0:290:color=#160000,crop=iw:1208[driver];[driver][1:v]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
-            "-map",
-            "[vout]",
+            f"[1:v]scale=iw/4.5:ih/4.5,format=yuva420p,colorchannelmixer=aa=1[front];[0:v][front]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/{forward_upon_wide_h}",
+            "-f",
+            "mp4",
+            "-movflags",
+            "+faststart",
         ]
+        if nvidia_hardware_rendering:
+            # Use H264 for maximum Discord compatibility
+            command += ["-c:v", "h264_nvenc"]
+
+        # Target bitrate
+        command += [
+            "-b:v",
+            str(target_bps),
+        ]
+        command += [output]
+        print(command)
+        process = subprocess.Popen(command, stdout=subprocess.PIPE)
+        try:
+            while True:
+                proc_output = process.stdout.readline()
+                if proc_output == b"" and process.poll() is not None:
+                    break
+                if proc_output:
+                    print(proc_output)
+        except KeyboardInterrupt:
+            process.kill()
+            raise
+
+    elif render_type == "360" or render_type == "360_forward_upon_wide":
+
+        if render_type == "360":
+            # Run the ffmpeg command that has two inputs and fisheye
+            command = [
+                "ffmpeg",
+                "-y",
+                "-hwaccel",
+                "auto",
+                "-probesize",
+                "100M",
+                "-r",
+                "20",
+                "-i",
+                driver_concat_string,
+                "-probesize",
+                "100M",
+                "-r",
+                "20",
+                "-i",
+                wide_concat_string,
+                "-t",
+                str(length_seconds),
+                "-ss",
+                str(start_seconds_relative),
+                "-filter_complex",
+                f"[0:v]pad=iw:ih+290:0:290:color=#160000,crop=iw:1208[driver];[driver][1:v]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
+                "-map",
+                "[vout]",
+            ]
+        elif render_type == "360_forward_upon_wide":
+            command = [
+                "ffmpeg",
+                "-y",
+                "-hwaccel",
+                "auto",
+                "-probesize",
+                "100M",
+                "-r",
+                "20",
+                "-i",
+                driver_concat_string,
+                "-probesize",
+                "100M",
+                "-r",
+                "20",
+                "-i",
+                wide_concat_string,
+                "-probesize",
+                "100M",
+                "-r",
+                "20",
+                "-i",
+                forward_concat_string,
+                "-t",
+                str(length_seconds),
+                "-ss",
+                str(start_seconds_relative),
+                "-filter_complex",
+                f"[2:v]scale=iw/4.5:ih/4.5,format=yuva420p,colorchannelmixer=aa=1[front];[1:v][front]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/{forward_upon_wide_h}[fuw];[0:v]pad=iw:ih+290:0:290:color=#160000,crop=iw:1208[driver];[driver][fuw]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
+                "-map",
+                "[vout]",
+            ]
         if nvidia_hardware_rendering:
             # Use HEVC encoding for 360 since people aren't looking at these
             # directly in Discord anyway.
@@ -239,6 +334,12 @@ if __name__ == "__main__":
         "--target_mb", type=int, help="Target file size in megabytes", default=25
     )
     parser.add_argument(
+        "--forward-upon-wide-h",
+        type=float,
+        help="Height of the forward camera in forward upon wide overlay videos",
+        default=2.2,
+    )
+    parser.add_argument(
         "--nvidia-hardware-rendering",
         "-nv",
         action="store_true",
@@ -258,5 +359,6 @@ if __name__ == "__main__":
         length_seconds=args.length_seconds,
         target_mb=args.target_mb,
         nvidia_hardware_rendering=args.nvidia_hardware_rendering,
+        forward_upon_wide_h=args.forward_upon_wide_h,
         output=args.output,
     )
