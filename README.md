@@ -110,7 +110,7 @@ The real MVP is [@deanlee](https://github.com/deanlee) for the replay tool in th
 
 https://github.com/commaai/openpilot/blame/master/tools/replay/main.cc
 
-### Video / UI-only
+### Video-only
 
 A lot of the FFmpeg commands is based off of [@ntegan1](https://github.com/ntegan1)'s research and documentation including a small disclosure of some but not all details by [@incognitojam](https://github.com/incognitojam) when [@incognitojam](https://github.com/incognitojam) was at comma.
 
