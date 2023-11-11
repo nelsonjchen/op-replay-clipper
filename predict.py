@@ -13,7 +13,7 @@ import ffmpeg_clip
 import route_or_url
 
 MIN_LENGTH_SECONDS = 5
-MAX_LENGTH_SECONDS = 180
+MAX_LENGTH_SECONDS = 300
 
 
 class Predictor(BasePredictor):
@@ -59,8 +59,8 @@ class Predictor(BasePredictor):
             default=5,
         ),
         speedhackRatio: float = Input(
-            description="(UI Render only) Speedhack ratio (Higher ratio renders faster but renders may be more unstable and have artifacts) (Suggestion: 0.3-0.5 for jitter-free, 1-3 for fast renders, 4+ for buggy territory)",
-            ge=0.3,
+            description="(UI Render only) Speedhack ratio (Higher ratio renders faster but renders may be more unstable and have artifacts) (Suggestion: 0.1-0.5 for jitter-free, 1-3 for fast renders, 4+ for buggy territory)",
+            ge=0.1,
             le=7.0,
             default=1.0,
         ),
