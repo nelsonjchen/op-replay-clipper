@@ -96,6 +96,9 @@ class Predictor(BasePredictor):
         startSeconds = parsed_input_route_or_url.start_seconds
         lengthSeconds = parsed_input_route_or_url.length_seconds
 
+        # Set filesize to be 1 less megabyte than the input. Discord only allows 25MB but sometimes the file is slightly larger than 25MB when set to 25MB.
+        fileSize = fileSize - 1
+
         # Enforce the minimum and maximum lengths
         if lengthSeconds < MIN_LENGTH_SECONDS:
             raise ValueError(
