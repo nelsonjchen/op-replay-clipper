@@ -16,12 +16,14 @@ The clipper can produce clips of:
   * Rendered from Wide and Driver Camera. Uploadable to YouTube, viewable in VLC, and accepted by any video players or web services that take 360 videos.
 * Forward Upon Wide and 360 Forward Upon Wide
   * Forward video is overlayed atop the wide video. Not perfect, but usable.
+ 
+All clip options have a configurable target file size option as platforms like Discord limit file upload sizes.
 
-Most users use the [Replicate](https://replicate.com) web service version of the clipper:
+The clipper is deployed on [Replicate](https://replicate.com):
 
 https://replicate.com/nelsonjchen/op-replay-clipper
 
-Replicate is an ultra-low-cost pay-as-you-go compute platform for running software jobs. It's a great way to run this clipper as it's fast, easy to use, and you don't need to install anything on your computer or even deploy anything yourself. Just enter in the desired information into the form, and you can generate a clip. Expect to pay about ~$0.01 per clip but not even need to put in any payment details until you've reached a generously large level of usage.
+Replicate is an ultra-low-cost pay-as-you-go compute platform for running software jobs. Replicate is a great way to run this clipper as it's fast, easy to use, and you don't need to install anything on your computer or even deploy anything yourself. Just enter in the required information into the form, and Replicate will generate a clip. Expect to pay about ~$0.01 per clip but not even need to put in any payment details until you've reached a generously large level of usage.
 
 ## Terminology
 
@@ -35,7 +37,7 @@ Replicate is an ultra-low-cost pay-as-you-go compute platform for running softwa
 ### Non-Requirements
 
 - A comma lite or prime subscription.
-   * Clipping used to be a comma prime feature but was removed. This is a free and open source tool to do the same.
+   * Clipping was a comma connect prime-only feature but was removed for refurbishment. This is a free and open source tool to do the same.
 
 ## Quick Usage
 
