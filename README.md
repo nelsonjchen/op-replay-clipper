@@ -64,7 +64,7 @@ We assume you've already paired your device and have access to the device with y
 6. Visit https://replicate.com/nelsonjchen/op-replay-clipper
 7. Under `route`, paste the URL you copied in the previous step.
    * ![image](https://github.com/commaai/openpilot/assets/5363/15d286cc-057f-4a1c-be82-855c5b570b90)
-8. Tweak any settings you'll like.
+8. Tweak any settings you like.
 9. Press `Run`.
 10. Wait for the clip to render. It may take a few minutes.
 11. Once done, you can download the clip. If you want, turn off "Public access" on the route after you're done.
