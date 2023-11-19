@@ -537,15 +537,17 @@ fi
 
 DRAW_TEXT_FILTER="drawtext=textfile=/tmp/overlay.txt:reload=1:fontcolor=white:fontsize=14:box=1:boxcolor=black@0.5:boxborderw=5:x=(w-text_w)/2:y=10"
 
+BUFSIZE=$(($TARGET_BITRATE * 2))
+
 if [ "$NVIDIA_DIRECT_ENCODING" = "on" ]; then
 	# Directly encode with nvidia hardware to the target file
 	# Good for setups where the video renders fast.
-	eatmydata ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec h264_nvenc -preset llhp -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_OUTPUT"
+	eatmydata ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec h264_nvenc -preset llhp -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -bufsize "$BUFSIZE" -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_OUTPUT"
 	cleanup
 elif [ "$NVIDIA_HYBRID_ENCODING" = "on" ]; then
 	# Directly encode with nvidia hardware to the target file with the smear amount also recorded.
 	# Then lop it off with copy mode.
-	eatmydata ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0  -vcodec h264_nvenc -preset llhp -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -g 20 -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
+	eatmydata ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0  -vcodec h264_nvenc -preset llhp -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -bufsize "$BUFSIZE" -g 20 -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
 	cleanup
 	ffmpeg -y -ss "$SMEAR_AMOUNT" -i "$VIDEO_RAW_OUTPUT" -vcodec copy -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 elif [ "$NVIDIA_FAST_ENCODING" = "on" ]; then
