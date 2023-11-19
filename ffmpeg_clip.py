@@ -129,12 +129,17 @@ def make_ffmpeg_clip(
             # Use H264 for maximum Discord compatibility
             command += ["-c:v", "h264_nvenc"]
 
-        # Target bitrate
+        # Target bitrate with maxrate and bufsize
         command += [
             "-b:v",
             str(target_bps),
+            "-maxrate",
+            str(target_bps),
+            "-bufsize",
+            str(target_bps * 2),
         ]
         command += [output]
+
         print(command)
         process = subprocess.Popen(command, stdout=subprocess.PIPE)
         try:
@@ -182,13 +187,18 @@ def make_ffmpeg_clip(
             # Use H264 for maximum Discord compatibility
             command += ["-c:v", "h264_nvenc"]
 
-        # Target bitrate
+        # Target bitrate with maxrate and bufsize
         command += [
             "-b:v",
             str(target_bps),
+            "-maxrate",
+            str(target_bps),
+            "-bufsize",
+            str(target_bps * 2),
         ]
         command += [output]
         print(command)
+
         process = subprocess.Popen(command, stdout=subprocess.PIPE)
         try:
             while True:
@@ -264,15 +274,20 @@ def make_ffmpeg_clip(
                 "-map",
                 "[vout]",
             ]
+
         if nvidia_hardware_rendering:
             # Use HEVC encoding for 360 since people aren't looking at these
             # directly in Discord anyway.
             command += ["-c:v", "hevc_nvenc"]
 
-        # Target bitrate
+        # Target bitrate with maxrate and bufsize
         command += [
             "-b:v",
             str(target_bps),
+            "-maxrate",
+            str(target_bps),
+            "-bufsize",
+            str(target_bps * 2),
         ]
         command += [output]
 
