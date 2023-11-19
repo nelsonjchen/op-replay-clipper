@@ -136,11 +136,17 @@ class Predictor(BasePredictor):
                 f"--smear-amount={smearAmount}",
                 f"--speedhack-ratio={speedhackRatio}",
                 f"--target-mb={fileSize}",
-                f"--nv-hardware-rendering",
                 f"--nv-hybrid-encoding",
                 f"--data-dir={os.path.abspath(data_dir)}",
                 f"--output=cog-clip.mp4",
             ]
+            # Check if we're inside WSL2 or nested in via `uname` and
+            # don't append --nv-hardware-rendering if we are
+            if b"microsoft-standard-WSL2" not in subprocess.check_output(
+                ["uname", "--kernel-release"]
+            ):
+                command.append("--nv-hardware-rendering")
+
             if metric:
                 command.append("--metric")
             # if debugCommand != "":
