@@ -104,6 +104,14 @@ https://github.com/nelsonjchen/op-replay-clipper/assets/5363/9f845b8d-e4aa-4ab3-
 
 - The UI replayed is comma.ai's latest stock UI on their master branch; routes from forks that differ alot from stock may not render correctly. Your experience may and will vary. Please make sure to note these replays are from fork data and may not be representative of the stock behavior. [The comma team really does not like it if you ask them to debug fork code as "it just takes too much time to be sidetracked by hidden and unclear changes"](https://discord.com/channels/469524606043160576/616456819027607567/1042263657851142194).
 
+## Advanced Usage
+
+### JWT Token Input
+
+There is a JWT Token input field. This is for users who do not wish to set a route to be "Public access". There is a major catch though. The JWT Token is valid for 1 year and is unrevokable in any way. If you share the JWT Token with anyone, they will be able to access all your routes for 1 year with no recourse from you. This is why it's not recommended to use this feature unless you know what you're doing compared to the "Public access" method which is much easier to revoke access to.
+
+Tokens can be obtained from visiting https://jwt.comma.ai/ and logging in with the same comma connect account type. Tokens should be about 181 characters or longer.
+
 ## Credits
 
 ### UI

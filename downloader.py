@@ -38,6 +38,7 @@ def downloadSegments(
         "ecameras",
         "logs",
     ],
+    jwt_token: Optional[str] = None,
 ):
     """
     Handle downloading segments and throwing up errors if something goes wrong.
@@ -80,16 +81,24 @@ def downloadSegments(
 
     # Check if the route is accessible
     # If it isn't, throw an error
-    route_files_response = requests.get(filelist_url)
-    if route_files_response.status_code != 200:
-        raise ValueError(f"Route {route} is not accessible. You may need to set the route to be public. Visit https://connect.comma.ai/{dongle_id}, view the route, dropdown the \"More Info\" button, and toggle \"Public\". You can set \"Public\" back to off after using this tool.")
+    if jwt_token:
+        route_files_response = requests.get(filelist_url, headers={"Authorization": f"JWT {jwt_token}"})
+        if route_files_response.status_code != 200:
+            raise ValueError(f"Route {route} is not accessible, even with JWT Token. Check to make sure you have copied the full JWT Token which should be 181+ characters from https://jwt.comma.ai .")
+    else:
+        route_files_response = requests.get(filelist_url)
+        if route_files_response.status_code != 200:
+            raise ValueError(f"Route {route} is not accessible. You may need to set the route to be public. Visit https://connect.comma.ai/{dongle_id}, view the route, dropdown the \"More Info\" button, and toggle \"Public\". You can set \"Public\" back to off after using this tool.")
     filelist: FileListDict = route_files_response.json()
 
     # Get beginning and end times of the route for error message reasons
     # Find the segment_start_time and segment_end_time with the first and last segment_id
     routeinfo_url = f"https://api.commadotai.com/v1/route/{route_url}"
     print(f"Downloading route info from {routeinfo_url}")
-    route_info_response = requests.get(routeinfo_url)
+    if jwt_token:
+        route_info_response = requests.get(routeinfo_url, headers={"Authorization": f"JWT {jwt_token}"})
+    else:
+        route_info_response = requests.get(routeinfo_url)
     route_info: RouteInfoDict = route_info_response.json()
     route_start_time = route_info["segment_start_times"][start_segment]
     route_end_time = route_info["segment_end_times"][end_segment]
@@ -230,6 +239,12 @@ if __name__ == "__main__":
         help="List of file types to download",
         default=["cameras", "ecameras", "logs"],
     )
+    parser.add_argument(
+        "--jwt_token",
+        type=str,
+        help="JWT Token to use to download the route. If not specified, the route must be public.",
+        default=None,
+    )
     args = parser.parse_args()
     # All arguments are required
 
@@ -240,4 +255,5 @@ if __name__ == "__main__":
         args.start_seconds,
         args.length,
         args.file_types,
+        args.jwt_token,
     )

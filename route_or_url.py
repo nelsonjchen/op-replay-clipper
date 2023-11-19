@@ -17,7 +17,10 @@ class ParsedRouteOrURL:
 
 
 def parseRouteOrUrl(
-    route_or_url: str, start_seconds: int, length_seconds: int
+    route_or_url: str,
+    start_seconds: int,
+    length_seconds: int,
+    jwt_token: str = None,
 ) -> ParsedRouteOrURL:
     # if the route_or_url is a route, just return it
     # Assume that a route is a string with a pipe in it
@@ -58,7 +61,10 @@ def parseRouteOrUrl(
 
     # Make the API call
     api_url = f"https://api.comma.ai/v1/devices/{dongle_id}/routes_segments?end={end_time}&start={start_time}"
-    response = requests.get(api_url)
+    if jwt_token:
+        response = requests.get(api_url, headers={"Authorization": f"JWT {jwt_token}"})
+    else:
+        response = requests.get(api_url)
     # Check the response
     if response.status_code != 200:
         raise ValueError("Invalid API response")
@@ -149,7 +155,10 @@ def parseRouteOrUrl(
 
     # If we didn't find a match, throw an exception
     if matched_route is None:
-        raise ValueError(f"Route not found from URL. Route is possibly not set to Public. Visit the URL {route_or_url} and make sure Public is toggled under the \"More Info\" drop-down. You can always make it not Public after you're done rendering a clip.")
+        if jwt_token:
+            raise ValueError(f"Route not found from URL and JWT Token. Make sure you're using a correct JWT token of 181+ characters from https://jwt.comma.ai .")
+        else:
+            raise ValueError(f"Route not found from URL. Route is possibly not set to Public. Visit the URL {route_or_url} and make sure Public is toggled under the \"More Info\" drop-down. You can always make it not Public after you're done rendering a clip.")
 
     # Get the route name
     route_name = matched_route["fullname"]
@@ -172,10 +181,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "length_seconds", type=int, help="Length of the segment to render"
     )
+    parser.add_argument(
+        "--jwt_token",
+        type=str,
+        help="JWT token to use for API calls (optional)",
+        default=None,
+    )
     args = parser.parse_args()
 
     parsed_route = parseRouteOrUrl(
-        args.route_or_url, args.start_seconds, args.length_seconds
+        args.route_or_url,
+        args.start_seconds,
+        args.length_seconds,
+        args.jwt_token,
     )
 
     print(f"Route: {parsed_route.route}")
