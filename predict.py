@@ -73,6 +73,10 @@ class Predictor(BasePredictor):
         fileSize: int = Input(
             description="Rough size of clip output in MB.", ge=10, le=100, default=25
         ),
+        jwtToken: str = Input(
+            description="Optional JWT Token from https://jwt.comma.ai for non-\"Public access\" routes. ⚠️ DO NOT SHARE THIS TOKEN WITH ANYONE as comma generates JWT tokens valid for 1 year and they are unrevokable. Please use the safer, temporary, and revokable \"Public Access\" toggle option on comma connect if possible.",
+            default="",
+        ),
         notes: str = Input(
             description="Notes Text field. Doesn't affect output. For your own reference.", default="",
         ),
@@ -90,7 +94,10 @@ class Predictor(BasePredictor):
         print("")
 
         parsed_input_route_or_url = route_or_url.parseRouteOrUrl(
-            route_or_url=route, start_seconds=startSeconds, length_seconds=lengthSeconds
+            route_or_url=route,
+            start_seconds=startSeconds,
+            length_seconds=lengthSeconds,
+            jwt_token=jwtToken,
         )
         route = parsed_input_route_or_url.route
         startSeconds = parsed_input_route_or_url.start_seconds
@@ -123,6 +130,7 @@ class Predictor(BasePredictor):
                 length=lengthSeconds,
                 smear_seconds=smearAmount,
                 data_dir=data_dir,
+                jwt_token=jwtToken,
             )
             # Start the shell command and capture its output
             command = [
@@ -146,6 +154,9 @@ class Predictor(BasePredictor):
                 ["uname", "--kernel-release"]
             ):
                 command.append("--nv-hardware-rendering")
+
+            if jwtToken:
+                command.append(f"--jwt-token={jwtToken}")
 
             if metric:
                 command.append("--metric")
@@ -195,6 +206,7 @@ class Predictor(BasePredictor):
                 smear_seconds=0,
                 data_dir=data_dir,
                 file_types=file_types,
+                jwt_token=jwtToken,
             )
 
             # Start the shell command and capture its output

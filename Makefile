@@ -47,6 +47,15 @@ predict-360-fuw:
 	./cog/generate.sh
 	../cog/cog predict -i renderType=360_forward_upon_wide
 
+# These require an exported token and route variable to work.
+predict-non-public:
+	./cog/generate.sh
+	../cog/cog predict -i route=$(NONPUBLIC_ROUTE) -i jwtToken=$(JWT_TOKEN)
+
+predict-non-public-forward:
+	./cog/generate.sh
+	../cog/cog predict -i route=$(NONPUBLIC_ROUTE) -i jwtToken=$(JWT_TOKEN) -i renderType=forward
+
 # Push using modified cog
 push:
 	./cog/generate.sh
