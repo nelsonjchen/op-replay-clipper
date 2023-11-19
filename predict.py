@@ -24,7 +24,7 @@ class Predictor(BasePredictor):
     def predict(
         self,
         renderType: str = Input(
-            description="Render Type. UI is slow. Forward, Wide, and Driver are fast transcodes; they are great for quick previews. 360 is slow and requires viewing/uploading the video file in VLC or YouTube to pan around in a 🌐 sphere. Forward Upon Wide roughly overlays Forward on Wide. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video.",
+            description="Render Type. UI renders with UI. Forward, Wide, and Driver process the raw, segmented, and low-compatibility HEVC video files into a portable H.264 MP4 file, are fast transcodes, and are great for quick previews. 360 requires viewing/uploading the video file in VLC or YouTube to pan around in a 🌐 sphere. Forward Upon Wide roughly overlays Forward video on Wide video. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video.",
             choices=[
                 "ui",
                 "forward",
@@ -38,7 +38,7 @@ class Predictor(BasePredictor):
         ),
         route: str = Input(
             description="comma connect URL (e.g. https://connect.comma.ai/fe18f736cb0d7813/1698620773416/1698620855707 ) OR route/segment ID (e.g. a2a0ccea32023010|2023-07-27--13-01-19)"
-            " (⚠️ \"Public Access\" must be enabled and All Files must be uploaded. Please see the README on GitHub for more info.)",
+            " (⚠️ \"Public Access\" must be enabled or a valid JWT Token must be provided. All Required Files in Comma Connect must be uploaded from Device. Please see the Quick Usage section of the README on GitHub at https://github.com/nelsonjchen/op-replay-clipper#quick-usage for instructions.)",
             default="a2a0ccea32023010|2023-07-27--13-01-19",
         ),
         startSeconds: int = Input(
@@ -59,7 +59,7 @@ class Predictor(BasePredictor):
             default=5,
         ),
         speedhackRatio: float = Input(
-            description="(UI Render only) Speedhack ratio (Higher ratio renders faster but renders may be more unstable and have artifacts) (Suggestion: 0.1-0.5 for jitter-free, 1-3 for fast renders, 4+ for buggy territory)",
+            description="(UI Render only) Speedhack ratio (Higher ratio renders faster but renders may be more unstable and have artifacts) (Suggestion: 0.1-0.3 for jitter-free, 1-3 for fast renders)",
             ge=0.1,
             le=7.0,
             default=1.0,
@@ -68,13 +68,13 @@ class Predictor(BasePredictor):
             description="(UI Render only) Render in metric units (km/h)", default=False
         ),
         forwardUponWideH: float = Input(
-            description="(Forward Upon Wide Renders only) H-position of the forward video overlay on wide. Different devices can have different offsets from the factory.", ge=1.9, le=2.3, default=2.2
+            description="(Forward Upon Wide Renders only) H-position of the forward video overlay on wide. Different devices can have different offsets from differing user mounting or factory calibration.", ge=1.9, le=2.3, default=2.2
         ),
         fileSize: int = Input(
             description="Rough size of clip output in MB.", ge=10, le=100, default=25
         ),
         jwtToken: str = Input(
-            description="Optional JWT Token from https://jwt.comma.ai for non-\"Public access\" routes. ⚠️ DO NOT SHARE THIS TOKEN WITH ANYONE as comma generates JWT tokens valid for 1 year and they are unrevokable. Please use the safer, temporary, and revokable \"Public Access\" toggle option on comma connect if possible.",
+            description="Optional JWT Token from https://jwt.comma.ai for non-\"Public access\" routes. ⚠️ DO NOT SHARE THIS TOKEN WITH ANYONE as https://jwt.comma.ai generates JWT tokens valid for 1 year and they are irrevocable. Please use the safer, optionally temporary, more granular, and revocable \"Public Access\" toggle option on comma connect if possible. For more info please see https://github.com/nelsonjchen/op-replay-clipper#jwt-token-input .",
             default="",
         ),
         notes: str = Input(
