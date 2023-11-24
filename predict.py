@@ -37,7 +37,7 @@ class Predictor(BasePredictor):
             default="ui",
         ),
         route: str = Input(
-            description='🔗 comma connect URL (e.g. https://connect.comma.ai/fe18f736cb0d7813/1698620773416/1698620855707, this is the preferred input method and includes dongle ID with start/end times.) OR #️⃣ route ID (e.g. a2a0ccea32023010|2023-07-27--13-01-19. Note that any segment ID\"--\" appended to the end will be ignored as\"startSecond\" is used instead, but route id portion of input will still accepted)'
+            description='🔗 comma connect URL (e.g. https://connect.comma.ai/fe18f736cb0d7813/1698620773416/1698620855707, this is the preferred input method and includes dongle ID with start/end times.) OR #️⃣ route ID (e.g. a2a0ccea32023010|2023-07-27--13-01-19. Note that any segment ID \"--\" appended to the end will be ignored as\"startSecond\" is used instead, but route id portion of input will still accepted)'
             ' (⚠️ "Public Access" must be enabled or a valid JWT Token must be provided.'
             " All required files for render type in Comma Connect must be uploaded from device."
             " Please see the Quick Usage section of the README on GitHub at https://github.com/nelsonjchen/op-replay-clipper#quick-usage for instructions on generating an appropiate comma connect URL.)",
