@@ -44,12 +44,12 @@ class Predictor(BasePredictor):
             default="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496",
         ),
         startSeconds: int = Input(
-            description="Start time in seconds for #️⃣ Route ID route input only. (ℹ️ :🔗 comma connect URL already has the start time embedded in it and this input will be ignored in favor of that) ",
+            description="Start time in seconds for #️⃣ Route ID route input only. (🔗 comma connect URL already has the start time embedded in it and this input will be ignored in favor of that) ",
             ge=0,
             default=50,
         ),
         lengthSeconds: int = Input(
-            description="Length of clip in seconds #️⃣ Route ID route input only. (ℹ️ :🔗 comma connect URL already has the length time indirectly embedded in it from the embedded end time and this input will be ignored in favor of that. The minimum and maximum length will still be enforced)"
+            description="Length of clip in seconds #️⃣ Route ID route input only. (🔗 comma connect URL already has the length time indirectly embedded in it from the embedded end time and this input will be ignored in favor of that. The minimum and maximum length will still be enforced)"
            , ge=MIN_LENGTH_SECONDS,
             le=MAX_LENGTH_SECONDS,
             default=20,
