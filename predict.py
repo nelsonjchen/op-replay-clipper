@@ -24,7 +24,7 @@ class Predictor(BasePredictor):
     def predict(
         self,
         renderType: str = Input(
-            description="Render Type. UI renders with UI. Forward, Wide, and Driver process the raw, segmented, and low-compatibility HEVC video files into a portable H.264 MP4 file, are fast transcodes, and are great for quick previews. 360 requires viewing/uploading the video file in VLC or YouTube to pan around in a 🌐 sphere. Forward Upon Wide roughly overlays Forward video on Wide video. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video.",
+            description="UI renders with UI. Forward, Wide, and Driver process the raw, segmented, and low-compatibility HEVC video files into a portable H.264 MP4 file, are fast transcodes, and are great for quick previews. 360 requires viewing/uploading the video file in VLC or YouTube to pan around in a 🌐 sphere. Forward Upon Wide roughly overlays Forward video on Wide video. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video.",
             choices=[
                 "ui",
                 "forward",
@@ -37,23 +37,25 @@ class Predictor(BasePredictor):
             default="ui",
         ),
         route: str = Input(
-            description="comma connect URL (e.g. https://connect.comma.ai/fe18f736cb0d7813/1698620773416/1698620855707 ) OR route/segment ID (e.g. a2a0ccea32023010|2023-07-27--13-01-19)"
-            " (⚠️ \"Public Access\" must be enabled or a valid JWT Token must be provided. All Required Files in Comma Connect must be uploaded from Device. Please see the Quick Usage section of the README on GitHub at https://github.com/nelsonjchen/op-replay-clipper#quick-usage for instructions.)",
-            default="a2a0ccea32023010|2023-07-27--13-01-19",
+            description='🔗 comma connect URL (e.g. https://connect.comma.ai/fe18f736cb0d7813/1698620773416/1698620855707, preferred input method and which includes dongle ID and start/end times.) OR #️⃣ route ID (e.g. a2a0ccea32023010|2023-07-27--13-01-19, any segment ID\"--\" appended to the end will be ignored as\"startSecond\" is used instead, but input will still accepted)'
+            ' (⚠️ "Public Access" must be enabled or a valid JWT Token must be provided.'
+            " All required files for render type in Comma Connect must be uploaded from device."
+            " Please see the Quick Usage section of the README on GitHub at https://github.com/nelsonjchen/op-replay-clipper#quick-usage for instructions on generating an appropiate comma connect URL.)",
+            default="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496",
         ),
         startSeconds: int = Input(
-            description=
-            "Start time in seconds (Ignored if comma connect URL input is used)",
+            description="Start time in seconds for #️⃣ Route ID route input only. (ℹ️ :🔗 comma connect URL already has the start time embedded in it and this input will be ignored in favor of that) ",
             ge=0,
-            default=50
+            default=50,
         ),
         lengthSeconds: int = Input(
-            description="Length of clip in seconds (Ignored if comma connect URL input is used, however the minimum and maximum lengths are still enforced)", ge=MIN_LENGTH_SECONDS,
+            description="Length of clip in seconds #️⃣ Route ID route input only. (ℹ️ :🔗 comma connect URL already has the length time indirectly embedded in it from the embedded end time and this input will be ignored in favor of that. The minimum and maximum length will still be enforced)"
+           , ge=MIN_LENGTH_SECONDS,
             le=MAX_LENGTH_SECONDS,
-            default=20
+            default=20,
         ),
         smearAmount: int = Input(
-            description="(UI Render only) Smear amount (Let the video start this time before beginning recording, useful for making sure the radar triangle (△), if present, is rendered at the start if necessary)",
+            description="(UI Render only) Smear amount (Let the video start this time before beginning recording, useful for making sure the radar triangle (△), if not present, is present to be rendered at the start if necessary)",
             ge=5,
             le=40,
             default=5,
@@ -68,17 +70,21 @@ class Predictor(BasePredictor):
             description="(UI Render only) Render in metric units (km/h)", default=False
         ),
         forwardUponWideH: float = Input(
-            description="(Forward Upon Wide Renders only) H-position of the forward video overlay on wide. Different devices can have different offsets from differing user mounting or factory calibration.", ge=1.9, le=2.3, default=2.2
+            description="(Forward Upon Wide Renders only) H-position of the forward video overlay on wide. Different devices can have different offsets from differing user mounting or factory calibration.",
+            ge=1.9,
+            le=2.3,
+            default=2.2,
         ),
         fileSize: int = Input(
             description="Rough size of clip output in MB.", ge=10, le=100, default=25
         ),
         jwtToken: str = Input(
-            description="Optional JWT Token from https://jwt.comma.ai for non-\"Public access\" routes. ⚠️ DO NOT SHARE THIS TOKEN WITH ANYONE as https://jwt.comma.ai generates JWT tokens valid for 1 year and they are irrevocable. Please use the safer, optionally temporary, more granular, and revocable \"Public Access\" toggle option on comma connect if possible. For more info please see https://github.com/nelsonjchen/op-replay-clipper#jwt-token-input .",
+            description='Optional JWT Token from https://jwt.comma.ai for non-"Public access" routes. ⚠️ DO NOT SHARE THIS TOKEN WITH ANYONE as https://jwt.comma.ai generates JWT tokens valid for 1 year and they are irrevocable. Please use the safer, optionally temporary, more granular, and revocable "Public Access" toggle option on comma connect if possible. For more info, please see https://github.com/nelsonjchen/op-replay-clipper#jwt-token-input .',
             default="",
         ),
         notes: str = Input(
-            description="Notes Text field. Doesn't affect output. For your own reference.", default="",
+            description="Notes Text field. Doesn't affect output. For your own reference.",
+            default="",
         ),
         # debugCommand: str = Input(
         #     description="Debug command to run instead of clip", default=""
