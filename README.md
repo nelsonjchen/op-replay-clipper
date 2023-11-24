@@ -16,7 +16,7 @@ The clipper can produce clips of:
   * Rendered from Wide and Driver Camera. Uploadable to YouTube, viewable in VLC, and accepted by any video players or web services that take 360 videos.
 * Forward Upon Wide and 360 Forward Upon Wide
   * Forward video is overlayed atop the wide video. Not perfect, but usable.
- 
+
 All clip options have a configurable target file size option as platforms like Discord limit file upload sizes.
 
 The clipper is deployed on [Replicate](https://replicate.com):
@@ -61,7 +61,7 @@ We assume you've already paired your device and have access to the device with y
    * Make sure the route has "Public access" under "More info" turned on. You can set this to off after you're done with clip making.
       * ![image](https://github.com/commaai/openpilot/assets/5363/6a55c181-d93f-4db5-9513-ff6a1d370757)
 5. Copy the URL in the address bar to your clipboard. In the case above, I've copied "https://connect.comma.ai/fe18f736cb0d7813/1698203405863/1698203460702" to my clipboard.
-   * When you were adjusting the selected portion of the route in the last step, it was changing those last two numbers in the URL which is the start time and end time respectively. 
+   * When you were adjusting the selected portion of the route in the last step, it was changing those last two numbers in the URL which is the start time and end time respectively.
 6. Visit https://replicate.com/nelsonjchen/op-replay-clipper
 7. Under `route`, paste the URL you copied in the previous step.
    * ![image](https://github.com/commaai/openpilot/assets/5363/15d286cc-057f-4a1c-be82-855c5b570b90)
@@ -120,6 +120,10 @@ If you share a JWT Token with anyone, they will be able to access all your route
 This is why it's not recommended to use this feature unless you know what you're doing compared to the "Public access" method which is much easier to revoke access to.
 
 Tokens can be obtained from visiting https://jwt.comma.ai/ and logging in with the same comma connect account type. Tokens should be about 181 characters or longer.
+
+### Replicate can queue up jobs to run in parallel
+
+After you run something, just use your browser to "Duplicate" the tab, change the settings for the next thing, and press Run. Replicate will queue up jobs and if necessary, even scale up to run multiple jobs in parallel. Very cool!
 
 ## Credits
 
