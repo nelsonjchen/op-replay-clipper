@@ -106,6 +106,18 @@ https://github.com/nelsonjchen/op-replay-clipper/assets/5363/9f845b8d-e4aa-4ab3-
 
 - The UI replayed is comma.ai's latest stock UI on their master branch; routes from forks that differ alot from stock may not render correctly. Your experience may and will vary. Please make sure to note these replays are from fork data and may not be representative of the stock behavior. [The comma team really does not like it if you ask them to debug fork code as "it just takes too much time to be sidetracked by hidden and unclear changes"](https://discord.com/channels/469524606043160576/616456819027607567/1042263657851142194).
 
+## Usage Tips
+
+* Learn how to bookmark and flag interesting points on a drive/route.
+
+  With the car on, soon after an incident when it is safe:
+  1. Tap the screen to reveal a bookmark flag button if it isn't there already.
+     * ![button_flag](https://github.com/nelsonjchen/op-replay-clipper/assets/5363/d0cf9372-78ad-4a06-9128-b6fdb6f5394c)
+  2. Tap that icon.  
+  3. This will result in small slivers of yellow in the timeline you can quickly hone in on. 
+     * ![flagged](https://github.com/nelsonjchen/op-replay-clipper/assets/5363/15a3f611-ffb8-47de-b917-1988a0f6f66a)
+  4. With regards to the clipper usage, during the process in which you are honing in on the start and of the clip, your upper bound of the clip will nearly all the time be at that yellow so your first or early drags to hone down should basically top out there and be very generous with the start time before the yellow.
+
 ## Advanced Usage
 
 ### JWT Token Input
