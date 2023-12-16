@@ -23,6 +23,9 @@ services:
     volumes:
       # Update this to wherever you want VS Code to mount the folder of your project
       - ../:/workspace/op-replay-clipper:cached
+      
+      # Pass in /mnt too, so we can use it for large data in the future
+      - /mnt:/mnt
 
       # Uncomment the next line to use Docker from inside the container. See https://aka.ms/vscode-remote/samples/docker-from-docker-compose for details.
       # - /var/run/docker.sock:/var/run/docker.sock
