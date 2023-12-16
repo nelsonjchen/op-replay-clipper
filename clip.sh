@@ -5,6 +5,7 @@
 # ARG_OPTIONAL_SINGLE([start-seconds],[s],[Seconds to start at],[60])
 # ARG_OPTIONAL_SINGLE([length-seconds],[l],[Clip length],[30])
 # ARG_OPTIONAL_SINGLE([target-mb],[m],[Target converted file size in MB],[50])
+# ARG_OPTIONAL_SINGLE([format],[],[h264 or hevc],[h264])
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
 # ARG_OPTIONAL_SINGLE([smear-amount],[],[Amount of seconds to smear the clip start by before recording starts],[3])
 # ARG_OPTIONAL_SINGLE([ntfysh],[n],[ntfy.sh topic to post to when clip has completed rendering])
@@ -51,6 +52,7 @@ _positionals=()
 _arg_start_seconds="60"
 _arg_length_seconds="30"
 _arg_target_mb="50"
+_arg_format="h264"
 _arg_jwt_token=
 _arg_smear_amount="3"
 _arg_ntfysh=
@@ -70,11 +72,12 @@ _arg_nv_direct_encoding="off"
 print_help()
 {
 	printf '%s\n' "See README at https://github.com/nelsonjchen/op-replay-clipper/"
-	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [--data-dir <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [--(no-)hidden-dongle-id] [--(no-)nv-hardware-rendering] [--(no-)nv-hybrid-encoding] [--(no-)nv-fast-encoding] [--(no-)nv-direct-encoding] [-h|--help] <route_id>\n' "$0"
+	printf 'Usage: %s [-s|--start-seconds <arg>] [-l|--length-seconds <arg>] [-m|--target-mb <arg>] [--format <arg>] [-j|--jwt-token <arg>] [--smear-amount <arg>] [-n|--ntfysh <arg>] [--data-dir <arg>] [-r|--speedhack-ratio <arg>] [-c|--video-cwd <arg>] [--vnc <arg>] [-o|--output <arg>] [--(no-)metric] [--(no-)hidden-dongle-id] [--(no-)nv-hardware-rendering] [--(no-)nv-hybrid-encoding] [--(no-)nv-fast-encoding] [--(no-)nv-direct-encoding] [-h|--help] <route_id>\n' "$0"
 	printf '\t%s\n' "<route_id>: comma connect route id, segment id is ignored (hint, put this in quotes otherwise your shell might misinterpret the pipe) "
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
 	printf '\t%s\n' "-m, --target-mb: Target converted file size in MB (default: '50')"
+	printf '\t%s\n' "--format: h264 or hevc (default: 'h264')"
 	printf '\t%s\n' "-j, --jwt-token: JWT Auth token to use (get token from https://jwt.comma.ai) (no default)"
 	printf '\t%s\n' "--smear-amount: Amount of seconds to smear the clip start by before recording starts (default: '3')"
 	printf '\t%s\n' "-n, --ntfysh: ntfy.sh topic to post to when clip has completed rendering (no default)"
@@ -132,6 +135,14 @@ parse_commandline()
 				;;
 			-m*)
 				_arg_target_mb="${_key##-m}"
+				;;
+			--format)
+				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
+				_arg_format="$2"
+				shift
+				;;
+			--format=*)
+				_arg_format="${_key##--format=}"
 				;;
 			-j|--jwt-token)
 				test $# -lt 2 && die "Missing value for the optional argument '$_key'." 1
@@ -349,6 +360,7 @@ TARGET_MB=$_arg_target_mb
 TARGET_BYTES=$((($TARGET_MB) * 1024 * 1024))
 TARGET_BITRATE=$(($TARGET_BYTES * 8 / $RECORDING_LENGTH))
 TARGET_BITRATE_PLUS_SMEAR=$(($TARGET_BYTES * 8 / $RECORDING_LENGTH_PLUS_SMEAR))
+VIDEO_FORMAT=$_arg_format
 VNC_PORT=$_arg_vnc
 # Data dir is used to pass in a pre-downloaded data dir to replay
 DATA_DIR=$_arg_data_dir
@@ -361,6 +373,12 @@ if [ -n "$JWT_AUTH" ]; then
 	ROUTE_INFO=$(curl --fail -H "Authorization: JWT $JWT_AUTH" https://api.commadotai.com/v1/route/$URL_ROUTE/)
 else
 	ROUTE_INFO=$(curl --fail https://api.commadotai.com/v1/route/$URL_ROUTE/)
+fi
+
+# Check if format is valid
+if [ "$VIDEO_FORMAT" != "h264" ] && [ "$VIDEO_FORMAT" != "hevc" ]; then
+	echo "Invalid format $VIDEO_FORMAT. Must be h264 or hevc."
+	exit 1
 fi
 
 ROUTE_INFO_GIT_REMOTE=$(echo "$ROUTE_INFO" | jq -r '.git_remote')
@@ -539,15 +557,21 @@ DRAW_TEXT_FILTER="drawtext=textfile=/tmp/overlay.txt:reload=1:fontcolor=white:fo
 
 BUFSIZE=$(($TARGET_BITRATE * 2))
 
+# Set vcodec to hevc if format is hevc
+VCODEC="h264_nvenc"
+if [ "$VIDEO_FORMAT" = "hevc" ]; then
+	VCODEC="hevc_nvenc"
+fi
+
 if [ "$NVIDIA_DIRECT_ENCODING" = "on" ]; then
 	# Directly encode with nvidia hardware to the target file
 	# Good for setups where the video renders fast.
-	eatmydata ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec h264_nvenc -preset llhp -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -bufsize "$BUFSIZE" -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_OUTPUT"
+	eatmydata ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0 -ss "$SMEAR_AMOUNT" -vcodec $VCODEC -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -bufsize "$BUFSIZE" -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH" "$VIDEO_OUTPUT"
 	cleanup
 elif [ "$NVIDIA_HYBRID_ENCODING" = "on" ]; then
 	# Directly encode with nvidia hardware to the target file with the smear amount also recorded.
 	# Then lop it off with copy mode.
-	eatmydata ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0  -vcodec h264_nvenc -preset llhp -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -bufsize "$BUFSIZE" -g 20 -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
+	eatmydata ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0  -vcodec $VCODEC -b:v "$TARGET_BITRATE" -maxrate "$TARGET_BITRATE" -bufsize "$BUFSIZE" -g 20 -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
 	cleanup
 	ffmpeg -y -ss "$SMEAR_AMOUNT" -i "$VIDEO_RAW_OUTPUT" -vcodec copy -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 elif [ "$NVIDIA_FAST_ENCODING" = "on" ]; then
@@ -556,7 +580,7 @@ elif [ "$NVIDIA_FAST_ENCODING" = "on" ]; then
 	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0  -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
 	# The setup is no longer needed. Just transcode now.
 	cleanup
-	ffmpeg -hwaccel auto -i "$VIDEO_RAW_OUTPUT" -ss "$SMEAR_AMOUNT" -c:v h264_nvenc -b:v "$TARGET_BITRATE" -y -pix_fmt yuv420p -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
+	ffmpeg -hwaccel auto -i "$VIDEO_RAW_OUTPUT" -ss "$SMEAR_AMOUNT" -c:v $VCODEC -b:v "$TARGET_BITRATE" -y -pix_fmt yuv420p -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 else
 	# Complete CPU rendering
 	ffmpeg -framerate "$RECORD_FRAMERATE" -video_size 1920x1080 -f x11grab -draw_mouse 0 -i :0.0  -vcodec libx264rgb -crf 0 -preset ultrafast -r 20 -filter:v "setpts=$SPEEDHACK_AMOUNT*PTS,scale=1920:1080,$DRAW_TEXT_FILTER" -y -t "$RECORDING_LENGTH_PLUS_SMEAR" "$VIDEO_RAW_OUTPUT"
