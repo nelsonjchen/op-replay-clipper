@@ -1,4 +1,3 @@
-# Temporary pin until the dust settles
 FROM ubuntu:22.04 AS base
 
 COPY ./common/setup.sh /setup.sh
