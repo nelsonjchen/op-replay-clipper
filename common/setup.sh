@@ -54,10 +54,6 @@ export PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
     rm -rf /var/lib/apt/lists/* && \
     rm -rf /tmp/*
 
-# Replace "constexpr int MIN_SEGMENTS_CACHE = 5;" smaller amount
-# in tools/replay/replay.h as for some reason the argument does not appear to be working
-sed -i 's/constexpr int MIN_SEGMENTS_CACHE = 5;/constexpr int MIN_SEGMENTS_CACHE = 3;/g' tools/replay/replay.h
-
 scons -j$(nproc) tools/replay/replay selfdrive/ui/ui
 
 # Only copy the folders we need from the build repo to /home/batman/openpilot_min
