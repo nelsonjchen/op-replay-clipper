@@ -27,6 +27,8 @@ apt-get update -y && apt-get install -y \
     `# Missing in the base cog image` \
     sudo \
     git-lfs \
+    wget \
+    tzdata \
     git
 
 # Download and install libicu66

@@ -1,6 +1,11 @@
 services:
   dev:
-    shm_size: '64mb'
+    shm_size: '4096mb'
+    build:
+      context: ../
+      target: clipper
+      args:
+        - BASE_IMAGE=nvcr.io/nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
     deploy:
       resources:
         reservations:
