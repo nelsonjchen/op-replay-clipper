@@ -401,46 +401,6 @@ if [ -n "$JWT_AUTH" ]; then
     echo "{\"access_token\": \"$JWT_AUTH\"}" > "$HOME"/.comma/auth.json
 fi
 
-# For reference for high frequency services
-UI_SERVICES="modelV2,\
-controlsState,\
-liveCalibration,\
-radarState,\
-deviceState,\
-roadCameraState,\
-pandaStates,\
-carParams,\
-driverMonitoringState,\
-carState,\
-liveLocationKalman,\
-driverStateV2,\
-wideRoadCameraState,\
-managerState,\
-navInstruction,\
-navRoute,\
-uiPlan"
-
-HIGH_FREQ_SERVICES="modelV2,\
-controlsState,\
-carState,\
-uiPlan"
-
-# Accelerate certain msgq queues with /dev/shm
-# Applicable to OP compiled to use msgq at /var/tmp
-pushd /var/tmp
-# Blow away everything in /dev/shm/op as it is where accelerated msgq queues are stored
-rm -rf /dev/shm/op/* || true
-mkdir -p /dev/shm/op || true
-# Vision
-ln -s /dev/shm/op/visionipc_camerad_0 visionipc_camerad_0 || true
-ln -s /dev/shm/op/visionipc_camerad_2 visionipc_camerad_2 || true
-# For each HIGH_FREQ_SERVICES, create a symlink to /dev/shm/<service_name>
-# ln -s /dev/shm/<service_name> <service_name> || true
-for service in ${HIGH_FREQ_SERVICES//,/ }; do
-    ln -s /dev/shm/op/"$service" "$service" || true
-done
-popd
-
 # Start processes
 if [ "$NVIDIA_HARDWARE_RENDERING" = "on" ]; then
 	# Does not work on WSL2

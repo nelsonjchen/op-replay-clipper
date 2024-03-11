@@ -1,4 +1,5 @@
-FROM ubuntu:22.04 AS base
+ARG BASE_IMAGE=ubuntu:22.04
+FROM $BASE_IMAGE AS base
 
 COPY ./common/setup.sh /setup.sh
 
