@@ -64,7 +64,7 @@ find . -type f -exec sed -i 's/#define DEFAULT_SEGMENT_SIZE (10 \* 1024 \* 1024)
 # in tools/replay/replay.h as for some reason the argument does not appear to be working
 sed -i 's/constexpr int MIN_SEGMENTS_CACHE = 5;/constexpr int MIN_SEGMENTS_CACHE = 3;/g' tools/replay/replay.h
 
-scons -j8 tools/replay/replay selfdrive/ui/ui
+scons -j$(nproc) tools/replay/replay selfdrive/ui/ui
 
 # Only copy the folders we need from the build repo to /home/batman/openpilot_min
 mkdir -p /home/batman/openpilot_min
