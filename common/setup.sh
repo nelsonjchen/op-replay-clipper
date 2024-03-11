@@ -29,6 +29,12 @@ apt-get update -y && apt-get install -y \
     git-lfs \
     git
 
+# Download and install libicu66 for Ubuntu jammy
+# http://security.ubuntu.com/ubuntu/pool/main/i/icu/libicu66_66.1-2ubuntu2.1_amd64.deb
+wget -q -O /tmp/libicu66_66.1-2ubuntu2.1_amd64.deb http://security.ubuntu.com/ubuntu/pool/main/i/icu/libicu66_66.1-2ubuntu2.1_amd64.deb
+dpkg -i /tmp/libicu66_66.1-2ubuntu2.1_amd64.deb
+rm -f /tmp/libicu66_66.1-2ubuntu2.1_amd64.deb
+
 # Setup git lfs
 git lfs install
 
