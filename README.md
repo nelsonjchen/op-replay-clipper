@@ -50,7 +50,7 @@ We assume you've already paired your device and have access to the device with y
 3. Now I need to select the portion of the route I want to clip. Here's a video of what that UI looks like
    * See how I drag and select a portion.
    * You can see me make a mistake but pressing the left arrow (←) in the top-left corner lets me re-expand and try to trim again.
-   * The clipper has a maximum length of 5 minutes. Try to select a portion that's less than that. Try to aim for 20 seconds to a minute though; everybody else has short attention spans.
+   * The clipper has a maximum length of 5 minutes. Try to select a portion that's less than that. Try to aim for 20 seconds to a minute though as everybody else has short attention spans.
    * Video:
 
      https://github.com/commaai/openpilot/assets/5363/504665de-9222-4e6b-b090-c26cdcc7137a
@@ -113,8 +113,8 @@ https://github.com/nelsonjchen/op-replay-clipper/assets/5363/9f845b8d-e4aa-4ab3-
   With the car on, soon after an incident when it is safe:
   1. Tap the screen to reveal a bookmark flag button if it isn't there already.
      * ![button_flag](https://github.com/nelsonjchen/op-replay-clipper/assets/5363/d0cf9372-78ad-4a06-9128-b6fdb6f5394c)
-  2. Tap that icon.  
-  3. This will result in small slivers of yellow in the timeline you can quickly hone in on. 
+  2. Tap that icon.
+  3. This will result in small slivers of yellow in the timeline you can quickly hone in on.
      * ![flagged](https://github.com/nelsonjchen/op-replay-clipper/assets/5363/15a3f611-ffb8-47de-b917-1988a0f6f66a)
   4. With regards to the clipper usage, during the process in which you are honing in on the start and of the clip, your upper bound of the clip will nearly all the time be at that yellow so your first or early drags to hone down should basically top out there and be very generous with the start time before the yellow.
 
