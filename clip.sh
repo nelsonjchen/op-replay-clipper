@@ -444,11 +444,8 @@ popd
 # Start processes
 if [ "$NVIDIA_HARDWARE_RENDERING" = "on" ]; then
 	# Does not work on WSL2
-	# GPU_BOARD=$(nvidia-xconfig --query-gpu-info | grep -i 'Name' | awk -F ': ' '{print $2}')
-	# HACK: Hardcoded for now to workaround nvidia-xconfig not working on Replicate
-	GPU_BOARD="Tesla T4"
-	# GPU_PCI=$(nvidia-xconfig --query-gpu-info | grep BusID | awk '{print $4}')
-	GPU_PCI="PCI:0:5:0"
+	GPU_BOARD=$(nvidia-smi --query-gpu=name --format=csv,noheader)
+	GPU_PCI=$(nvidia-smi --query-gpu=pci.bus_id --format=csv,noheader | awk -F ':' '{printf("PCI:%d:%d:0", "0x"$2, "0x"$3)}')
 
 	mkdir -p /etc/X11
 cat <<EOT > /etc/X11/xorg.conf
