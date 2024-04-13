@@ -39,7 +39,7 @@ predict-url-wide-new-format:
 # This is a private URL
 predict-url-ui-new-format:
 	./cog/generate.sh
-	../cog/cog predict -i route="https://connect.comma.ai/fe18f736cb0d7813/1710110122129/1710110166074" -i renderType=ui
+	../cog/cog predict -i route="https://connect.comma.ai/fe18f736cb0d7813/1712798688347/1712798721553" -i renderType=ui
 
 predict-wide:
 	./cog/generate.sh
