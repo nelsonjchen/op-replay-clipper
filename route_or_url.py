@@ -138,10 +138,8 @@ def parseRouteOrUrl(
     for route_info in json:
         start_in_route = False
         end_in_route = False
-        # Assume the first segment_start_time is the start of the route
-        route_start_time = route_info["segment_start_times"][0]
-        # Assume the last segment_end_time is the end of the route
-        route_end_time = route_info["segment_end_times"][-1]
+        route_start_time = route_info["start_time_utc_millis"]
+        route_end_time = route_info["end_time_utc_millis"]
         # Check if the start time is in the route
         if start_time >= route_start_time and start_time <= route_end_time:
             start_in_route = True
@@ -163,10 +161,17 @@ def parseRouteOrUrl(
     # Get the route name
     route_name = matched_route["fullname"]
     # Compute the start seconds
+
     start_seconds = (start_time - route_start_time) // 1000
     # Compute the length seconds
     length_seconds = (end_time - start_time) // 1000
 
+    print(f"Route: {route_name}")
+    print(f"Matched Route: {matched_route}")
+    print(f"Start Seconds: {start_seconds}")
+    print(f"Start Time: {start_time}")
+    print(f'Route Start Time: {route_start_time}')
+    print(f"Length Seconds: {length_seconds}")
     # Return the parsed route
     return ParsedRouteOrURL(route_name, start_seconds, length_seconds)
 
