@@ -26,6 +26,7 @@ apt-get update -y && apt-get install -y \
     net-tools \
     `# Missing in the base cog image` \
     sudo \
+    wget \
     git-lfs \
     git
 
