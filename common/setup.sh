@@ -28,6 +28,7 @@ apt-get update -y && apt-get install -y \
     sudo \
     wget \
     git-lfs \
+    tzdata \
     git
 
 # Download and install libicu66 for Ubuntu jammy
