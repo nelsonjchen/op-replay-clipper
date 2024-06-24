@@ -60,8 +60,8 @@ We assume you've already paired your device and have access to the device with y
       * ![image](https://github.com/commaai/openpilot/assets/5363/ce997a7b-9a93-4f67-944b-95d09ae68b02)
    * Make sure the route has "Public access" under "More info" turned on. You can set this to off after you're done with clip making.
       * ![image](https://github.com/commaai/openpilot/assets/5363/6a55c181-d93f-4db5-9513-ff6a1d370757)
-5. Copy the URL in the address bar of your browser to your clipboard. This is not the segment ID underneath the More Info button. In the case above, I've copied "https://connect.comma.ai/fe18f736cb0d7813/1698203405863/1698203460702" to my clipboard.
-   * When you were adjusting the selected portion of the route in a previous step step, it was changing those last two numbers in the browser address bar URL which is the start time and end time respectively.
+5. Copy the URL in the address bar of your browser to your clipboard. This is not the segment ID underneath the More Info button. In the case above, I've copied an old URL of "https://connect.comma.ai/fe18f736cb0d7813/1698203405863/1698203460702" to my clipboard. Note: comma has changed the URL format since this step was originally written. New URLs are like "https://connect.comma.ai/fe18f736cb0d7813/000001bb--4c0c0efba9/21/90".
+   * When you were adjusting the selected portion of the route in a previous step, it was changing those last two numbers in the browser address bar URL which is the start time and end time respectively.
    * "Share This Route" button if it is present will work too. Choose "copy to clipboard" or similar.
 6. Visit https://replicate.com/nelsonjchen/op-replay-clipper
 7. Under `route`, paste the URL you copied in the previous step.
