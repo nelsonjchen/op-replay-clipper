@@ -15,18 +15,55 @@ class ParsedRouteOrURL:
     start_seconds: int
     length_seconds: int
 
+# These have a dash in the 2nd part and 4 parts
+# https://connect.comma.ai/a2a0ccea32023010/2023-07-27--13-01-19/7/124
+# Notably, instead of looking at routes_segments, look at the route itself
+# curl https://api.commadotai.com/v1/route/99c94dc769b5d96e\|2019-05-17--17-31-58/
+def parseRouteRelativeUrl(
+    route_or_url: str,
+    jwt_token: str = None,
+) -> ParsedRouteOrURL:
+    # Parse the URL
+    parsed_url = urlparse(route_or_url)
+    # Check the hostname
+    if parsed_url.hostname != "connect.comma.ai":
+        raise ValueError("Invalid hostname in URL")
+    # Check the path
+    path_parts = parsed_url.path.split("/")
+    # There should be five parts
+    if len(path_parts) != 5:
+        raise ValueError("Invalid path in URL")
+    # The first part should be the dongle ID
+    dongle_id = path_parts[1]
+    # The second part should be the route name in url slash format
+    segment_name = path_parts[2]
+    internal_route_name = f"{dongle_id}|{segment_name}"
+    # The third part should be the start time relative to the start time of the route
+    start_time = int(path_parts[3])
+    # The fourth part should be end time relative to the start time of the route
+    end_time = int(path_parts[4])
 
-def parseRouteOrUrl(
+
+    start_seconds = start_time
+    # Compute the length seconds
+    length_seconds = (end_time - start_time)
+
+    print(f"Route: {internal_route_name}")
+    print(f"Matched Route: {internal_route_name}")
+    print(f"Start Seconds: {start_seconds}")
+    print(f"Start Time: {start_time}")
+    print(f"Length Seconds: {length_seconds}")
+    # Return the parsed route
+    return ParsedRouteOrURL(internal_route_name, start_seconds, length_seconds)
+
+# These have no dash in the 2nd part and 3 parts
+# https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496
+def parseAbsoluteTimeUrl(
     route_or_url: str,
     start_seconds: int,
     length_seconds: int,
     jwt_token: str = None,
 ) -> ParsedRouteOrURL:
-    # if the route_or_url is a route, just return it
-    # Assume that a route is a string with a pipe in it
-    if "|" in route_or_url:
-        return ParsedRouteOrURL(route_or_url, start_seconds, length_seconds)
-
     # Check if the URL is like this:
     # https://connect.comma.ai/a2a0ccea32023010/1690488084000/1690488085000
     # * Hostname is connect.comma.ai
@@ -175,6 +212,41 @@ def parseRouteOrUrl(
     # Return the parsed route
     return ParsedRouteOrURL(route_name, start_seconds, length_seconds)
 
+
+def parseRouteOrUrl(
+    route_or_url: str,
+    start_seconds: int,
+    length_seconds: int,
+    jwt_token: str = None,
+) -> ParsedRouteOrURL:
+    # if the route_or_url is a route, just return it
+    # Assume that a route is a string with a pipe in it
+    if "|" in route_or_url:
+        return ParsedRouteOrURL(route_or_url, start_seconds, length_seconds)
+
+    # Check if the URL is an absolute time URL
+    # Parse URL and check if it's a valid URL
+    parsed_url = urlparse(route_or_url)
+    url_parts = parsed_url.path.split("/")
+
+    # Check if the host is connect.comma.ai
+    valid_hostname = parsed_url.hostname == "connect.comma.ai"
+    if not valid_hostname:
+        raise ValueError("Invalid hostname in URL")
+    if not parsed_url.hostname == "connect.comma.ai":
+        raise ValueError("Invalid hostname in URL")
+
+    # Check if the path has 3 parts
+    if len(url_parts) == 4 and "-" not in url_parts[2]:
+        return parseAbsoluteTimeUrl(route_or_url, start_seconds, length_seconds, jwt_token)
+    # Check if the path has 4 parts and a dash in the 2nd part
+    if len(url_parts) == 5 and "-" in url_parts[2]:
+        return parseRouteRelativeUrl(route_or_url, jwt_token)
+
+    print("Number of url parts: ", len(url_parts))
+
+    # If the URL is not an absolute time URL, throw an exception
+    raise ValueError("Invalid URL")
 
 # Make an argparse test for this
 if __name__ == "__main__":
