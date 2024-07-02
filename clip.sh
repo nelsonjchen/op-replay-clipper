@@ -389,6 +389,9 @@ ROUTE_INFO_GIT_DIRTY=$(echo "$ROUTE_INFO" | jq -r '.git_dirty')
 # Get platform of route
 ROUTE_INFO_PLATFORM=$(echo "$ROUTE_INFO" | jq -r '.platform')
 
+# Get date since it's no longer inside the segment id
+ROUTE_INFO_START_TIME=$(echo "$ROUTE_INFO" | jq -r '.start_time')
+
 # Render speed
 # RECORD_FRAMERATE = SPEEDHACK_AMOUNT * 20
 SPEEDHACK_AMOUNT=$_arg_speedhack_ratio
@@ -493,7 +496,7 @@ else
 fi
 
 # Generate and start overlay
-CLIP_DESC="Segment ID: $DISPLAYED_SEGMENT_ID, Starting Second: $STARTING_SEC, Clip Length: $RECORDING_LENGTH, \
+CLIP_DESC="Segment ID: $DISPLAYED_SEGMENT_ID, Route Time: $ROUTE_INFO_START_TIME, Starting Second: $STARTING_SEC, Clip Length: $RECORDING_LENGTH, \
 $ROUTE_INFO_GIT_REMOTE, $ROUTE_INFO_GIT_BRANCH, $ROUTE_INFO_GIT_COMMIT, Dirty: \
 $ROUTE_INFO_GIT_DIRTY, $ROUTE_INFO_PLATFORM"
 echo -n "$CLIP_DESC" > /tmp/overlay.txt
