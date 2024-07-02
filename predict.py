@@ -184,7 +184,16 @@ class Predictor(BasePredictor):
                     if proc_output:
                         print(proc_output)
             except KeyboardInterrupt:
-                process.kill()
+                try:
+                    process.kill()
+                except Exception as e:
+                    print(f"Failed to kill the process: {e}")
+                try:
+                    subprocess.run(["tmux", "kill-session", "-t", "clipper"], check=True)
+                except subprocess.CalledProcessError as e:
+                    print(f"Failed to kill the tmux session 'clipper': {e}")
+                except Exception as e:
+                    print(f"An error occurred while trying to kill the tmux session 'clipper': {e}")
                 raise
 
             return Path("./shared/cog-clip.mp4")
