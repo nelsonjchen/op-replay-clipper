@@ -73,6 +73,7 @@ We assume you've already paired your device and have access to the device with y
     * Here's a generated clip with the `wide` rendering type with no UI:
 
       https://github.com/commaai/openpilot/assets/5363/8bd91642-51ff-4de9-87d2-31e770c64542
+    * If you have issues downloading the clip with the "Download" button in Replicate's UI, click on the vertical ellipsis button or whatever is available in your browser for video in the lower right corner of the video and download via that. This is a [strange issue](https://github.com/nelsonjchen/op-replay-clipper/issues/77) in Replicate's UI that this clipper can't do anything about.
 
 ## Gallery
 
