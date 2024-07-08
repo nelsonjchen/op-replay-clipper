@@ -5,7 +5,7 @@
 # ARG_OPTIONAL_SINGLE([start-seconds],[s],[Seconds to start at],[60])
 # ARG_OPTIONAL_SINGLE([length-seconds],[l],[Clip length],[30])
 # ARG_OPTIONAL_SINGLE([target-mb],[m],[Target converted file size in MB],[50])
-# ARG_OPTIONAL_SINGLE([format],[],[h264 or hevc],[h264])
+# ARG_OPTIONAL_SINGLE([format],[],[h264 or hevc],[hevc])
 # ARG_OPTIONAL_SINGLE([jwt-token],[j],[JWT Auth token to use (get token from https://jwt.comma.ai)])
 # ARG_OPTIONAL_SINGLE([smear-amount],[],[Amount of seconds to smear the clip start by before recording starts],[3])
 # ARG_OPTIONAL_SINGLE([ntfysh],[n],[ntfy.sh topic to post to when clip has completed rendering])
@@ -52,7 +52,7 @@ _positionals=()
 _arg_start_seconds="60"
 _arg_length_seconds="30"
 _arg_target_mb="50"
-_arg_format="h264"
+_arg_format="hevc"
 _arg_jwt_token=
 _arg_smear_amount="3"
 _arg_ntfysh=
@@ -77,7 +77,7 @@ print_help()
 	printf '\t%s\n' "-s, --start-seconds: Seconds to start at (default: '60')"
 	printf '\t%s\n' "-l, --length-seconds: Clip length (default: '30')"
 	printf '\t%s\n' "-m, --target-mb: Target converted file size in MB (default: '50')"
-	printf '\t%s\n' "--format: h264 or hevc (default: 'h264')"
+	printf '\t%s\n' "--format: h264 or hevc (default: 'hevc')"
 	printf '\t%s\n' "-j, --jwt-token: JWT Auth token to use (get token from https://jwt.comma.ai) (no default)"
 	printf '\t%s\n' "--smear-amount: Amount of seconds to smear the clip start by before recording starts (default: '3')"
 	printf '\t%s\n' "-n, --ntfysh: ntfy.sh topic to post to when clip has completed rendering (no default)"
