@@ -24,7 +24,7 @@ class Predictor(BasePredictor):
     def predict(
         self,
         renderType: str = Input(
-            description="UI renders with UI. Forward, Wide, and Driver process the raw, segmented, and low-compatibility HEVC video files into a portable H.264 MP4 file, are fast transcodes, and are great for quick previews. 360 requires viewing/uploading the video file in VLC or YouTube to pan around in a 🌐 sphere. Forward Upon Wide roughly overlays Forward video on Wide video. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video.",
+            description="UI renders with UI. Forward, Wide, and Driver process the raw, segmented, and low-compatibility HEVC video files into a portable HEVC MP4 file, are fast transcodes, and are great for quick previews. 360 requires viewing/uploading the video file in VLC or YouTube to pan around in a 🌐 sphere. Forward Upon Wide roughly overlays Forward video on Wide video. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video.",
             choices=[
                 "ui",
                 "forward",
