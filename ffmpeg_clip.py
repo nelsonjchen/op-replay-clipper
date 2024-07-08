@@ -184,8 +184,7 @@ def make_ffmpeg_clip(
             "+faststart",
         ]
         if nvidia_hardware_rendering:
-            # Use H264 for maximum Discord compatibility
-            command += ["-c:v", "h264_nvenc"]
+            command += ["-c:v", "hevc_nvenc"]
 
         # Target bitrate with maxrate and bufsize
         command += [
