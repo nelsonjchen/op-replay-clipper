@@ -37,7 +37,7 @@ Replicate is an ultra-low-cost pay-as-you-go compute platform for running softwa
 ### Non-Requirements
 
 - A comma lite or prime subscription.
-   * Clipping was a comma connect prime-only feature but was removed for refurbishment. This is a free and open source tool to do the same.
+   * Clipping was a comma connect prime-only feature but was [removed for refurbishment](https://discord.com/channels/469524606043160576/819046761287909446/1163326961276440616). This is a free and open source tool to do the same.
 
 ## Quick Usage
 
