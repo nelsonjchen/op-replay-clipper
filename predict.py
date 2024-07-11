@@ -78,6 +78,14 @@ class Predictor(BasePredictor):
         fileSize: int = Input(
             description="Rough size of clip output in MB.", ge=10, le=100, default=25
         ),
+        fileFormat: str = Input(
+            description="H.264 or HEVC (HEVC is 50-60 percent higher quality for its filesize but may not be compatible with all web browsers or devices).",
+            choices=[
+                "h264",
+                "hevc",
+            ],
+            default="hevc",
+        ),
         jwtToken: str = Input(
             description='Optional JWT Token from https://jwt.comma.ai for non-"Public access" routes. ⚠️ DO NOT SHARE THIS TOKEN WITH ANYONE as https://jwt.comma.ai generates JWT tokens valid for 1 year and they are irrevocable. Please use the safer, optionally temporary, more granular, and revocable "Public Access" toggle option on comma connect if possible. For more info, please see https://github.com/nelsonjchen/op-replay-clipper#jwt-token-input .',
             default="",
@@ -150,6 +158,7 @@ class Predictor(BasePredictor):
                 f"--smear-amount={smearAmount}",
                 f"--speedhack-ratio={speedhackRatio}",
                 f"--target-mb={fileSize}",
+                f"--format={fileFormat}",
                 f"--nv-hybrid-encoding",
                 f"--data-dir={os.path.abspath(data_dir)}",
                 f"--output=cog-clip.mp4",
@@ -232,6 +241,7 @@ class Predictor(BasePredictor):
                 start_seconds=startSeconds,
                 length_seconds=lengthSeconds,
                 target_mb=fileSize,
+                format=fileFormat,
                 nvidia_hardware_rendering=True,
                 forward_upon_wide_h=forwardUponWideH,
                 output="./shared/cog-clip.mp4",
