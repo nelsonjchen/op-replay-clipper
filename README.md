@@ -16,6 +16,7 @@ The clipper can produce clips of:
   * Rendered from Wide and Driver Camera. Uploadable to YouTube, viewable in VLC, and accepted by any video players or web services that take 360 videos.
 * Forward Upon Wide and 360 Forward Upon Wide
   * Forward video is overlayed atop the wide video. Not perfect, but usable.
+  * 360 Forward Upon Wide scales and renders the final result at a higher resolution to assist in reframing the 360 video to a normal video if that's what you want.
 
 All clip options have a configurable target file size option as platforms like Discord limit file upload sizes.
 
@@ -138,6 +139,20 @@ Tokens can be obtained from visiting https://jwt.comma.ai/ and logging in with t
 ### Replicate can queue up jobs to run in parallel
 
 After you run something, just use your browser to "Duplicate" the tab, change the settings for the next thing, and press Run. Replicate will queue up jobs and if necessary, even scale up to run multiple jobs in parallel. Very cool!
+
+### Reframing 360 and 360 Forward Upon Wide to a normal video
+
+360 videos are cool but sometimes you want a normal video pointing at a specific direction or directions from that data.
+
+https://github.com/nelsonjchen/op-replay-clipper/assets/5363/b63b0288-4483-44f8-aca4-bd43c33702d1
+
+With 360 videos, it is possible to reframe the 360 video so it is a non-360 video to a normal video pointing at a specific direction.
+
+The best current way to do this is to use a 360 video editor like [Insta360 Studio](https://www.insta360.com/download/insta360-onex) to reframe the video to a normal video. Simply load the 360 video into the editor and reframe the video to the desired direction.
+
+There may be alternative software that'll do it and I will take pull requests to add them to this README, but this is the best way I know how to do it and it is free.
+
+The 360 Forward Upon Wide rendering option scales input videos and renders the final result in a much higher 8K resolution (to the max, actually) to assist reframing with a high resolution forward video but the normal 360 option just glues the videos together. This option affects the rendering speed which you may want to consider.
 
 ## Credits
 
