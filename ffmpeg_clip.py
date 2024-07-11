@@ -43,6 +43,7 @@ def make_ffmpeg_clip(
     start_seconds: int,
     length_seconds: int,
     target_mb: int,
+    format: str,
     nvidia_hardware_rendering: bool,
     forward_upon_wide_h: float,
     output: str,
@@ -60,6 +61,9 @@ def make_ffmpeg_clip(
         raise ValueError(f"Invalid data_dir: {data_dir}")
     route = re.sub(r"--\d+$", "", route_or_segment)
     route_date = re.sub(r"^[^|]+\|", "", route)
+
+    if format not in ["h264", "hevc"]:
+        raise ValueError(f"Invalid format: {format}")
 
     # Target bitrate in bits per second (bps). Try to get close to the target file size.
     target_bps = (target_mb) * 8 * 1024 * 1024 // length_seconds
@@ -126,8 +130,11 @@ def make_ffmpeg_clip(
             "+faststart",
         ]
         if nvidia_hardware_rendering:
-            # Use H264 for maximum Discord compatibility
-            command += ["-c:v", "h264_nvenc"]
+            if format == "h264":
+                command += ["-c:v", "h264_nvenc"]
+            elif format == "hevc":
+                command += ["-c:v", "hevc_nvenc"]
+                command += ["-vtag", "hvc1"]
 
         # Target bitrate with maxrate and bufsize
         command += [
@@ -184,7 +191,11 @@ def make_ffmpeg_clip(
             "+faststart",
         ]
         if nvidia_hardware_rendering:
-            command += ["-c:v", "hevc_nvenc"]
+            if format == "h264":
+                command += ["-c:v", "h264_nvenc"]
+            elif format == "hevc":
+                command += ["-c:v", "hevc_nvenc"]
+                command += ["-vtag", "hvc1"]
 
         # Target bitrate with maxrate and bufsize
         command += [
@@ -275,9 +286,11 @@ def make_ffmpeg_clip(
             ]
 
         if nvidia_hardware_rendering:
-            # Use HEVC encoding for 360 since people aren't looking at these
-            # directly in Discord anyway.
-            command += ["-c:v", "hevc_nvenc"]
+            if format == "h264":
+                command += ["-c:v", "h264_nvenc"]
+            elif format == "hevc":
+                command += ["-c:v", "hevc_nvenc"]
+                command += ["-vtag", "hvc1"]
 
         # Target bitrate with maxrate and bufsize
         command += [
