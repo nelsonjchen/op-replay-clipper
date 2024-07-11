@@ -554,6 +554,14 @@ else
 	ffmpeg -y -i "$VIDEO_RAW_OUTPUT" -ss "$SMEAR_AMOUNT" -c:v libx264 -b:v "$TARGET_BITRATE" -pix_fmt yuv420p -preset medium -movflags +faststart -f MP4 "$VIDEO_OUTPUT"
 fi
 
+# If the codec is hevc, make sure to tag it as such so that it's compatible on Apple devices
+if [ "$VIDEO_FORMAT" = "hevc" ]; then
+	# Move the output to a temporary file
+	mv "$VIDEO_OUTPUT" "$VIDEO_OUTPUT.tmp"
+	ffmpeg -i "$VIDEO_OUTPUT.tmp" -c copy -vtag hvc1 "$VIDEO_OUTPUT"
+	rm "$VIDEO_OUTPUT.tmp"
+fi
+
 ctrl_c
 
 RENDER_COMPLETE_MESSAGE="Finished rendering $SEGMENT_ID to $VIDEO_OUTPUT."
