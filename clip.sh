@@ -558,7 +558,7 @@ fi
 if [ "$VIDEO_FORMAT" = "hevc" ]; then
 	# Move the output to a temporary file
 	mv "$VIDEO_OUTPUT" "$VIDEO_OUTPUT.tmp"
-	ffmpeg -i "$VIDEO_OUTPUT.tmp" -c copy -vtag hvc1 "$VIDEO_OUTPUT"
+	ffmpeg -i "$VIDEO_OUTPUT.tmp" -c copy -movflags +faststart -f MP4 -vtag hvc1 "$VIDEO_OUTPUT"
 	rm "$VIDEO_OUTPUT.tmp"
 fi
 
