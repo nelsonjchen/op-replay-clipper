@@ -150,6 +150,8 @@ With 360 videos, it is possible to reframe the 360 video so it is a non-360 vide
 
 The best current way to do this is to use a 360 video editor like [Insta360 Studio](https://www.insta360.com/download/insta360-onex) to reframe the video to a normal video. Simply load the 360 video into the editor and reframe the video to the desired direction.
 
+![insta360](https://github.com/nelsonjchen/op-replay-clipper/assets/5363/dece938d-e575-48f7-b64e-659464800bc7)
+
 There may be alternative software that'll do it and I will take pull requests to add them to this README, but this is the best way I know how to do it and it is free.
 
 The 360 Forward Upon Wide rendering option scales input videos and renders the final result in a much higher 8K resolution to assist reframing with a high resolution forward video but the normal 360 option just glues the videos together. This option affects the rendering speed which you may want to consider.
