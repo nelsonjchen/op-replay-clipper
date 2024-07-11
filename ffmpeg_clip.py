@@ -280,7 +280,7 @@ def make_ffmpeg_clip(
                 "-ss",
                 str(start_seconds_relative),
                 "-filter_complex",
-                f"[2:v]scale=iw/4.5:ih/4.5,format=yuva420p,colorchannelmixer=aa=1[front];[1:v][front]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/{forward_upon_wide_h}[fuw];[0:v]pad=iw:ih+290:0:290:color=#160000,crop=iw:1208[driver];[driver][fuw]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
+                f"[2:v]scale=iw/2.25:ih/2.25,format=yuva420p,colorchannelmixer=aa=1[front];[1:v]scale=iw*2:ih*2[wide];[wide][front]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/{forward_upon_wide_h}[fuw];[0:v]scale=iw*2:ih*2,pad=iw:ih+290:0:290:color=#160000,crop=iw:2416[driver];[driver][fuw]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
                 "-map",
                 "[vout]",
             ]
