@@ -144,7 +144,7 @@ After you run something, just use your browser to "Duplicate" the tab, change th
 
 360 videos are cool but sometimes you want a normal video pointing at a specific direction or directions from that data.
 
-https://github.com/nelsonjchen/op-replay-clipper/assets/5363/b63b0288-4483-44f8-aca4-bd43c33702d1
+https://github.com/user-attachments/assets/08b51cee-f357-4afc-87f2-4c4d0f6aedba
 
 With 360 videos, it is possible to reframe the 360 video so it is a non-360 video to a normal video pointing at a specific direction.
 
