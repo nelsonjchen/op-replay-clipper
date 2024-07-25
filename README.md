@@ -118,7 +118,7 @@ https://github.com/nelsonjchen/op-replay-clipper/assets/5363/9f845b8d-e4aa-4ab3-
   2. Tap that icon.
   3. This will result in small slivers of yellow in the timeline you can quickly hone in on.
      * ![flagged](https://github.com/nelsonjchen/op-replay-clipper/assets/5363/15a3f611-ffb8-47de-b917-1988a0f6f66a)
-  4. With regards to the clipper usage, during the process in which you are honing in on the start and of the clip, your upper bound of the clip will nearly all the time be at that yellow so your first or early drags to hone down should basically top out there and be very generous with the start time before the yellow.
+  4. With regards to the clipper usage, during the process in which you are honing in on the start and end boundaries of the clip, your upper bound of the clip will nearly all the time be at that yellow so your first or early drags to hone down should basically top out there and be very generous with the start time before the yellow.
 
 ## Advanced Usage
 
