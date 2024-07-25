@@ -127,7 +127,7 @@ https://github.com/nelsonjchen/op-replay-clipper/assets/5363/9f845b8d-e4aa-4ab3-
 There is a JWT Token input field.
 This is for users who do not wish to set a route to be "Public access".
 There is a major catch though.
-The JWT Token is valid for 1 year and is irrevocable in any way.
+The JWT Token is valid for 90 days and is irrevocable in any way.
 Password changes from SSO account logins like in Comma Connect will not invalidate the token.
 Addtionally, it is not granular, meaning it will give access to all routes for the user if leaked.
 
