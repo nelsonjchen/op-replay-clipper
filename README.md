@@ -131,7 +131,7 @@ The JWT Token is valid for 90 days and is irrevocable in any way.
 Password changes from SSO account logins like in Comma Connect will not invalidate the token.
 Addtionally, it is not granular, meaning it will give access to all routes for the user if leaked.
 
-If you share a JWT Token with anyone, they will be able to access all your routes for 1 year with no possibility of revocation from you.
+If you share a JWT Token with anyone, they will be able to access all your routes for 90 days with no possibility of revocation from you.
 This is why it's not recommended to use this feature unless you know what you're doing compared to the "Public access" method which is much easier to revoke access to.
 
 Tokens can be obtained from visiting https://jwt.comma.ai/ and logging in with the same comma connect account type. Tokens should be about 181 characters or longer.
