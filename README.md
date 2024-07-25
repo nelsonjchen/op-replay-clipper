@@ -11,9 +11,9 @@ The clipper can produce clips of:
 * comma.ai openpilot UI (including desired path, lane lines, modes, etc.)
   * Origin of codebase, Segment ID, and seconds marker branded into the clip for debugging/reporting. Useful for posting clips in the [comma.ai Discord's #driving-feedback and/or #openpilot-experience channel](https://discord.comma.ai), [reddit](https://www.reddit.com/r/comma_ai), [Facebook](https://www.facebook.com/groups/706398630066928), or anywhere else that takes video. Very useful for [making outstanding bug reports](https://github.com/commaai/openpilot/wiki/FAQ#how-do-i-report-a-bug) as well as feedback on good behavior.
 * Forward, Wide, and Driver Camera with no UI
-  * Concatenate, cut, and convert the raw, low-compatibility, and separated HEVC files to one fairly compatible HEVC MP4 for easy sharing.
+  * Concatenate, cut, and convert the raw, low-compatibility, and separated HEVC files to one fairly compatible HEVC MP4 (or H.264 MP4) for easy sharing.
 * 360 Video
-  * Rendered from Wide and Driver Camera. Uploadable to YouTube, viewable in VLC, and accepted by any video players or web services that take 360 videos.
+  * Rendered from Wide and Driver Camera. Uploadable to YouTube, viewable in VLC, loadable in 360 video editing software such as Insta360 Studio, and accepted by any video players or web services that take 360 videos.
 * Forward Upon Wide and 360 Forward Upon Wide
   * Forward video is overlayed atop the wide video. Not perfect, but usable.
   * 360 Forward Upon Wide scales and renders the final result at a higher resolution to assist in reframing the 360 video to a normal video if that's what you want.
