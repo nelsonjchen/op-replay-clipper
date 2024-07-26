@@ -26,6 +26,11 @@ https://replicate.com/nelsonjchen/op-replay-clipper
 
 Replicate is an ultra-low-cost pay-as-you-go compute platform for running software jobs. Replicate is a great way to run this clipper as it's fast, easy to use, and you don't need to install anything on your computer or even deploy anything yourself. Just enter in the required information into the form, and Replicate will generate a clip. Expect to pay about ~$0.01 per clip but not even need to put in any payment details until you've reached a generously large level of usage.
 
+> [!WARNING]
+> [comma devices should not be used as primary dashcams for numerous reasons!](https://github.com/commaai/openpilot/wiki/Video-Files#consider-another-device-for-serious-dashcam-purposes)
+>
+> They are still great as a backup dashcam and for other purposes though.
+
 ## Terminology
 
 * Route - A drive recorded by openpilot. Generally from Ignition On to Ignition Off.
