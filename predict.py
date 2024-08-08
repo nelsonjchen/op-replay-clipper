@@ -24,7 +24,7 @@ class Predictor(BasePredictor):
     def predict(
         self,
         renderType: str = Input(
-            description="UI renders with UI. Forward, Wide, and Driver process the raw, segmented, and low-compatibility HEVC video files into a portable HEVC MP4 file, are fast transcodes, and are great for quick previews. 360 requires viewing/uploading the video file in VLC or YouTube to pan around in a 🌐 sphere. Forward Upon Wide roughly overlays Forward video on Wide video. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video.",
+            description="UI renders with UI. Forward, Wide, and Driver process the raw, segmented, and low-compatibility HEVC video files into a portable HEVC or H264 MP4 file, are fast transcodes, and are great for quick previews. 360 requires viewing/uploading the video file in VLC or YouTube to pan around in a 🌐 sphere. Forward Upon Wide roughly overlays Forward video on Wide video. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video.",
             choices=[
                 "ui",
                 "forward",
@@ -71,8 +71,8 @@ class Predictor(BasePredictor):
         ),
         forwardUponWideH: float = Input(
             description="(Forward Upon Wide Renders only) H-position of the forward video overlay on wide. Different devices can have different offsets from differing user mounting or factory calibration.",
-            ge=1.9,
-            le=2.3,
+            ge=1.0,
+            le=3.0,
             default=2.2,
         ),
         fileSize: int = Input(
@@ -87,7 +87,7 @@ class Predictor(BasePredictor):
             default="hevc",
         ),
         jwtToken: str = Input(
-            description='Optional JWT Token from https://jwt.comma.ai for non-"Public access" routes. ⚠️ DO NOT SHARE THIS TOKEN WITH ANYONE as https://jwt.comma.ai generates JWT tokens valid for 1 year and they are irrevocable. Please use the safer, optionally temporary, more granular, and revocable "Public Access" toggle option on comma connect if possible. For more info, please see https://github.com/nelsonjchen/op-replay-clipper#jwt-token-input .',
+            description='Optional JWT Token from https://jwt.comma.ai for non-"Public access" routes. ⚠️ DO NOT SHARE THIS TOKEN WITH ANYONE as https://jwt.comma.ai generates JWT tokens valid for 90 days and they are irrevocable. Please use the safer, optionally temporary, more granular, and revocable "Public Access" toggle option on comma connect if possible. For more info, please see https://github.com/nelsonjchen/op-replay-clipper#jwt-token-input .',
             default="",
         ),
         notes: str = Input(
