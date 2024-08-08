@@ -9,6 +9,10 @@ build: cog/cog.template.yaml cog/generate.sh
 downloader:
 	python downloader.py shared/data_dir "a2a0ccea32023010|2023-07-27--13-01-19" 5 300 60
 
+# Test downloader by itself for zstd
+downloader_zstd:
+	python downloader.py shared/data_dir "fe18f736cb0d7813|00000257--fb26599141" 5 573 12
+
 # Test the ffmpeg_clip by itself
 ffmpeg_clip:
 	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 -nv -t driver
@@ -70,6 +74,10 @@ predict-non-public:
 predict-non-public-forward:
 	./cog/generate.sh
 	cog predict -i route=$(NONPUBLIC_ROUTE) -i jwtToken=$(JWT_TOKEN) -i renderType=forward
+
+predict-zstd:
+	./cog/generate.sh
+	cog predict -i route="https://connect.comma.ai/fe18f736cb0d7813/00000257--fb26599141/573/585" -i renderType=ui
 
 # Push using modified cog
 push:

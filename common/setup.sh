@@ -29,6 +29,7 @@ apt-get update -y && apt-get install -y \
     wget \
     git-lfs \
     tzdata \
+    zstd \
     git
 
 # # Setup git lfs

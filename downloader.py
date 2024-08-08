@@ -141,7 +141,7 @@ def downloadSegments(
                 dcamera_exists = True
                 break
         for log_url in filelist["logs"]:
-            if f"/{segment_id}/rlog.bz2" in log_url:
+            if f"/{segment_id}/rlog.bz2" in log_url or f"/{segment_id}/rlog.zst" in log_url:
                 log_exists = True
                 break
         if not camera_exists and "cameras" in file_types:
@@ -210,6 +210,15 @@ def downloadSegments(
                     break
                 downloader.enqueue_file(log_url, path=segment_dir, filename="rlog.bz2")
                 break
+            if f"/{segment_id}/rlog.zst" in log_url and "logs" in file_types:
+                # Check if the file already exists
+                if (segment_dir / "rlog.zst").exists() or (
+                    segment_dir / "rlog"
+                ).exists():
+                    print(f"Skipping {log_url} because it already exists")
+                    break
+                downloader.enqueue_file(log_url, path=segment_dir, filename="rlog.zst")
+                break
 
     # Start the download
     results: Results = downloader.download()
@@ -227,11 +236,17 @@ def downloadSegments(
         if (segment_dir / "rlog").exists():
             print(f"Skipping decompression of {segment_id} because it already exists")
             continue
+        found_log_path = None
         log_path = segment_dir / "rlog.bz2"
         if log_path.exists():
             subprocess.run(["bzip2", "-d", log_path])
-        else:
-            raise ValueError(f"Segment {segment_id} does not have a log upload")
+            found_log_path = segment_dir / "rlog"
+        log_path = segment_dir / "rlog.zst"
+        if log_path.exists():
+            subprocess.run(["zstd", "-d", log_path])
+            found_log_path = segment_dir / "rlog"
+        if not found_log_path:
+            raise ValueError(f"Log for segment {segment_id} not found")
 
 
 if __name__ == "__main__":
