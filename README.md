@@ -132,7 +132,10 @@ With the car on, **within a minute** after an incident when it is safe to do so:
 5. With regards to the clipper usage, during the process in which you are honing in on the start and end boundaries of the clip, your upper bound of the clip will nearly all the time be at that yellow so your first or early drags to hone down should basically top out there and be very generous with the start time before the yellow.
 
 > [!TIP]
-> If you find it a hassle to reach out and touch the device or it is too inconvenient, try installing a custom macropad like the [🦾 comma three Faux-Touch keyboard](https://github.com/nelsonjchen/c3-faux-touch-keyboard/)! 
+> If you find it a hassle to reach out and touch the device or it is too inconvenient, try installing a custom macropad like the [🦾 comma three Faux-Touch keyboard](https://github.com/nelsonjchen/c3-faux-touch-keyboard/)!
+>
+> ![touchkey keyboard demo](https://github.com/nelsonjchen/c3-touchkey-keyboard/assets/5363/d9617916-2442-4287-b430-709dad173da8)
+
 
 
 ## Advanced Usage
