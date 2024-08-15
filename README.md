@@ -115,19 +115,24 @@ https://github.com/nelsonjchen/op-replay-clipper/assets/5363/9f845b8d-e4aa-4ab3-
 
 ## Usage Tips
 
-* Learn how to bookmark and flag interesting points on a drive/route.
+### Bookmark/Preserve
 
-  With the car on, soon after an incident when it is safe:
+Learn how to bookmark, preserve, and flag interesting points on a drive/route.
 
-  1. Tap the screen to reveal a bookmark flag button if it isn't there already.
-     * ![button_flag](https://github.com/nelsonjchen/op-replay-clipper/assets/5363/d0cf9372-78ad-4a06-9128-b6fdb6f5394c)
-  2. Tap that icon.
-  3. This will result in small slivers of yellow in the timeline you can quickly hone in on.
-     * ![flagged](https://github.com/nelsonjchen/op-replay-clipper/assets/5363/15a3f611-ffb8-47de-b917-1988a0f6f66a)
-  4. With regards to the clipper usage, during the process in which you are honing in on the start and end boundaries of the clip, your upper bound of the clip will nearly all the time be at that yellow so your first or early drags to hone down should basically top out there and be very generous with the start time before the yellow.
+[Preservation saves the last couple segments from being deleted on your device as well.](https://github.com/commaai/openpilot/blob/d43bf899786bb752fc13818c6a4f8d4a7669ab37/system/loggerd/deleter.py#L28)
+
+With the car on, **within a minute** after an incident when it is safe to do so:
+
+1. Tap the screen to reveal a bookmark flag button in the bottom left if it isn't there already.
+   * ![button_flag](https://github.com/nelsonjchen/op-replay-clipper/assets/5363/d0cf9372-78ad-4a06-9128-b6fdb6f5394c)
+2. Tap that icon.
+3. This will result in small slivers of yellow in the timeline you can quickly hone in on.
+   * ![flagged](https://github.com/nelsonjchen/op-replay-clipper/assets/5363/15a3f611-ffb8-47de-b917-1988a0f6f66a)
+4. You should also set the route to preserve under More Info while you're working on it. Non-comma Prime users need to heed this especially since while files aren't deleted *on* the device, visiblity in and through comma connect sunsets after 3 days.
+5. With regards to the clipper usage, during the process in which you are honing in on the start and end boundaries of the clip, your upper bound of the clip will nearly all the time be at that yellow so your first or early drags to hone down should basically top out there and be very generous with the start time before the yellow.
 
 > [!TIP]
-> If you find it a hassle to reach out and touch or it is too inconvenient, try installing an external keyboard or macropad like the [🦾 comma three Faux-Touch keyboard](https://github.com/nelsonjchen/c3-faux-touch-keyboard/)!
+> If you find it a hassle to reach out and touch the device or it is too inconvenient, try installing a custom macropad like the [🦾 comma three Faux-Touch keyboard](https://github.com/nelsonjchen/c3-faux-touch-keyboard/)! 
 
 
 ## Advanced Usage
