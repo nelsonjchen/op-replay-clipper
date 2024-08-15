@@ -172,7 +172,9 @@ The best current way to do this is to use a 360 video editor like [Insta360 Stud
 
 There may be alternative software that'll do it and I will take pull requests to add them to this README, but this is the best way I know how to do it and it is free.
 
-The 360 Forward Upon Wide rendering option scales input videos and renders the final result in a much higher 8K resolution to assist reframing with a high resolution forward video. The normal 360 option just glues the videos together. This option affects the rendering speed which you may want to consider.
+The 360 Forward Upon Wide rendering option scales input videos and renders the final result in a much higher 8K resolution to assist reframing with a high resolution forward video. The normal 360 option just glues the videos together. 
+
+If wanting to use 360 Forward Upon Wide, test with the non-360 Forward Upon Wide option and start with a value for `forwardUponWideH` around "1.9" to dial in that value in first for that overlay before using the 360 Forward Upon Wide option to save money and time.
 
 ## Credits
 
