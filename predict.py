@@ -24,7 +24,7 @@ class Predictor(BasePredictor):
     def predict(
         self,
         renderType: str = Input(
-            description="UI renders with UI. Forward, Wide, and Driver process the raw, segmented, and low-compatibility HEVC video files into a portable HEVC or H264 MP4 file, are fast transcodes, and are great for quick previews. 360 requires viewing/uploading the video file in VLC or YouTube to pan around in a 🌐 sphere. Forward Upon Wide roughly overlays Forward video on Wide video. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video.",
+            description="UI renders with the comma openpilot UI. Forward, Wide, and Driver process the raw, segmented, and low-compatibility HEVC video files into a portable HEVC or H264 MP4 file, are fast transcodes, and are great for quick previews. 360 requires viewing/uploading the video file in VLC or YouTube to pan around in a 🌐 sphere or post-processing with software such as Insta360 Studio or similar software for reframing. Forward Upon Wide roughly overlays Forward video on Wide video for increased detail in Forward video. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video and scales up to render at 8K for reframing with Insta360 Studio or similar software.",
             choices=[
                 "ui",
                 "forward",
@@ -37,7 +37,7 @@ class Predictor(BasePredictor):
             default="ui",
         ),
         route: str = Input(
-            description='🔗 comma connect URL (e.g. https://connect.comma.ai/fe18f736cb0d7813/1698620773416/1698620855707, this is the preferred input method and includes dongle ID with start/end times.) OR #️⃣ route ID (e.g. a2a0ccea32023010|2023-07-27--13-01-19. Note that any segment ID \"--\" appended to the end will be ignored as\"startSecond\" is used instead, but route id portion of input will still accepted)'
+            description='One 🔗 comma connect URL (e.g. https://connect.comma.ai/18277b1abce7bbe4/00000029--e1c8705a52/132/144, this is the preferred input method and includes dongle ID with start/end times.) OR one #️⃣ route ID (e.g. a2a0ccea32023010|2023-07-27--13-01-19. Note that any segment ID \"--\" appended to the end will be ignored as\"startSecond\" is used instead, but route id portion of input will still accepted)'
             ' (⚠️ "Public Access" must be enabled or a valid JWT Token must be provided.'
             " All required files for render type in Comma Connect must be uploaded from device."
             " Please see the Quick Usage section of the README on GitHub at https://github.com/nelsonjchen/op-replay-clipper#quick-usage for instructions on generating an appropiate comma connect URL.)",
@@ -61,7 +61,7 @@ class Predictor(BasePredictor):
             default=5,
         ),
         speedhackRatio: float = Input(
-            description="(UI Render only) Speedhack ratio (Higher ratio renders faster but renders may be more unstable and have artifacts) (Suggestion: 0.1-0.3 for jitter-free, 1-3 for fast renders)",
+            description="(UI Render only) Speedhack ratio (Higher ratio renders faster but renders may be more unstable and have artifacts) (Suggestion: 0.1-0.3 for jitter-free, 1-3 for fast renders). WARNING: Too low of a speed hack ratio may cause the render to exceed 10 minutes which is the max Replicate will allow for a single run. Please use 1.0 for everyday use.",
             ge=0.1,
             le=7.0,
             default=1.0,
@@ -76,7 +76,7 @@ class Predictor(BasePredictor):
             default=2.2,
         ),
         fileSize: int = Input(
-            description="Rough size of clip output in MB.", ge=10, le=100, default=25
+            description="Rough size of clip output in MB.", ge=10, le=200, default=25
         ),
         fileFormat: str = Input(
             description="H.264 or HEVC (HEVC is 50-60 percent higher quality for its filesize but may not be compatible with all web browsers or devices).",
