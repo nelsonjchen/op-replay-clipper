@@ -79,6 +79,10 @@ predict-zstd:
 	./cog/generate.sh
 	cog predict -i route="https://connect.comma.ai/fe18f736cb0d7813/00000257--fb26599141/573/585" -i renderType=ui
 
+predict-bug-report-2024-09-01:
+	./cog/generate.sh
+	cog predict -i route="https://connect.comma.ai/a4653a9be878a408/00000029--e1c8705a52/132/144" -i renderType=ui
+
 # Push using modified cog
 push:
 	./cog/generate.sh
