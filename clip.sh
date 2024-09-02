@@ -322,6 +322,8 @@ function cleanup() {
 		# somehow
 		pkill -f "replay" || true
 		pkill -f "ui" || true
+		# Kill any tmux processes too
+		pkill -f "tmux" || true
 }
 
 function ctrl_c() {
