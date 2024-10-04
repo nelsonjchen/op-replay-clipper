@@ -84,7 +84,7 @@ class Predictor(BasePredictor):
                 "h264",
                 "hevc",
             ],
-            default="hevc",
+            default="h264",
         ),
         jwtToken: str = Input(
             description='Optional JWT Token from https://jwt.comma.ai for non-"Public access" routes. ⚠️ DO NOT SHARE THIS TOKEN WITH ANYONE as https://jwt.comma.ai generates JWT tokens valid for 90 days and they are irrevocable. Please use the safer, optionally temporary, more granular, and revocable "Public Access" toggle option on comma connect if possible. For more info, please see https://github.com/nelsonjchen/op-replay-clipper#jwt-token-input .',
