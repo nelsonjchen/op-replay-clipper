@@ -79,12 +79,13 @@ class Predictor(BasePredictor):
             description="Rough size of clip output in MB.", ge=10, le=200, default=25
         ),
         fileFormat: str = Input(
-            description="H.264 or HEVC (HEVC is 50-60 percent higher quality for its filesize but may not be compatible with all web browsers or devices).",
+            description="Auto, H.264, or HEVC (HEVC is 50-60 percent higher quality for its filesize but may not be compatible with all web browsers or devices). Auto, which is recommended, will choose HEVC for 360 renders and H.264 for all other renders.",
             choices=[
+                "auto",
                 "h264",
                 "hevc",
             ],
-            default="h264",
+            default="auto",
         ),
         jwtToken: str = Input(
             description='Optional JWT Token from https://jwt.comma.ai for non-"Public access" routes. ⚠️ DO NOT SHARE THIS TOKEN WITH ANYONE as https://jwt.comma.ai generates JWT tokens valid for 90 days and they are irrevocable. Please use the safer, optionally temporary, more granular, and revocable "Public Access" toggle option on comma connect if possible. For more info, please see https://github.com/nelsonjchen/op-replay-clipper#jwt-token-input .',
@@ -135,6 +136,13 @@ class Predictor(BasePredictor):
 
         # Partition the data dir by the dongle ID from the route
         data_dir = os.path.join("./shared/data_dir", dongleID)
+
+        # If the file format is auto, set it to HEVC if the render type is 360
+        if fileFormat == "auto":
+            if renderType == "360" or renderType == "360_forward_upon_wide":
+                fileFormat = "hevc"
+            else:
+                fileFormat = "h264"
 
         if renderType == "ui":
             # Download the route data
