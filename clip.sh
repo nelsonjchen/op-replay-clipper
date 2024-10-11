@@ -458,16 +458,23 @@ else
 	tmux new-session -d -s clipper -n x11 "Xtigervnc :0 -geometry 1920x1080 -SecurityTypes None -rfbport $VNC_PORT"
 fi
 
+# Base command
+BASE_REPLAY_CMD="./tools/replay/replay --start \"$SMEARED_STARTING_SEC\" \"$ROUTE\""
+
+# Add data_dir if provided
 if [ -n "$DATA_DIR" ]; then
-	# If data dir is passed in, use it
-	REPLAY_CMD="./tools/replay/replay --ecam --start \"$SMEARED_STARTING_SEC\" --data_dir \"$DATA_DIR\" \"$ROUTE\""
-else
-	# Otherwise, have replay download/decompress the route on demand
-	REPLAY_CMD="./tools/replay/replay --ecam --start \"$SMEARED_STARTING_SEC\" \"$ROUTE\""
+    BASE_REPLAY_CMD="$BASE_REPLAY_CMD --data_dir \"$DATA_DIR\""
 fi
 
-tmux new-window -n replay -t clipper: "TERM=xterm-256color eatmydata faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" $REPLAY_CMD"
-tmux new-window -n ui -t clipper: "cd ./selfdrive/ui && eatmydata faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./ui"
+# Construct the final commands
+REPLAY_CMD="$BASE_REPLAY_CMD --ecam"
+
+# "Prime" the replay with the route with faketime going at max speed up to the length
+# This is to ensure UI has seen carParams.
+# Hardcode speedhack to 100.0 for this.
+REPLAY_PRIME_TIMEOUT=$(($RECORDING_LENGTH + 5))
+REPLAY_PRIME_CMD="timeout $REPLAY_PRIME_TIMEOUT $BASE_REPLAY_CMD --no-vipc"
+tmux new-window -n prime -t clipper: "TERM=xterm-256color eatmydata faketime -m -f \"+0 x9999.0\" $REPLAY_PRIME_CMD"
 
 # If it's not a local replay with data dir, then we need to wait for the route to download
 if [ -z "$DATA_DIR" ]; then
@@ -481,6 +488,13 @@ if [ -z "$DATA_DIR" ]; then
 			sleep 3
 	done
 fi
+
+# Kill the prime window
+sleep 3
+tmux kill-window -t clipper:prime
+
+tmux new-window -n replay -t clipper: "TERM=xterm-256color eatmydata faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" $REPLAY_CMD"
+tmux new-window -n ui -t clipper: "cd ./selfdrive/ui && eatmydata faketime -m -f \"+0 x$SPEEDHACK_AMOUNT\" ./ui"
 
 # Set back to smeared starting sec and immediately pause
 tmux send-keys -t clipper:replay Enter "$SMEARED_STARTING_SEC" Enter
