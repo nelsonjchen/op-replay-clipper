@@ -59,7 +59,7 @@ def make_ffmpeg_clip(
         raise ValueError(f"Invalid choice: {render_type}")
     if not os.path.exists(data_dir):
         raise ValueError(f"Invalid data_dir: {data_dir}")
-    route = re.sub(r"--\d+$", "", route_or_segment)
+    route = re.sub(r"--\d{,4}+$", "", route_or_segment)
     route_date = re.sub(r"^[^|]+\|", "", route)
 
     if format not in ["h264", "hevc"]:
