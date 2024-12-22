@@ -348,7 +348,7 @@ fi
 RECORDING_LENGTH=$_arg_length_seconds
 RECORDING_LENGTH_PLUS_SMEAR=$(($RECORDING_LENGTH + $SMEAR_AMOUNT))
 # Cleanup trailing segment count. Seconds is what matters
-ROUTE=$(echo "$_arg_route_id" | sed -E 's/--[0-9]+$//g')
+ROUTE=$(echo "$_arg_route_id" | sed -E 's/--[0-9]{1,4}$//g')
 # Segment ID is the floor of the starting seconds divided by 60
 SEGMENT_NUM=$(($STARTING_SEC / 60))
 SEGMENT_ID="$ROUTE--$SEGMENT_NUM"

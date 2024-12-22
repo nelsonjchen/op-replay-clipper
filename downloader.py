@@ -58,7 +58,10 @@ def downloadSegments(
     # Examples:
     # a2a0ccea32023010|2023-07-27--13-01-19 -> a2a0ccea32023010|2023-07-27--13-01-19
     # a2a0ccea32023010|2023-07-27--13-01-19--5 -> a2a0ccea32023010|2023-07-27--13-01-19
-    route = re.sub(r"--\d+$", "", route_or_segment)
+    # Let through rare cases where the second part is fully numeric
+    print(f"Route or segment: {route_or_segment}")
+    route = re.sub(r"--\d{,4}+$", "", route_or_segment)
+    print(f"Downloading route {route}")
     # Dongle ID is the part before the |
     dongle_id = route.split("|")[0]
 

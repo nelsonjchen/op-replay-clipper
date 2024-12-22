@@ -83,6 +83,11 @@ predict-bug-report-2024-09-01:
 	./cog/generate.sh
 	cog predict -i route="https://connect.comma.ai/a4653a9be878a408/00000029--e1c8705a52/132/144" -i renderType=ui
 
+predict-bug-all-number:
+	./cog/generate.sh
+	cog predict -i route="https://connect.comma.ai/fe18f736cb0d7813/00000497--5809888120/1611/1635" -i renderType=ui
+
+
 # Push using modified cog
 push:
 	./cog/generate.sh
