@@ -13,7 +13,7 @@ The clipper can produce clips of:
 * Forward, Wide, and Driver Camera with no UI
   * Concatenate, cut, and convert the raw, low-compatibility, and separated HEVC files to one fairly compatible HEVC MP4 or super-compatible H.264 MP4 for easy sharing.
 * 360 Video
-  * Rendered from Wide and Driver Camera. Uploadable to YouTube, viewable in VLC, loadable in 360 video editing software such as Insta360 Studio, and accepted by any video players or web services that take 360 videos.
+  * Rendered from Wide and Driver Camera. Uploadable to YouTube, viewable in VLC, loadable in 360 video editing software such as Insta360 Studio or even the Insta360 mobile app, and accepted by any video players or web services that take 360 videos.
 * Forward Upon Wide and 360 Forward Upon Wide
   * Forward video is overlayed atop the wide video. Not perfect, but usable.
   * 360 Forward Upon Wide scales and renders the final result at a higher resolution to assist in reframing the 360 video to a normal video if that's what you want.
@@ -109,6 +109,10 @@ Copying the car in front to get around someone waiting for the left turn
 
 https://github.com/nelsonjchen/op-replay-clipper/assets/5363/9f845b8d-e4aa-4ab3-8785-8d09b83c9d8b
 
+Search up the readme for 360 stuff! It's pretty cool.
+
+https://github.com/user-attachments/assets/deea7b78-61ee-43be-8a29-38319114c083
+
 ## Limitations
 
 - The UI replayed is comma.ai's latest stock UI on their master branch; routes from forks that differ alot from stock may not render correctly. Your experience may and will vary. Please make sure to note these replays are from fork data and may not be representative of the stock behavior. [The comma team really does not like it if you ask them to debug fork code as "it just takes too much time to be sidetracked by hidden and unclear changes"](https://discord.com/channels/469524606043160576/616456819027607567/1042263657851142194).
@@ -166,9 +170,13 @@ https://github.com/user-attachments/assets/08b51cee-f357-4afc-87f2-4c4d0f6aedba
 
 With 360 videos, it is possible to reframe the 360 video so it is a non-360 video to a normal video pointing at a specific direction.
 
-The best current way to do this is to use a 360 video editor like [Insta360 Studio](https://www.insta360.com/download/insta360-onex) to reframe the video to a normal video. Simply load the 360 video into the editor and reframe the video to the desired direction.
+The best current way to do this is to use a 360 video editor like [Insta360 Studio](https://www.insta360.com/download/insta360-onex) to reframe the video to a normal video. Simply load the 360 video into the editor and reframe the video to the desired direction. A more through description of this functionality can be [found at their site](https://www.insta360.com/blog/tips/how-to-edit-and-reframe-360.html).
 
 ![insta360](https://github.com/nelsonjchen/op-replay-clipper/assets/5363/dece938d-e575-48f7-b64e-659464800bc7)
+
+The Insta360 mobile apps also allow using the phone's movement and swipes for a more natural reframing as well. That is also described at [their site](https://www.insta360.com/blog/tips/how-to-edit-and-reframe-360.html)
+
+https://github.com/user-attachments/assets/deea7b78-61ee-43be-8a29-38319114c083
 
 There may be alternative software that'll do it and I will take pull requests to add them to this README, but this is the best way I know how to do it and it is free.
 
