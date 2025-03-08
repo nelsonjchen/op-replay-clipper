@@ -91,7 +91,7 @@ Unfortunately, there's sometimes some state tracked in the openpilot UI. Past da
 
 The best way to describe this issue would be like on a movie set. Let's say you want to have a shot where the actor is already running. You would say "ACTION!" and then immediately roll the camera. The editor would not include the clapboard, the director yelling "ACTION!" or the actor starting to run. They would splice the film when the actor is running in stride. 
 
-Smear is when the clipper does "ACTION!". The clipper aims to start the recording to simulate the editor splicing the film. 
+Smear is when the clipper does "ACTION!". The clipper aims to start the recording some "smear" seconds later to simulate the editor splicing the start of the shot. 
 
 **Due to this, you may need to upload an additional minute of video and data before the current start point for UI renders.** You may need to adjust the quick usage steps above accordingly by selecting a minute before your desired start point and uploading the data, if you get segments not uploaded errors.
 
