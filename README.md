@@ -66,7 +66,8 @@ We assume you've already paired your device and have access to the device with y
       * ![image](https://github.com/commaai/openpilot/assets/5363/ce997a7b-9a93-4f67-944b-95d09ae68b02)
    * Make sure the route has "Public access" under "More info" turned on. You can set this to off after you're done with clip making.
       * ![image](https://github.com/commaai/openpilot/assets/5363/6a55c181-d93f-4db5-9513-ff6a1d370757)
-5. Copy the URL in the address bar of your browser to your clipboard. This is not the segment ID underneath the More Info button. In the case above, I've copied an old URL of "https://connect.comma.ai/fe18f736cb0d7813/1698203405863/1698203460702" to my clipboard. Note: comma has changed the URL format since this step was originally written. New URLs are like "https://connect.comma.ai/fe18f736cb0d7813/000001bb--4c0c0efba9/21/90".
+5. Copy the URL in the address bar of your browser to your clipboard. This is not the segment ID underneath the More Info button. In the case above, I've copied an old URL of "https://connect.comma.ai/fe18f736cb0d7813/1698203405863/1698203460702" to my clipboard. 
+   * **Note**: comma has changed the URL format since this step/guide was originally written. Current URLs are like "https://connect.comma.ai/fe18f736cb0d7813/000001bb--4c0c0efba9/21/90". It has a dongle ID, a new route designator format, and the time is relative to the route itself.
    * When you were adjusting the selected portion of the route in a previous step, it was changing those last two numbers in the browser address bar URL which is the start time and end time respectively.
    * "Share This Route" button if it is present will work too. Choose "copy to clipboard" or similar.
 6. Visit https://replicate.com/nelsonjchen/op-replay-clipper
@@ -80,6 +81,19 @@ We assume you've already paired your device and have access to the device with y
 
       https://github.com/commaai/openpilot/assets/5363/8bd91642-51ff-4de9-87d2-31e770c64542
     * If you have issues downloading the clip with the "Download" button in Replicate's UI, click on the vertical ellipsis button or whatever is available in your browser for video in the lower right corner of the video and download via that. This is a [strange issue](https://github.com/nelsonjchen/op-replay-clipper/issues/77) in Replicate's UI that this clipper can't do anything about.
+    * You can reupload this file onto Discord. Be aware of Discord's file size limits. Discord Free users should target 10MB file sizes for rendering
+   
+### UI Renders and Smearing
+
+UI rendering works by actually running the openpilot UI on the remote server, sending in recorded UI data inputs from the log, and then capturing the screen recording of that output. 
+
+Unfortunately, there's sometimes some state tracked in the openpilot UI. Past data may be needed to be sent to get the UI to the correct state before the clipper starts recording the screen.
+
+The best way to describe this issue would be like on a movie set. Let's say you want to have a shot where the actor is already running. You would say "ACTION!" and then immediately roll the camera. The editor would not include the clapboard, the director yelling "ACTION!" or the actor starting to run. They would splice the film when the actor is running in stride. 
+
+Smear is when the clipper does "ACTION!". The clipper aims to start the recording to simulate the editor splicing the film. 
+
+**Due to this, you may need to upload an additional minute of video and data before the current start point for UI renders.** You may need to adjust the quick usage steps above accordingly by selecting a minute before your desired start point and uploading the data, if you get segments not uploaded errors.
 
 ## Gallery
 
