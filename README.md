@@ -96,9 +96,9 @@ Lack of or insufficient smearing can cause:
 
 Those can be important information in describing what has happened.
 
-One way to describe this issue would be like on a movie set. Let's say you are a director and you want to have a shot where the actor is already running. You would say "ACTION!" and then immediately roll the camera. In post, the editor would not include the clapboard, the director yelling "ACTION!" or the actor starting to run. They would splice the film when the actor is already running in stride. 
+One way to describe this issue would be like on a movie set. Let's say you are a director and you want to have a shot where the actor is already running. You would say "lights", roll the "camera", and then say "ACTION!". In post, the editor would not include the clapboard, the director yelling "ACTION!" or the actor starting to run. They would splice the film when the actor is already running in stride. 
 
-The smear point is when the clipper does "ACTION!". It's the amount of seconds before the clip is to start. The clipper "production crew" aims starts recording immediately once the data has started to be sent but a later "editor" will cut the intermediate clip some "smear" seconds later as the actual beginning and return that to you.
+The smear point is when the clipper does some cutting after "ACTION!". It's the amount of seconds before the clip is to start. The clipper "production crew" aims starts recording immediately (CAMERA) once the data has started to be sent (LIGHTS) but a later "editor" will cut the intermediate clip some "smear" seconds later as the actual beginning and return that to you.
 
 **Due to this, you may need to upload an additional minute of video and data before the current start point for UI renders.** You may need to adjust the quick usage steps above accordingly by selecting a minute before your desired start point and uploading the data, if you get segments not uploaded errors.
 
