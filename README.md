@@ -1,6 +1,6 @@
 # 📽 openpilot Replay Clipper
 
-*Here's a small openpilot bug clip*:
+*Here's a small openpilot bug clip with a small dash of Big Altima Energy*:
 
 https://github.com/commaai/openpilot/assets/5363/97a6c767-9b67-4206-8ba7-b4030f08a8cd
 
