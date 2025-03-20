@@ -29,7 +29,7 @@ Replicate is an ultra-low-cost pay-as-you-go compute platform for running softwa
 > [!WARNING]
 > [comma devices should not be used as primary dashcams for numerous reasons!](https://github.com/commaai/openpilot/wiki/Video-Files#consider-another-device-for-serious-dashcam-purposes)
 >
-> They are still great as a backup dashcam and for other purposes though.
+> They are still great as a backup dashcam, openpilot, and for other purposes though.
 
 ## Terminology
 
