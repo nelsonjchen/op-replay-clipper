@@ -76,7 +76,7 @@ class Predictor(BasePredictor):
             default=2.2,
         ),
         fileSize: int = Input(
-            description="Rough size of clip output in MB.", ge=10, le=200, default=25
+            description="Rough size of clip output in MB.", ge=5, le=200, default=25
         ),
         fileFormat: str = Input(
             description="Auto, H.264, or HEVC (HEVC is 50-60 percent higher quality for its filesize but may not be compatible with all web browsers or devices). Auto, which is recommended, will choose HEVC for 360 renders and H.264 for all other renders.",
