@@ -324,6 +324,8 @@ function cleanup() {
 		pkill -f "ui" || true
 		# Kill any tmux processes too
 		pkill -f "tmux" || true
+		# Blow away anything in rm -rf /dev/shm/* and it's OK if there's nothing there
+		rm -rf /dev/shm/* || true
 }
 
 function ctrl_c() {
