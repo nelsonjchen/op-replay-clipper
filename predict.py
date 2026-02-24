@@ -11,6 +11,7 @@ import downloader
 
 import ffmpeg_clip
 import route_or_url
+import ui_clip
 
 MIN_LENGTH_SECONDS = 5
 MAX_LENGTH_SECONDS = 300
@@ -68,6 +69,16 @@ class Predictor(BasePredictor):
         ),
         metric: bool = Input(
             description="(UI Render only) Render in metric units (km/h)", default=False
+        ),
+        uiMode: str = Input(
+            description="(UI Render only) UI layout mode. c3/c3x use BIG UI mode. c4 uses current C4/mici mode. auto lets backend choose defaults.",
+            choices=["auto", "c3", "c3x", "big", "c4"],
+            default="auto",
+        ),
+        uiBackend: str = Input(
+            description="(UI Render only) Rendering backend. modern uses upstream openpilot tools/clip/run.py when available; legacy uses clip.sh.",
+            choices=["auto", "modern", "legacy"],
+            default="auto",
         ),
         forwardUponWideH: float = Input(
             description="(Forward Upon Wide Renders only) H-position of the forward video overlay on wide. Different devices can have different offsets from differing user mounting or factory calibration.",
@@ -153,64 +164,31 @@ class Predictor(BasePredictor):
                 smear_seconds=smearAmount,
                 data_dir=data_dir,
                 jwt_token=jwtToken,
+                decompress_logs=False,
             )
-            # Start the shell command and capture its output
-            command = [
-                # Run with GNU timeout to prevent runaway processes
-                "timeout",
-                "10m",
-                "./clip.sh",
-                route,
-                f"--start-seconds={startSeconds}",
-                f"--length-seconds={lengthSeconds}",
-                f"--smear-amount={smearAmount}",
-                f"--speedhack-ratio={speedhackRatio}",
-                f"--target-mb={fileSize}",
-                f"--format={fileFormat}",
-                f"--nv-hybrid-encoding",
-                f"--data-dir={os.path.abspath(data_dir)}",
-                f"--output=cog-clip.mp4",
-            ]
-            # Check if we're inside WSL2 or nested in via `uname` and
-            # don't append --nv-hardware-rendering if we are
-            if b"microsoft-standard-WSL2" not in subprocess.check_output(
-                ["uname", "--kernel-release"]
-            ):
-                command.append("--nv-hardware-rendering")
-
-            if jwtToken:
-                command.append(f"--jwt-token={jwtToken}")
-
-            if metric:
-                command.append("--metric")
-            # if debugCommand != "":
-            #     # Run bash with the command
-            #     command = ["bash", "-c", debugCommand]
-            env = {}
-            env.update(os.environ)
-            env.update({"DISPLAY": ":0", "SCALE": "1"})
-
-            process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE)
-
-            # Read the output as it becomes available and yield it to the caller
             try:
-                while True:
-                    proc_output = process.stdout.readline()
-                    if proc_output == b"" and process.poll() is not None:
-                        break
-                    if proc_output:
-                        print(proc_output)
+                ui_clip.render_ui_clip(
+                    ui_clip.UIRenderOptions(
+                        route=route,
+                        start_seconds=startSeconds,
+                        length_seconds=lengthSeconds,
+                        smear_seconds=smearAmount,
+                        target_mb=fileSize,
+                        file_format=fileFormat,
+                        speedhack_ratio=speedhackRatio,
+                        metric=metric,
+                        output_path="./shared/cog-clip.mp4",
+                        data_dir=os.path.abspath(data_dir),
+                        jwt_token=jwtToken or None,
+                        backend=uiBackend,  # type: ignore[arg-type]
+                        ui_mode=uiMode,     # type: ignore[arg-type]
+                    )
+                )
             except KeyboardInterrupt:
                 try:
-                    process.kill()
+                    subprocess.run(["tmux", "kill-session", "-t", "clipper"], check=False)
                 except Exception as e:
-                    print(f"Failed to kill the process: {e}")
-                try:
-                    subprocess.run(["tmux", "kill-session", "-t", "clipper"], check=True)
-                except subprocess.CalledProcessError as e:
-                    print(f"Failed to kill the tmux session 'clipper': {e}")
-                except Exception as e:
-                    print(f"An error occurred while trying to kill the tmux session 'clipper': {e}")
+                    print(f"Failed cleanup after interrupt: {e}")
                 raise
 
             return Path("./shared/cog-clip.mp4")
