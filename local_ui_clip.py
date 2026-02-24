@@ -81,6 +81,21 @@ def bootstrap_openpilot(openpilot_dir: Path) -> None:
     run(["uv", "run", "scons", "-j8", *scons_targets], cwd=openpilot_dir)
 
 
+def ensure_openpilot_ui_fonts(openpilot_dir: Path) -> None:
+    fonts_dir = openpilot_dir / "openpilot/selfdrive/assets/fonts"
+    needed = [
+        "Inter-Light.fnt",
+        "Inter-Medium.fnt",
+        "Inter-Bold.fnt",
+        "Inter-SemiBold.fnt",
+        "Inter-Regular.fnt",
+        "unifont.fnt",
+    ]
+    if all((fonts_dir / f).exists() for f in needed):
+        return
+    run(["uv", "run", "python", "selfdrive/assets/fonts/process.py"], cwd=openpilot_dir)
+
+
 def patch_openpilot_local_ffprobe(openpilot_dir: Path) -> None:
     """
     Work around upstream ffprobe sniffing only 4KB via stdin.
@@ -270,6 +285,7 @@ def main() -> None:
         bootstrap_openpilot(openpilot_dir)
     patch_openpilot_local_ffprobe(openpilot_dir)
     patch_openpilot_clip_qcam_local_decode(openpilot_dir)
+    ensure_openpilot_ui_fonts(openpilot_dir)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
