@@ -1,4 +1,4 @@
-.PHONY: build predict predict-360 push
+.PHONY: build predict predict-360 push local-ui-clip
 
 # Unmodified cog
 build: cog/cog.template.yaml cog/generate.sh
@@ -96,3 +96,9 @@ predict-bug-all-number-360:
 push:
 	./cog/generate.sh
 	cog push r8.im/nelsonjchen/op-replay-clipper
+
+# Local no-Docker UI clip using upstream openpilot tools/clip/run.py
+# Example:
+# make local-ui-clip ROUTE="https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
+local-ui-clip:
+	python3 local_ui_clip.py "$(ROUTE)"

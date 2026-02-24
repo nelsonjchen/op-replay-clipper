@@ -165,6 +165,32 @@ With the car on, **within a minute** after an incident when it is safe to do so:
 
 ## Advanced Usage
 
+### Local UI clip MP4 (no Docker, modern openpilot clip tool)
+
+This repo now includes `local_ui_clip.py`, which uses upstream `openpilot/tools/clip/run.py`
+instead of the older tmux/X11 capture wrapper.
+
+Example:
+
+```bash
+python3 local_ui_clip.py "https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
+```
+
+Demo smoke test (no route download):
+
+```bash
+python3 local_ui_clip.py --demo --qcam --length-seconds 2 --output ./shared/demo-ui-clip.mp4
+```
+
+Notes:
+
+* It clones/updates `openpilot` into `./.cache/openpilot-local`
+* It runs `uv sync --frozen --all-extras` (plain `uv sync` can miss UI deps like `Pillow`)
+* It builds the native modules needed by `tools/clip/run.py`
+* On macOS it applies the same `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` workaround used by upstream `tools/install_python_dependencies.sh`
+
+Output defaults to `./shared/local-ui-clip.mp4`.
+
 ### JWT Token Input
 
 There is a JWT Token input field.
