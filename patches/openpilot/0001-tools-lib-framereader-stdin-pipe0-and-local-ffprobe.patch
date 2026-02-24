@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nelson Local <local@example.com>
+Date: Tue, 24 Feb 2026 00:00:00 +0000
+Subject: [PATCH 1/2] tools/lib/framereader: use pipe:0 and local ffprobe path
+
+Fix stdin handling for ffmpeg/ffprobe in environments where `-i -` is not
+accepted by the ffmpeg binary (vendored builds observed via openpilot uv setup).
+
+Also allow local files to be probed directly with ffprobe, which avoids brittle
+stdin sniffing for some local HEVC files.
+---
+ tools/lib/framereader.py | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/tools/lib/framereader.py b/tools/lib/framereader.py
+index c13f7fd..8020e79 100644
+--- a/tools/lib/framereader.py
++++ b/tools/lib/framereader.py
+@@ -44,6 +44,7 @@ def assert_hvec(fn: str) -> None:
+ 
+ def decompress_video_data(rawdat, w, h, pix_fmt="rgb24", vid_fmt='hevc', hwaccel="auto", loglevel="info") -> np.ndarray:
+   threads = os.getenv("FFMPEG_THREADS", "0")
++  hwaccel = os.getenv("FFMPEG_HWACCEL", hwaccel)
+   args = ["ffmpeg", "-v", loglevel,
+           "-threads", threads,
+           "-hwaccel", hwaccel,
+@@ -51,7 +52,7 @@ def decompress_video_data(rawdat, w, h, pix_fmt="rgb24", vid_fmt='hevc', hwaccel
+           "-vsync", "0",
+           "-f", vid_fmt,
+           "-flags2", "showall",
+-          "-i", "-",
++          "-i", "pipe:0",
+           "-f", "rawvideo",
+           "-pix_fmt", pix_fmt,
+           "-"]
+@@ -71,11 +72,16 @@ def ffprobe(fn, fmt=None):
+   cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams"]
+   if fmt:
+     cmd += ["-f", fmt]
+-  cmd += ["-i", "-"]
++  local_cmd = list(cmd)
++  local_cmd += ["-i", fn]
++  cmd += ["-i", "pipe:0"]
+ 
+   try:
+-    with FileReader(fn) as f:
+-      ffprobe_output = subprocess.check_output(cmd, input=f.read(4096))
++    if os.path.exists(fn):
++      ffprobe_output = subprocess.check_output(local_cmd)
++    else:
++      with FileReader(fn) as f:
++        ffprobe_output = subprocess.check_output(cmd, input=f.read(4096))
+   except subprocess.CalledProcessError as e:
+     raise DataUnreadableError(fn) from e
+   return json.loads(ffprobe_output)
+-- 
+2.39.5
+
