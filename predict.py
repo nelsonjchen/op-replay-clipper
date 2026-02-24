@@ -78,7 +78,7 @@ class Predictor(BasePredictor):
         uiBackend: str = Input(
             description="(UI Render only) Rendering backend. modern uses upstream openpilot tools/clip/run.py when available; legacy uses clip.sh.",
             choices=["auto", "modern", "legacy"],
-            default="auto",
+            default="modern",
         ),
         forwardUponWideH: float = Input(
             description="(Forward Upon Wide Renders only) H-position of the forward video overlay on wide. Different devices can have different offsets from differing user mounting or factory calibration.",

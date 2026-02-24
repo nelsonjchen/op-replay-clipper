@@ -14,6 +14,7 @@ import platform
 import re
 import subprocess
 from pathlib import Path
+import ui_clip
 
 MIN_LENGTH_SECONDS = 1
 MAX_LENGTH_SECONDS = 300
@@ -214,6 +215,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--speed", type=int, default=1, help="Render speed multiplier")
     parser.add_argument("--title", default="", help="Optional overlay title")
     parser.add_argument("--big", action="store_true", help="Use big UI render")
+    parser.add_argument(
+        "--ui-mode",
+        choices=["auto", "c3", "c3x", "big", "c4"],
+        default="auto",
+        help="UI layout mode (preferred over --big).",
+    )
     parser.add_argument("--qcam", action="store_true", help="Use qcamera")
     parser.add_argument("--windowed", action="store_true", help="Show render window")
     parser.add_argument("--no-metadata", action="store_true", help="Disable metadata overlay")
@@ -283,59 +290,31 @@ def main() -> None:
         ensure_openpilot_checkout(openpilot_dir, branch=args.openpilot_branch)
     if not args.skip_openpilot_bootstrap:
         bootstrap_openpilot(openpilot_dir)
-    patch_openpilot_local_ffprobe(openpilot_dir)
-    patch_openpilot_clip_qcam_local_decode(openpilot_dir)
-    ensure_openpilot_ui_fonts(openpilot_dir)
-
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    ui_mode = args.ui_mode
+    if args.big and ui_mode == "auto":
+        ui_mode = "big"
+    if args.title or args.windowed or args.no_metadata or args.no_time_overlay:
+        print("warning: title/windowed/no-metadata/no-time-overlay are not yet wired through local_ui_clip -> ui_clip")
 
-    clip_cmd = [
-        "uv",
-        "run",
-        "python",
-        "tools/clip/run.py",
-        "-o",
-        str(output_path),
-        "-f",
-        str(args.file_size_mb),
-        "-x",
-        str(args.speed),
-    ]
-    compat_data_dir: Path | None = None
-    if not args.demo:
-        route_slash = route.replace("|", "/")
-    else:
-        route_slash = route.replace("|", "/")
-    if data_dir is not None:
-        compat_data_dir = build_openpilot_compatible_data_dir(route, data_dir)
-    clip_cmd += [
-        route_slash,
-        "-s",
-        str(start_seconds),
-        "-e",
-        str(start_seconds + length_seconds),
-        "-d",
-        str(compat_data_dir.resolve()),
-    ]
-    if args.title:
-        clip_cmd += ["-t", args.title]
-    if args.big:
-        clip_cmd.append("--big")
-    if args.qcam:
-        clip_cmd.append("--qcam")
-    if args.windowed:
-        clip_cmd.append("--windowed")
-    if args.no_metadata:
-        clip_cmd.append("--no-metadata")
-    if args.no_time_overlay:
-        clip_cmd.append("--no-time-overlay")
-
-    env = os.environ.copy()
-    if platform.system() == "Darwin":
-        env["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
-        env.setdefault("FFMPEG_HWACCEL", "none")
-
-    run(clip_cmd, cwd=openpilot_dir, env=env)
+    ui_clip.render_ui_clip(
+        ui_clip.UIRenderOptions(
+            route=route,
+            start_seconds=start_seconds,
+            length_seconds=length_seconds,
+            smear_seconds=0,
+            target_mb=max(1, int(round(args.file_size_mb))),
+            file_format="h264",
+            speedhack_ratio=float(args.speed),
+            metric=False,
+            output_path=str(output_path),
+            data_dir=str(data_dir.resolve()) if data_dir is not None else None,
+            jwt_token=args.jwt_token or None,
+            openpilot_dir=str(openpilot_dir),
+            backend="modern",
+            ui_mode=ui_mode,  # type: ignore[arg-type]
+        )
+    )
     print(f"\nWrote clip: {output_path}")
 
 

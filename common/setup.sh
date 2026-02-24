@@ -27,6 +27,7 @@ apt-get update -y && apt-get install -y \
     `# Missing in the base cog image` \
     sudo \
     wget \
+    curl \
     git-lfs \
     tzdata \
     zstd \
@@ -45,27 +46,28 @@ cd /home/batman/openpilot || exit
 # # Install dependencies
 INSTALL_EXTRA_PACKAGES=yes ./tools/ubuntu_setup.sh
 
+# Modern upstream Python env setup (includes UI extras such as pillow)
+./tools/install_python_dependencies.sh
+if [ -x /root/.local/bin/uv ]; then
+  ln -sf /root/.local/bin/uv /usr/local/bin/uv
+fi
+export PATH="/root/.local/bin:$PATH"
+
+# Build native modules and generated solver bindings used by tools/clip/run.py
+uv run scons -j8 \
+    msgq_repo/msgq/ipc_pyx.so \
+    msgq_repo/msgq/visionipc/visionipc_pyx.so \
+    common/params_pyx.so \
+    selfdrive/controls/lib/longitudinal_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so \
+    selfdrive/controls/lib/lateral_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so
+
+# Generate bitmap font atlases so recorded UI text uses proper fonts
+uv run python selfdrive/assets/fonts/process.py
+
 rm -rf /tmp/* && \
     rm -rf /root/.cache && \
     rm -rf /var/lib/apt/lists/* && \
     rm -rf /tmp/*
 
-source /home/batman/openpilot/.venv/bin/activate
-
-# # Compile openpilot UI and replay
-scons -j8 tools/replay/replay selfdrive/ui/ui
-
-# Only copy the folders we need from the build repo to /home/batman/openpilot_min
-mkdir -p /home/batman/openpilot_min
-mv /home/batman/openpilot/selfdrive /home/batman/openpilot_min
-mv /home/batman/openpilot/tools /home/batman/openpilot_min
-mv /home/batman/openpilot/third_party /home/batman/openpilot_min
-
-# Get the commit used to build openpilot and save it to /home/batman/openpilot/COMMIT
-git rev-parse HEAD > /home/batman/openpilot_min/COMMIT
-
-# Blow away openpilot folder that was used to build openpilot_min
-rm -rf /home/batman/openpilot
-# Rename openpilot_min to openpilot
-mv /home/batman/openpilot_min /home/batman/openpilot
-
+# Record checkout commit for debugging
+git rev-parse HEAD > /home/batman/openpilot/COMMIT
