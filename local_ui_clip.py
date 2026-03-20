@@ -207,6 +207,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--demo", action="store_true", help="Use a known public demo route (download locally)")
     parser.add_argument("--start-seconds", type=int, default=50, help="Used only for route-id input")
     parser.add_argument("--length-seconds", type=int, default=20, help="Used only for route-id input")
+    parser.add_argument("--smear-seconds", type=int, default=3, help="Warm up the UI this many seconds before the visible clip start")
     parser.add_argument("--jwt-token", default="", help="Optional JWT token for private routes")
     parser.add_argument("--output", default="./shared/local-ui-clip.mp4", help="Output MP4 path")
     parser.add_argument("--openpilot-dir", default="./.cache/openpilot-local", help="Local openpilot checkout path")
@@ -278,7 +279,7 @@ def main() -> None:
         downloader.downloadSegments(
             data_dir=data_dir,
             route_or_segment=route,
-            smear_seconds=0,
+            smear_seconds=args.smear_seconds,
             start_seconds=start_seconds,
             length=length_seconds,
             file_types=["qcameras", "logs"] if args.qcam else ["cameras", "logs"],
@@ -294,15 +295,15 @@ def main() -> None:
     ui_mode = args.ui_mode
     if args.big and ui_mode == "auto":
         ui_mode = "big"
-    if args.title or args.windowed or args.no_metadata or args.no_time_overlay:
-        print("warning: title/windowed/no-metadata/no-time-overlay are not yet wired through local_ui_clip -> ui_clip")
+    if args.title or args.no_metadata or args.no_time_overlay:
+        print("warning: title/no-metadata/no-time-overlay are not yet wired through local_ui_clip -> ui_clip")
 
     ui_clip.render_ui_clip(
         ui_clip.UIRenderOptions(
             route=route,
             start_seconds=start_seconds,
             length_seconds=length_seconds,
-            smear_seconds=0,
+            smear_seconds=max(0, args.smear_seconds),
             target_mb=max(1, int(round(args.file_size_mb))),
             file_format="h264",
             speedhack_ratio=float(args.speed),
@@ -313,6 +314,7 @@ def main() -> None:
             openpilot_dir=str(openpilot_dir),
             backend="modern",
             ui_mode=ui_mode,  # type: ignore[arg-type]
+            headless=not args.windowed,
         )
     )
     print(f"\nWrote clip: {output_path}")

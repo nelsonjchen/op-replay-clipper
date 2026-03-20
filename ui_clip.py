@@ -30,6 +30,7 @@ class UIRenderOptions:
     openpilot_dir: str = "/home/batman/openpilot"
     backend: UIBackend = "auto"
     ui_mode: UIMode = "auto"
+    headless: bool = True
 
 
 def _run(cmd: list[str], cwd: str | Path | None = None, env: dict[str, str] | None = None) -> None:
@@ -58,6 +59,13 @@ def _ui_mode_to_modern_flags(ui_mode: UIMode) -> list[str]:
     if ui_mode in ("c3", "c3x", "big"):
         return ["--big"]
     return []
+
+
+def _openpilot_python_cmd(openpilot_dir: Path) -> list[str]:
+    venv_python = openpilot_dir / ".venv/bin/python"
+    if venv_python.exists():
+        return [str(venv_python)]
+    return ["uv", "run", "python"]
 
 
 def _build_openpilot_compatible_data_dir(route: str, downloader_data_dir: Path) -> Path:
@@ -146,7 +154,7 @@ def _ensure_fonts(openpilot_dir: Path) -> None:
     needed = ["Inter-Light.fnt", "Inter-Medium.fnt", "Inter-Bold.fnt", "Inter-SemiBold.fnt", "Inter-Regular.fnt", "unifont.fnt"]
     if all((fonts_dir / f).exists() for f in needed):
         return
-    _run(["uv", "run", "python", "selfdrive/assets/fonts/process.py"], cwd=openpilot_dir)
+    _run([*_openpilot_python_cmd(openpilot_dir), "selfdrive/assets/fonts/process.py"], cwd=openpilot_dir)
 
 
 def _trim_mp4_in_place(path: Path, trim_start_seconds: int) -> None:
@@ -176,7 +184,7 @@ def _render_modern(opts: UIRenderOptions) -> None:
     trim_front = opts.start_seconds - render_start
 
     clip_cmd = [
-        "uv", "run", "python", "tools/clip/run.py",
+        *_openpilot_python_cmd(openpilot_dir), "tools/clip/run.py",
         opts.route.replace("|", "/"),
         "-s", str(render_start),
         "-e", str(render_end),
@@ -189,6 +197,8 @@ def _render_modern(opts: UIRenderOptions) -> None:
         compat_root = _build_openpilot_compatible_data_dir(opts.route, Path(opts.data_dir))
         clip_cmd += ["-d", str(compat_root)]
     clip_cmd += _ui_mode_to_modern_flags(opts.ui_mode)
+    if not opts.headless:
+        clip_cmd.append("--windowed")
     if opts.metric:
         # No direct flag in upstream clip tool currently.
         print("warning: modern backend does not expose metric toggle; ignoring")
@@ -244,4 +254,3 @@ def render_ui_clip(opts: UIRenderOptions) -> None:
     if not _has_legacy_clip_script():
         raise RuntimeError("Legacy backend unavailable (missing ./clip.sh) and modern backend failed/unavailable")
     _render_legacy(opts)
-
