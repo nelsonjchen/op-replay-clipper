@@ -165,31 +165,40 @@ With the car on, **within a minute** after an incident when it is safe to do so:
 
 ## Advanced Usage
 
-### Local UI clip MP4 (no Docker, modern openpilot clip tool)
+### Local-first development workflow
 
-This repo now includes `local_ui_clip.py`, which uses upstream `openpilot/tools/clip/run.py`
-instead of the older tmux/X11 capture wrapper.
+Use `local_clip.py` as the primary non-Cog entrypoint for cheap local validation on macOS or Linux before paying for GCE runs.
 
-Example:
+BIG UI is the first-class UI target in this cleanup phase. Non-BIG / comma 4 (`c4`/mici) UI support is intentionally deferred.
+
+Examples:
 
 ```bash
-python3 local_ui_clip.py "https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
+uv sync
+uv run python local_clip.py ui "https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
+uv run python local_clip.py forward "a2a0ccea32023010|2023-07-27--13-01-19" --demo
 ```
 
-Demo smoke test (no route download):
+BIG UI smoke test:
 
 ```bash
-python3 local_ui_clip.py --demo --qcam --length-seconds 2 --output ./shared/demo-ui-clip.mp4
+uv run python local_clip.py ui --demo --qcam --length-seconds 2 --output ./shared/demo-big-ui-clip.mp4
 ```
 
 Notes:
 
-* It clones/updates `openpilot` into `./.cache/openpilot-local`
-* It runs `uv sync --frozen --all-extras` (plain `uv sync` can miss UI deps like `Pillow`)
-* It builds the native modules needed by `tools/clip/run.py`
+* `local_clip.py` is the primary local CLI for UI and non-UI renders
+* `uv sync` bootstraps the local Python environment used by the local CLI
+* On macOS it prefers a local acceleration policy for ffmpeg-based renders where available
+* It clones/updates `openpilot` into `./.cache/openpilot-local` for UI renders
+* It runs `uv sync --frozen --all-extras` and builds the native modules needed by `tools/clip/run.py`
 * On macOS it applies the same `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` workaround used by upstream `tools/install_python_dependencies.sh`
+* `uv run pytest` runs the local refactor tests
 
-Output defaults to `./shared/local-ui-clip.mp4`.
+Compatibility wrappers:
+
+* `local_ui_clip.py` now forwards to `local_clip.py ui`
+* `clip.sh` is deprecated and forwards to the Python local CLI instead of being the implementation
 
 ### JWT Token Input
 

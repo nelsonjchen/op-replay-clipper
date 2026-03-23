@@ -1,391 +1,305 @@
-"""
-FFMPEG related clipping from a data directory.
-
-Reference for 360: https://discord.com/channels/469524606043160576/819046761287909446/1068406169317675078
-
-ffmpeg -i clip.ecam.clipped.mp4 -i clip.dcam.clipped.mp4 -filter_complex hstack -c:v libx265 clip.stacked.mp4
-ffmpeg -y -i clip.stacked.mp4 -vf v360=dfisheye:equirect:ih_fov=185:iv_fov=185 -c:v libx265 clip.equirect.mp4
-
-"looks like we have v360=dfisheye:equirect:ih_fov=195:iv_fov=122"
-
-ffmpeg -y -i clip.stacked.mp4 -vf v360=dfisheye:equirect:ih_fov=195:iv_fov=122 -c:v libx265 clip.equirect.mp4
-
-ChatGPT combined:
-
-ffmpeg -i clip.ecam.clipped.mp4 -i clip.dcam.clipped.mp4 -filter_complex "[0:v][1:v]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=185:iv_fov=185[vout]" -map "[vout]" -c:v libx265 clip.equirect.mp4
-
-Note that the above is not a complete command, it's missing some pre-processing of the driver camera file that comma does and has not been disclosed. More reverse engineering was done to figure out a command that's much closer but not quite identical.
-
-Discovered:
-
-* Driver camera might be shifted down and padded with a dark red color
-* Forward camera is initial view
-
-Unresolved Differences:
-
-* The curving is a bit different in the padded and final result. The padded result is a bit more curved somehow.
-* Is it possible there's lens correction going on in the driver camera? This would explain the difference in curving.
-
-"""
+from __future__ import annotations
 
 import argparse
 import os
+import platform
 import re
+import shutil
 import subprocess
-from typing import List
-import spatialmedia
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
+
+RenderType = Literal[
+    "forward",
+    "wide",
+    "driver",
+    "360",
+    "forward_upon_wide",
+    "360_forward_upon_wide",
+]
+OutputFormat = Literal["h264", "hevc"]
+AccelerationPolicy = Literal["auto", "cpu", "videotoolbox", "nvidia"]
+
+
+@dataclass(frozen=True)
+class VideoRenderOptions:
+    render_type: RenderType
+    data_dir: str
+    route_or_segment: str
+    start_seconds: int
+    length_seconds: int
+    target_mb: int
+    file_format: OutputFormat
+    acceleration: AccelerationPolicy = "auto"
+    forward_upon_wide_h: float = 2.2
+    output_path: str = "./shared/cog-clip.mp4"
+
+
+@dataclass(frozen=True)
+class VideoAcceleration:
+    name: AccelerationPolicy
+    decoder_args: tuple[str, ...]
+    encoder_args: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class VideoRenderResult:
+    output_path: Path
+    acceleration: AccelerationPolicy
+
+
+def _normalize_route(route_or_segment: str) -> str:
+    return re.sub(r"--\d{1,4}$", "", route_or_segment)
+
+
+def _route_date(route: str) -> str:
+    return route.split("|", 1)[1]
+
+
+def _segment_numbers(start_seconds: int, length_seconds: int) -> list[int]:
+    return list(range(start_seconds // 60, (start_seconds + length_seconds) // 60 + 1))
+
+
+def _concat_string(data_dir: str, route: str, segments: list[int], filename: str) -> str:
+    route_date = _route_date(route)
+    inputs = [f"{data_dir}/{route_date}--{segment}/{filename}" for segment in segments]
+    return f"concat:{'|'.join(inputs)}"
+
+
+def _target_bitrate(target_mb: int, length_seconds: int) -> int:
+    return target_mb * 8 * 1024 * 1024 // length_seconds
+
+
+def _run_logged(command: list[str]) -> None:
+    print(f"+ {' '.join(command)}")
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    assert process.stdout is not None
+    try:
+        for line in process.stdout:
+            print(line.rstrip())
+    except KeyboardInterrupt:
+        process.kill()
+        raise
+    return_code = process.wait()
+    if return_code != 0:
+        raise subprocess.CalledProcessError(return_code, command)
+
+
+def _has_nvidia() -> bool:
+    nvidia_smi = shutil.which("nvidia-smi")
+    if not nvidia_smi:
+        return False
+    return subprocess.run([nvidia_smi, "-L"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode == 0
+
+
+def select_video_acceleration(policy: AccelerationPolicy, file_format: OutputFormat) -> VideoAcceleration:
+    if policy == "auto":
+        if platform.system() == "Darwin":
+            policy = "videotoolbox"
+        elif _has_nvidia():
+            policy = "nvidia"
+        else:
+            policy = "cpu"
+
+    if policy == "nvidia":
+        encoder = ("-c:v", "h264_nvenc") if file_format == "h264" else ("-c:v", "hevc_nvenc", "-vtag", "hvc1")
+        return VideoAcceleration(name="nvidia", decoder_args=("-hwaccel", "auto"), encoder_args=encoder)
+
+    if policy == "videotoolbox":
+        encoder = ("-c:v", "h264_videotoolbox") if file_format == "h264" else ("-c:v", "hevc_videotoolbox", "-vtag", "hvc1")
+        return VideoAcceleration(name="videotoolbox", decoder_args=(), encoder_args=encoder)
+
+    if policy == "cpu":
+        encoder = ("-c:v", "libx264") if file_format == "h264" else ("-c:v", "libx265", "-vtag", "hvc1")
+        return VideoAcceleration(name="cpu", decoder_args=(), encoder_args=encoder)
+
+    raise ValueError(f"Unsupported acceleration policy: {policy}")
+
+
+def _encoder_output_args(accel: VideoAcceleration, target_bps: int, output_path: str) -> list[str]:
+    return [
+        *accel.encoder_args,
+        "-b:v",
+        str(target_bps),
+        "-maxrate",
+        str(target_bps),
+        "-bufsize",
+        str(target_bps * 2),
+        "-movflags",
+        "+faststart",
+        output_path,
+    ]
+
+
+def _simple_render_command(opts: VideoRenderOptions, accel: VideoAcceleration, ffmpeg_input: str) -> list[str]:
+    start_seconds_relative = opts.start_seconds % 60
+    target_bps = _target_bitrate(opts.target_mb, opts.length_seconds)
+    return [
+        "ffmpeg",
+        "-y",
+        *accel.decoder_args,
+        "-probesize",
+        "100M",
+        "-r",
+        "20",
+        "-vsync",
+        "0",
+        "-i",
+        ffmpeg_input,
+        "-t",
+        str(opts.length_seconds),
+        "-ss",
+        str(start_seconds_relative),
+        *(_encoder_output_args(accel, target_bps, opts.output_path)),
+    ]
+
+
+def _complex_render_command(opts: VideoRenderOptions, accel: VideoAcceleration, inputs: list[str], filter_complex: str) -> list[str]:
+    start_seconds_relative = opts.start_seconds % 60
+    target_bps = _target_bitrate(opts.target_mb, opts.length_seconds)
+    command = ["ffmpeg", "-y"]
+    for ffmpeg_input in inputs:
+        command.extend([*accel.decoder_args, "-probesize", "100M", "-r", "20", "-i", ffmpeg_input])
+    command.extend(
+        [
+            "-t",
+            str(opts.length_seconds),
+            "-ss",
+            str(start_seconds_relative),
+            "-filter_complex",
+            filter_complex,
+            "-map",
+            "[vout]",
+            *(_encoder_output_args(accel, target_bps, opts.output_path)),
+        ]
+    )
+    return command
+
+
+def _inject_360_metadata(output_path: Path) -> None:
+    import spatialmedia
+
+    temp_output = output_path.with_suffix(".temp.mp4")
+    if temp_output.exists():
+        temp_output.unlink()
+    output_path.rename(temp_output)
+    metadata = spatialmedia.metadata_utils.Metadata()
+    metadata.video = spatialmedia.metadata_utils.generate_spherical_xml("none", None)
+    spatialmedia.metadata_utils.inject_metadata(str(temp_output), str(output_path), metadata, print)
+    temp_output.unlink()
+
+
+def render_video_clip(opts: VideoRenderOptions) -> VideoRenderResult:
+    if not os.path.exists(opts.data_dir):
+        raise ValueError(f"Invalid data_dir: {opts.data_dir}")
+
+    route = _normalize_route(opts.route_or_segment)
+    segments = _segment_numbers(opts.start_seconds, opts.length_seconds)
+    accel = select_video_acceleration(opts.acceleration, opts.file_format)
+
+    forward_input = _concat_string(opts.data_dir, route, segments, "fcamera.hevc")
+    wide_input = _concat_string(opts.data_dir, route, segments, "ecamera.hevc")
+    driver_input = _concat_string(opts.data_dir, route, segments, "dcamera.hevc")
+
+    if opts.render_type == "forward":
+        command = _simple_render_command(opts, accel, forward_input)
+    elif opts.render_type == "wide":
+        command = _simple_render_command(opts, accel, wide_input)
+    elif opts.render_type == "driver":
+        command = _simple_render_command(opts, accel, driver_input)
+    elif opts.render_type == "forward_upon_wide":
+        command = _complex_render_command(
+            opts,
+            accel,
+            [wide_input, forward_input],
+            f"[1:v]scale=iw/4.5:ih/4.5,format=yuva420p,colorchannelmixer=aa=1[front];[0:v][front]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/{opts.forward_upon_wide_h}[vout]",
+        )
+    elif opts.render_type == "360":
+        command = _complex_render_command(
+            opts,
+            accel,
+            [driver_input, wide_input],
+            "[0:v]pad=iw:ih+290:0:290:color=#160000,crop=iw:1208[driver];[driver][1:v]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
+        )
+    elif opts.render_type == "360_forward_upon_wide":
+        command = _complex_render_command(
+            opts,
+            accel,
+            [driver_input, wide_input, forward_input],
+            f"[2:v]scale=iw/2.25:ih/2.25,format=yuva420p,colorchannelmixer=aa=1[front];[1:v]scale=iw*2:ih*2[wide];[wide][front]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/{opts.forward_upon_wide_h}[fuw];[0:v]scale=iw*2:ih*2,pad=iw:ih+290:0:290:color=#160000,crop=iw:2416[driver];[driver][fuw]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
+        )
+    else:
+        raise ValueError(f"Invalid render_type: {opts.render_type}")
+
+    _run_logged(command)
+
+    output_path = Path(opts.output_path).resolve()
+    if opts.render_type in ("360", "360_forward_upon_wide"):
+        _inject_360_metadata(output_path)
+    return VideoRenderResult(output_path=output_path, acceleration=accel.name)
 
 
 def make_ffmpeg_clip(
-    render_type: str,
+    render_type: RenderType,
     data_dir: str,
     route_or_segment: str,
     start_seconds: int,
     length_seconds: int,
     target_mb: int,
-    format: str,
+    format: OutputFormat,
     nvidia_hardware_rendering: bool,
     forward_upon_wide_h: float,
     output: str,
-):
-    if render_type not in [
+) -> None:
+    render_video_clip(
+        VideoRenderOptions(
+            render_type=render_type,
+            data_dir=data_dir,
+            route_or_segment=route_or_segment,
+            start_seconds=start_seconds,
+            length_seconds=length_seconds,
+            target_mb=target_mb,
+            file_format=format,
+            acceleration="nvidia" if nvidia_hardware_rendering else "auto",
+            forward_upon_wide_h=forward_upon_wide_h,
+            output_path=output,
+        )
+    )
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Render non-UI clips with ffmpeg")
+    parser.add_argument("--render-type", "-t", choices=[
         "forward",
         "wide",
         "driver",
         "360",
         "forward_upon_wide",
         "360_forward_upon_wide",
-    ]:
-        raise ValueError(f"Invalid choice: {render_type}")
-    if not os.path.exists(data_dir):
-        raise ValueError(f"Invalid data_dir: {data_dir}")
-    route = re.sub(r"--\d{,4}+$", "", route_or_segment)
-    route_date = re.sub(r"^[^|]+\|", "", route)
-
-    if format not in ["h264", "hevc"]:
-        raise ValueError(f"Invalid format: {format}")
-
-    # Target bitrate in bits per second (bps). Try to get close to the target file size.
-    target_bps = (target_mb) * 8 * 1024 * 1024 // length_seconds
-    # Start seconds relative to the start of the concatenated video
-    start_seconds_relative = start_seconds % 60
-
-    # Figure out the segments we'll be operating over
-    # The first segment is start_seconds // 60
-    # The last segment is (start_seconds + length_seconds) // 60
-    segments = list(
-        range(start_seconds // 60, (start_seconds + length_seconds) // 60 + 1)
-    )
-
-    # Generate concat strings for clip to use
-    forward_concat_string_input = "|".join(
-        [f"{data_dir}/{route_date}--{segment}/fcamera.hevc" for segment in segments]
-    )
-    forward_concat_string = f"concat:{forward_concat_string_input}"
-    wide_concat_string_input = "|".join(
-            [f"{data_dir}/{route_date}--{segment}/ecamera.hevc" for segment in segments]
-        )
-    wide_concat_string = f"concat:{wide_concat_string_input}"
-    driver_concat_string_input = "|".join(
-        [f"{data_dir}/{route_date}--{segment}/dcamera.hevc" for segment in segments]
-    )
-    driver_concat_string = f"concat:{driver_concat_string_input}"
-
-    # Figure out what segments we'll need to concat
-    # .hevc files can be concatenated with the concat protocol demuxer
-
-    # Split processing into two types:
-    # Simple processing: forward, wide, driver
-    # Complex processing: 360, forward_upon_wide, 360_forward_upon_wide
-    if render_type in ["forward", "wide", "driver"]:
-        #  Map render_type to appropriate filename
-        if render_type == "forward":
-            ffmpeg_concat_string = forward_concat_string
-        elif render_type == "wide":
-            ffmpeg_concat_string = wide_concat_string
-        elif render_type == "driver":
-            ffmpeg_concat_string = driver_concat_string
-
-        # Run the ffmpeg command
-        command = [
-            "ffmpeg",
-            "-r",
-            "20",
-            "-vsync",
-            "0",
-            "-y",
-            "-hwaccel",
-            "auto",
-            "-probesize",
-            "100M",
-            "-i",
-            ffmpeg_concat_string,
-            "-t",
-            str(length_seconds),
-            "-ss",
-            str(start_seconds_relative),
-            "-f",
-            "mp4",
-            "-movflags",
-            "+faststart",
-        ]
-        if nvidia_hardware_rendering:
-            if format == "h264":
-                command += ["-c:v", "h264_nvenc"]
-            elif format == "hevc":
-                command += ["-c:v", "hevc_nvenc"]
-                command += ["-vtag", "hvc1"]
-
-        # Target bitrate with maxrate and bufsize
-        command += [
-            "-b:v",
-            str(target_bps),
-            "-maxrate",
-            str(target_bps),
-            "-bufsize",
-            str(target_bps * 2),
-        ]
-        command += [output]
-
-        print(command)
-        process = subprocess.Popen(command, stdout=subprocess.PIPE)
-        try:
-            while True:
-                proc_output = process.stdout.readline()
-                if proc_output == b"" and process.poll() is not None:
-                    break
-                if proc_output:
-                    print(proc_output)
-        except KeyboardInterrupt:
-            process.kill()
-            raise
-
-    elif render_type in ["forward_upon_wide"]:
-        # Run the ffmpeg command
-        command = [
-            "ffmpeg",
-            "-y",
-            "-hwaccel",
-            "auto",
-            "-probesize",
-            "100M",
-            "-r",
-            "20",
-            "-i",
-            wide_concat_string,
-            "-probesize",
-            "100M",
-            "-r",
-            "20",
-            "-i",
-            forward_concat_string,
-            "-t",
-            str(length_seconds),
-            "-ss",
-            str(start_seconds_relative),
-            "-filter_complex",
-            f"[1:v]scale=iw/4.5:ih/4.5,format=yuva420p,colorchannelmixer=aa=1[front];[0:v][front]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/{forward_upon_wide_h}",
-            "-f",
-            "mp4",
-            "-movflags",
-            "+faststart",
-        ]
-        if nvidia_hardware_rendering:
-            if format == "h264":
-                command += ["-c:v", "h264_nvenc"]
-            elif format == "hevc":
-                command += ["-c:v", "hevc_nvenc"]
-                command += ["-vtag", "hvc1"]
-
-        # Target bitrate with maxrate and bufsize
-        command += [
-            "-b:v",
-            str(target_bps),
-            "-maxrate",
-            str(target_bps),
-            "-bufsize",
-            str(target_bps * 2),
-        ]
-        command += [output]
-        print(command)
-
-        process = subprocess.Popen(command, stdout=subprocess.PIPE)
-        try:
-            while True:
-                proc_output = process.stdout.readline()
-                if proc_output == b"" and process.poll() is not None:
-                    break
-                if proc_output:
-                    print(proc_output)
-        except KeyboardInterrupt:
-            process.kill()
-            raise
-
-    elif render_type == "360" or render_type == "360_forward_upon_wide":
-
-        if render_type == "360":
-            # Run the ffmpeg command that has two inputs and fisheye
-            command = [
-                "ffmpeg",
-                "-y",
-                "-hwaccel",
-                "auto",
-                "-probesize",
-                "100M",
-                "-r",
-                "20",
-                "-i",
-                driver_concat_string,
-                "-probesize",
-                "100M",
-                "-r",
-                "20",
-                "-i",
-                wide_concat_string,
-                "-t",
-                str(length_seconds),
-                "-ss",
-                str(start_seconds_relative),
-                "-filter_complex",
-                f"[0:v]pad=iw:ih+290:0:290:color=#160000,crop=iw:1208[driver];[driver][1:v]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
-                "-map",
-                "[vout]",
-            ]
-        elif render_type == "360_forward_upon_wide":
-            command = [
-                "ffmpeg",
-                "-y",
-                "-hwaccel",
-                "auto",
-                "-probesize",
-                "100M",
-                "-r",
-                "20",
-                "-i",
-                driver_concat_string,
-                "-probesize",
-                "100M",
-                "-r",
-                "20",
-                "-i",
-                wide_concat_string,
-                "-probesize",
-                "100M",
-                "-r",
-                "20",
-                "-i",
-                forward_concat_string,
-                "-t",
-                str(length_seconds),
-                "-ss",
-                str(start_seconds_relative),
-                "-filter_complex",
-                f"[2:v]scale=iw/2.25:ih/2.25,format=yuva420p,colorchannelmixer=aa=1[front];[1:v]scale=iw*2:ih*2[wide];[wide][front]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/{forward_upon_wide_h}[fuw];[0:v]scale=iw*2:ih*2,pad=iw:ih+290:0:290:color=#160000,crop=iw:2416[driver];[driver][fuw]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
-                "-map",
-                "[vout]",
-            ]
-
-        if nvidia_hardware_rendering:
-            if format == "h264":
-                command += ["-c:v", "h264_nvenc"]
-            elif format == "hevc":
-                command += ["-c:v", "hevc_nvenc"]
-                command += ["-vtag", "hvc1"]
-
-        # Target bitrate with maxrate and bufsize
-        command += [
-            "-b:v",
-            str(target_bps),
-            "-maxrate",
-            str(target_bps),
-            "-bufsize",
-            str(target_bps * 2),
-        ]
-        command += [output]
-
-        print(command)
-        process = subprocess.Popen(command, stdout=subprocess.PIPE)
-
-        try:
-            while True:
-                proc_output = process.stdout.readline()
-                if proc_output == b"" and process.poll() is not None:
-                    break
-                if proc_output:
-                    print(proc_output)
-        except KeyboardInterrupt:
-            process.kill()
-            raise
-
-        # Debug return to not do the spherical projection
-        # return
-
-        # Add spherical projection to the output
-        # Move the old output to a temp file
-        # Print type(output)
-        temp_output = output + ".temp.mp4"
-        if os.path.exists(temp_output):
-            os.remove(temp_output)
-            # Print working directory
-
-        print(os.getcwd())
-        os.rename(output, temp_output)
-
-        metadata = spatialmedia.metadata_utils.Metadata()
-        metadata.video = spatialmedia.metadata_utils.generate_spherical_xml(
-            "none", None
-        )
-        spatialmedia.metadata_utils.inject_metadata(
-            temp_output, output, metadata, print
-        )
-        # Delete the temp file
-        os.remove(temp_output)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="render segments with ffmpeg")
-    parser.add_argument(
-        "--render_type", "-t", type=str, help="Render type to do", default="forward"
-    )
-    parser.add_argument(
-        "--data_dir", type=str, help="Directory to read from", default="shared/data_dir"
-    )
-    parser.add_argument(
-        "route_or_segment", type=str, help="Name of the route or segment to process"
-    )
-    parser.add_argument("start_seconds", type=int, help="Start time in seconds")
-    parser.add_argument(
-        "length_seconds", type=int, help="Length of the segment to render"
-    )
-    parser.add_argument(
-        "--target_mb", type=int, help="Target file size in megabytes", default=25
-    )
-    parser.add_argument(
-        "--forward-upon-wide-h",
-        type=float,
-        help="Height of the forward camera in forward upon wide overlay videos",
-        default=2.2,
-    )
-    parser.add_argument(
-        "--nvidia-hardware-rendering",
-        "-nv",
-        action="store_true",
-        help="Use NVENC hardware rendering",
-    )
-    parser.add_argument(
-        "--output", type=str, help="Output file name", default="./shared/cog-clip.mp4"
-    )
+    ], default="forward")
+    parser.add_argument("--data-dir", default="shared/data_dir")
+    parser.add_argument("route_or_segment")
+    parser.add_argument("start_seconds", type=int)
+    parser.add_argument("length_seconds", type=int)
+    parser.add_argument("--target-mb", type=int, default=25)
+    parser.add_argument("--forward-upon-wide-h", type=float, default=2.2)
+    parser.add_argument("--accel", choices=["auto", "cpu", "videotoolbox", "nvidia"], default="auto")
+    parser.add_argument("--format", choices=["h264", "hevc"], default="h264")
+    parser.add_argument("--output", default="./shared/cog-clip.mp4")
     args = parser.parse_args()
 
-    # All arguments are required
-    make_ffmpeg_clip(
-        render_type=args.render_type,
-        data_dir=args.data_dir,
-        route_or_segment=args.route_or_segment,
-        start_seconds=args.start_seconds,
-        length_seconds=args.length_seconds,
-        target_mb=args.target_mb,
-        nvidia_hardware_rendering=args.nvidia_hardware_rendering,
-        forward_upon_wide_h=args.forward_upon_wide_h,
-        output=args.output,
+    render_video_clip(
+        VideoRenderOptions(
+            render_type=args.render_type,
+            data_dir=args.data_dir,
+            route_or_segment=args.route_or_segment,
+            start_seconds=args.start_seconds,
+            length_seconds=args.length_seconds,
+            target_mb=args.target_mb,
+            file_format=args.format,
+            acceleration=args.accel,
+            forward_upon_wide_h=args.forward_upon_wide_h,
+            output_path=args.output,
+        )
     )

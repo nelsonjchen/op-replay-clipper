@@ -1,4 +1,4 @@
-.PHONY: build predict predict-360 push local-ui-clip
+.PHONY: build predict predict-360 push local-ui-clip local-clip local-venv test-local
 
 # Unmodified cog
 build: cog/cog.template.yaml cog/generate.sh
@@ -97,8 +97,19 @@ push:
 	./cog/generate.sh
 	cog push r8.im/nelsonjchen/op-replay-clipper
 
-# Local no-Docker UI clip using upstream openpilot tools/clip/run.py
+# Local Python dependencies for the non-Cog CLI
+local-venv:
+	uv sync
+
+# Local no-Docker full pipeline clip using the primary Python CLI
 # Example:
-# make local-ui-clip ROUTE="https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
+# make local-clip RENDER=ui ROUTE="https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
+local-clip:
+	uv run python local_clip.py "$(RENDER)" "$(ROUTE)"
+
+# Compatibility target for the old UI-only entrypoint
 local-ui-clip:
-	python3 local_ui_clip.py "$(ROUTE)"
+	uv run python local_ui_clip.py "$(ROUTE)"
+
+test-local:
+	uv run pytest

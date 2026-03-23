@@ -4,8 +4,6 @@ import dataclasses
 
 from urllib.parse import urlparse
 
-import requests
-
 # Dataclass for a parsed route or URL
 
 
@@ -98,6 +96,8 @@ def parseAbsoluteTimeUrl(
 
     # Make the API call
     api_url = f"https://api.comma.ai/v1/devices/{dongle_id}/routes_segments?end={end_time}&start={start_time}"
+    import requests
+
     if jwt_token:
         response = requests.get(api_url, headers={"Authorization": f"JWT {jwt_token}"})
     else:

@@ -6,3 +6,4 @@ cog.yaml
 __pycache__/
 output.mp4
 .venv/
+.cache/openpilot-local/

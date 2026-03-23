@@ -1,0 +1,19 @@
+[project]
+name = "op-replay-clipper"
+version = "0.1.0"
+description = "Local tooling for openpilot replay clipping"
+requires-python = ">=3.12"
+dependencies = [
+  "parfive==2.1.0",
+  "requests==2.32.3",
+  "spatialmedia @ git+https://github.com/google/spatial-media.git@57c85bb5691518406408b675e52f430e0c62798c",
+]
+
+[dependency-groups]
+test = [
+  "pytest>=8.4,<9",
+]
+
+[tool.uv]
+package = false
+default-groups = ["test"]
