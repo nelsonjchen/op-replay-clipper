@@ -28,6 +28,7 @@ apt-get update -y && apt-get install -y \
     sudo \
     wget \
     curl \
+    capnproto \
     git-lfs \
     tzdata \
     zstd \
@@ -43,15 +44,23 @@ git clone --depth 1 --recurse-submodules https://github.com/commaai/openpilot /h
 
 cd /home/batman/openpilot || exit
 
-# # Install dependencies
-INSTALL_EXTRA_PACKAGES=yes ./tools/ubuntu_setup.sh
-
-# Modern upstream Python env setup (includes UI extras such as pillow)
-./tools/install_python_dependencies.sh
+# # Install dependencies (upstream script names changed)
+if [ -x ./tools/setup_dependencies.sh ]; then
+  ./tools/setup_dependencies.sh
+elif [ -x ./tools/ubuntu_setup.sh ]; then
+  INSTALL_EXTRA_PACKAGES=yes ./tools/ubuntu_setup.sh
+  ./tools/install_python_dependencies.sh
+else
+  echo "No supported openpilot dependency setup scripts found" >&2
+  exit 1
+fi
 if [ -x /root/.local/bin/uv ]; then
   ln -sf /root/.local/bin/uv /usr/local/bin/uv
 fi
 export PATH="/root/.local/bin:$PATH"
+
+# Some dependency tarballs in the Linux container land without exec bits on vendored tools.
+find .venv/lib -type f \( -name 'arm-none-eabi-*' -o -name 'capnp' -o -name 'capnpc*' -o -name 'ffmpeg' -o -name 'ffprobe' \) -exec chmod +x {} + || true
 
 # Build native modules and generated solver bindings used by tools/clip/run.py
 uv run scons -j8 \
