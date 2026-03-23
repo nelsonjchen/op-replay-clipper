@@ -1,4 +1,4 @@
-.PHONY: build predict predict-360 push local-ui-clip local-clip local-venv test-local
+.PHONY: build predict predict-360 push local-clip local-venv test-local
 
 # Unmodified cog
 build: cog/cog.template.yaml cog/generate.sh
@@ -15,16 +15,16 @@ downloader_zstd:
 
 # Test the ffmpeg_clip by itself
 ffmpeg_clip:
-	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 -nv -t driver
+	python ffmpeg_clip.py --render-type driver "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 --accel nvidia
 
 ffmpeg_clip_fuw:
-	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 -nv -t forward_upon_wide
+	python ffmpeg_clip.py --render-type forward_upon_wide "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 --accel nvidia
 
 ffmpeg_clip_360:
-	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 -nv -t 360
+	python ffmpeg_clip.py --render-type 360 "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 --accel nvidia
 
 ffmpeg_clip_360_fuw:
-	python ffmpeg_clip.py "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 -nv -t 360_forward_upon_wide
+	python ffmpeg_clip.py --render-type 360_forward_upon_wide "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 --accel nvidia
 
 # These uses a modified cog up one directory.
 predict:
@@ -106,10 +106,6 @@ local-venv:
 # make local-clip RENDER=ui ROUTE="https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
 local-clip:
 	uv run python local_clip.py "$(RENDER)" "$(ROUTE)"
-
-# Compatibility target for the old UI-only entrypoint
-local-ui-clip:
-	uv run python local_ui_clip.py "$(ROUTE)"
 
 test-local:
 	uv run pytest

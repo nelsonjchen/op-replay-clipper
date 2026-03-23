@@ -21,8 +21,6 @@ RenderType = Literal[
 OutputFormatInput = Literal["auto", "h264", "hevc"]
 OutputFormat = Literal["h264", "hevc"]
 ExecutionContext = Literal["cog", "local"]
-UIBackend = Literal["auto", "modern", "legacy"]
-UIMode = Literal["auto", "c3", "c3x", "big", "c4"]
 LocalAccel = Literal["auto", "cpu", "videotoolbox", "nvidia"]
 
 RENDER_TYPE_FILE_TYPES: dict[RenderType, tuple[str, ...]] = {
@@ -48,8 +46,6 @@ class ClipRequest:
     smear_seconds: int = 0
     jwt_token: str | None = None
     metric: bool = False
-    ui_mode: UIMode = "auto"
-    ui_backend: UIBackend = "modern"
     speedhack_ratio: float = 1.0
     forward_upon_wide_h: float = 2.2
     explicit_data_dir: str | None = None
@@ -77,8 +73,6 @@ class ClipPlan:
     download_file_types: tuple[str, ...]
     decompress_logs: bool
     smear_seconds: int
-    ui_mode: Literal["big"]
-    ui_backend: Literal["modern"]
     local_acceleration: LocalAccel
     forward_upon_wide_h: float
     jwt_token: str | None
@@ -95,7 +89,6 @@ class ClipResult:
     render_type: RenderType
     data_dir: Path
     file_format: OutputFormat
-    ui_mode: str | None = None
     acceleration: str | None = None
 
 
@@ -111,18 +104,6 @@ def normalize_target_mb(target_mb: int, execution_context: ExecutionContext) -> 
     if execution_context == "cog":
         return max(1, target_mb - 1)
     return max(1, target_mb)
-
-
-def normalize_ui_mode(ui_mode: UIMode) -> Literal["big"]:
-    if ui_mode in ("auto", "c3", "c3x", "big"):
-        return "big"
-    raise ValueError("comma 4 / non-BIG UI mode is deferred in this cleanup phase; use BIG, c3, or c3x")
-
-
-def normalize_ui_backend(ui_backend: UIBackend) -> Literal["modern"]:
-    if ui_backend == "legacy":
-        print("warning: legacy UI backend is deprecated; using modern backend")
-    return "modern"
 
 
 def select_download_file_types(render_type: RenderType, *, qcam: bool) -> tuple[str, ...]:
@@ -154,8 +135,6 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
             f"Length must be at most {request.maximum_length_seconds} seconds. Got {parsed.length_seconds} seconds."
         )
 
-    ui_mode = normalize_ui_mode(request.ui_mode) if request.render_type == "ui" else "big"
-    ui_backend = normalize_ui_backend(request.ui_backend) if request.render_type == "ui" else "modern"
     return ClipPlan(
         render_type=request.render_type,
         route=parsed.route,
@@ -168,8 +147,6 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
         download_file_types=select_download_file_types(request.render_type, qcam=request.qcam),
         decompress_logs=request.render_type != "ui",
         smear_seconds=max(0, request.smear_seconds),
-        ui_mode=ui_mode,
-        ui_backend=ui_backend,
         local_acceleration=request.local_acceleration,
         forward_upon_wide_h=request.forward_upon_wide_h,
         jwt_token=request.jwt_token or None,
@@ -215,8 +192,6 @@ def run_clip(request: ClipRequest) -> ClipResult:
                 data_dir=str(plan.data_dir),
                 jwt_token=plan.jwt_token,
                 openpilot_dir=plan.openpilot_dir,
-                backend=plan.ui_backend,
-                ui_mode=plan.ui_mode,
                 headless=plan.headless,
             )
         )
@@ -226,7 +201,6 @@ def run_clip(request: ClipRequest) -> ClipResult:
             render_type=plan.render_type,
             data_dir=plan.data_dir,
             file_format=plan.file_format,
-            ui_mode=ui_result.ui_mode,
         )
 
     video_result = ffmpeg_clip.render_video_clip(

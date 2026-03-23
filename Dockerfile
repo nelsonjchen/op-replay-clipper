@@ -23,7 +23,6 @@ FROM base AS clipper
 
 WORKDIR /workspace
 
-COPY ./clip.sh /workspace/clip.sh
 COPY ./local_clip.py /workspace/local_clip.py
 COPY ./clip_pipeline.py /workspace/clip_pipeline.py
 COPY ./ffmpeg_clip.py /workspace/ffmpeg_clip.py
@@ -34,5 +33,6 @@ COPY ./openpilot_compat.py /workspace/openpilot_compat.py
 COPY ./route_or_url.py /workspace/route_or_url.py
 COPY ./downloader.py /workspace/downloader.py
 COPY ./pyproject.toml /workspace/pyproject.toml
+COPY ./uv.lock /workspace/uv.lock
 
-CMD ["/workspace/clip.sh"]
+CMD ["uv", "run", "python", "/workspace/local_clip.py", "ui"]

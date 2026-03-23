@@ -169,7 +169,7 @@ With the car on, **within a minute** after an incident when it is safe to do so:
 
 Use `local_clip.py` as the primary non-Cog entrypoint for cheap local validation on macOS or Linux before paying for GCE runs.
 
-BIG UI is the first-class UI target in this cleanup phase. Non-BIG / comma 4 (`c4`/mici) UI support is intentionally deferred.
+BIG UI is the supported UI target.
 
 Examples:
 
@@ -194,11 +194,6 @@ Notes:
 * It runs `uv sync --frozen --all-extras` and builds the native modules needed by `tools/clip/run.py`
 * On macOS it applies the same `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` workaround used by upstream `tools/install_python_dependencies.sh`
 * `uv run pytest` runs the local refactor tests
-
-Compatibility wrappers:
-
-* `local_ui_clip.py` now forwards to `local_clip.py ui`
-* `clip.sh` is deprecated and forwards to the Python local CLI instead of being the implementation
 
 ### JWT Token Input
 
@@ -244,7 +239,7 @@ If wanting to use 360 Forward Upon Wide, test with the non-360 Forward Upon Wide
 
 ### UI
 
-The real MVP is [@deanlee](https://github.com/deanlee) for the replay tool in the openpilot project. The level of effort to develop the replay tool is far beyond this script. The script is just a wrapper around the replay tool to make it easy to use for clipping videos.
+The real MVP is [@deanlee](https://github.com/deanlee) for the replay tool in the openpilot project. The level of effort to develop the replay tool is far beyond this project. This tool builds on that replay work to make clipping videos practical.
 
 https://github.com/commaai/openpilot/blame/master/tools/replay/main.cc
 

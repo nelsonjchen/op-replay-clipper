@@ -5,7 +5,6 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 from openpilot_compat import (
     build_openpilot_compatible_data_dir,
@@ -13,11 +12,6 @@ from openpilot_compat import (
     patch_openpilot_qcam_local_decode,
 )
 from runtime_env import configure_ui_environment, temporary_headless_display
-
-
-UIBackend = Literal["auto", "modern", "legacy"]
-UIMode = Literal["auto", "c3", "c3x", "big", "c4"]
-
 
 @dataclass(frozen=True)
 class UIRenderOptions:
@@ -33,16 +27,12 @@ class UIRenderOptions:
     data_dir: str | None = None
     jwt_token: str | None = None
     openpilot_dir: str = "/home/batman/openpilot"
-    backend: UIBackend = "modern"
-    ui_mode: UIMode = "big"
     headless: bool = True
 
 
 @dataclass(frozen=True)
 class UIRenderResult:
     output_path: Path
-    backend: Literal["modern"]
-    ui_mode: Literal["big"]
 
 
 def _run(cmd: list[str], cwd: str | Path | None = None, env: dict[str, str] | None = None) -> None:
@@ -56,18 +46,6 @@ def _run(cmd: list[str], cwd: str | Path | None = None, env: dict[str, str] | No
 
 def _has_modern_openpilot(openpilot_dir: Path) -> bool:
     return (openpilot_dir / "tools/clip/run.py").exists()
-
-
-def _normalize_big_ui_mode(ui_mode: UIMode) -> Literal["big"]:
-    if ui_mode in ("auto", "c3", "c3x", "big"):
-        return "big"
-    raise ValueError("comma 4 / non-BIG UI mode is deferred in this cleanup phase; use BIG, c3, or c3x")
-
-
-def _normalize_backend(backend: UIBackend) -> Literal["modern"]:
-    if backend == "legacy":
-        print("warning: legacy UI backend is deprecated; using modern backend")
-    return "modern"
 
 
 def _openpilot_python_cmd(openpilot_dir: Path) -> list[str]:
@@ -115,9 +93,6 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
     if not _has_modern_openpilot(openpilot_dir):
         raise FileNotFoundError(f"Modern clip tool not found at {openpilot_dir}/tools/clip/run.py")
 
-    ui_mode = _normalize_big_ui_mode(opts.ui_mode)
-    backend = _normalize_backend(opts.backend)
-
     patch_openpilot_framereader_compat(openpilot_dir)
     patch_openpilot_qcam_local_decode(openpilot_dir)
     _ensure_fonts(openpilot_dir)
@@ -157,4 +132,4 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
 
     output_path = Path(opts.output_path).resolve()
     _trim_mp4_in_place(output_path, trim_front)
-    return UIRenderResult(output_path=output_path, backend=backend, ui_mode=ui_mode)
+    return UIRenderResult(output_path=output_path)

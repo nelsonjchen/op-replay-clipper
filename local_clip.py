@@ -28,33 +28,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Primary local CLI for openpilot replay clipping. Use this for cheap local validation before GCE."
     )
-    return add_common_arguments(parser)
-
-
-def add_common_arguments(parser: argparse.ArgumentParser, *, include_render_type: bool = True) -> argparse.ArgumentParser:
-    if include_render_type:
-        parser.add_argument("render_type", choices=RENDER_TYPES)
+    parser.add_argument("render_type", choices=RENDER_TYPES)
     parser.add_argument("route", nargs="?", help='Comma Connect URL or route id (e.g. "dongle|route")')
     parser.add_argument("--demo", action="store_true", help="Use a known public demo route")
     parser.add_argument("-s", "--start-seconds", type=int, default=None)
     parser.add_argument("-l", "--length-seconds", type=int, default=None)
-    parser.add_argument("--smear-seconds", "--smear-amount", type=int, default=5)
+    parser.add_argument("--smear-seconds", type=int, default=5)
     parser.add_argument("-j", "--jwt-token", default="")
     parser.add_argument("-o", "--output", default="./shared/local-clip.mp4")
-    parser.add_argument("-c", "--video-cwd", default="", help="Legacy alias for output directory.")
     parser.add_argument("--openpilot-dir", default="./.cache/openpilot-local")
     parser.add_argument("--openpilot-branch", default="master")
-    parser.add_argument("-m", "--file-size-mb", "--target-mb", type=int, default=9)
-    parser.add_argument("--file-format", "--format", choices=["auto", "h264", "hevc"], default="auto")
-    parser.add_argument("-r", "--speedhack-ratio", "--speed", type=float, default=1.0)
+    parser.add_argument("-m", "--file-size-mb", type=int, default=9)
+    parser.add_argument("--file-format", choices=["auto", "h264", "hevc"], default="auto")
+    parser.add_argument("-r", "--speedhack-ratio", type=float, default=1.0)
     parser.add_argument("--metric", action="store_true")
-    parser.add_argument(
-        "--ui-mode",
-        choices=["auto", "c3", "c3x", "big", "c4"],
-        default="auto",
-        help="BIG-first UI mode handling. c4 is deferred and currently rejected.",
-    )
-    parser.add_argument("--ui-backend", choices=["auto", "modern", "legacy"], default="modern")
     parser.add_argument("--forward-upon-wide-h", type=float, default=2.2)
     parser.add_argument("--qcam", action="store_true")
     parser.add_argument("--windowed", action="store_true")
@@ -64,32 +51,7 @@ def add_common_arguments(parser: argparse.ArgumentParser, *, include_render_type
     parser.add_argument("--data-dir", default="", help="Explicit data dir. If unset, uses --data-root/<dongle-id>.")
     parser.add_argument("--skip-download", action="store_true", help="Reuse already-downloaded route data.")
     parser.add_argument("--accel", choices=["auto", "cpu", "videotoolbox", "nvidia"], default="auto")
-    parser.add_argument("--ntfysh", default="", help="Deprecated legacy option. Ignored.")
-    parser.add_argument("--vnc", default="", help="Deprecated legacy option. Ignored.")
-    parser.add_argument("--hidden-dongle-id", action="store_true", help="Deprecated legacy option. Ignored.")
-    parser.add_argument("--nv-hardware-rendering", action="store_true", help="Alias for --accel=nvidia.")
-    parser.add_argument("--nv-hybrid-encoding", action="store_true", help="Deprecated legacy option. Ignored.")
-    parser.add_argument("--nv-fast-encoding", action="store_true", help="Deprecated legacy option. Ignored.")
-    parser.add_argument("--nv-direct-encoding", action="store_true", help="Deprecated legacy option. Ignored.")
     return parser
-
-
-def _warn_ignored_legacy_options(args: argparse.Namespace) -> None:
-    ignored = []
-    if args.ntfysh:
-        ignored.append("--ntfysh")
-    if args.vnc:
-        ignored.append("--vnc")
-    if args.hidden_dongle_id:
-        ignored.append("--hidden-dongle-id")
-    if args.nv_hybrid_encoding:
-        ignored.append("--nv-hybrid-encoding")
-    if args.nv_fast_encoding:
-        ignored.append("--nv-fast-encoding")
-    if args.nv_direct_encoding:
-        ignored.append("--nv-direct-encoding")
-    if ignored:
-        print(f"warning: ignoring deprecated legacy options: {', '.join(ignored)}")
 
 
 def _resolve_route_and_timing(args: argparse.Namespace) -> tuple[str, int, int]:
@@ -127,14 +89,9 @@ def _prepare_openpilot_if_needed(args: argparse.Namespace) -> str:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
-    _warn_ignored_legacy_options(args)
 
     route, start_seconds, length_seconds = _resolve_route_and_timing(args)
     openpilot_dir = _prepare_openpilot_if_needed(args)
-    accel = "nvidia" if args.nv_hardware_rendering else args.accel
-    output_path = args.output
-    if args.video_cwd:
-        output_path = str(Path(args.video_cwd).expanduser().resolve() / Path(args.output).name)
 
     try:
         result = run_clip(
@@ -145,12 +102,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 length_seconds=length_seconds,
                 target_mb=args.file_size_mb,
                 file_format=args.file_format,
-                output_path=output_path,
+                output_path=args.output,
                 smear_seconds=args.smear_seconds if args.render_type == "ui" else 0,
                 jwt_token=args.jwt_token or None,
                 metric=args.metric,
-                ui_mode=args.ui_mode,
-                ui_backend=args.ui_backend,
                 speedhack_ratio=args.speedhack_ratio,
                 forward_upon_wide_h=args.forward_upon_wide_h,
                 explicit_data_dir=args.data_dir or None,
@@ -158,7 +113,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 execution_context="local",
                 minimum_length_seconds=1,
                 maximum_length_seconds=300,
-                local_acceleration=accel,
+                local_acceleration=args.accel,
                 openpilot_dir=openpilot_dir,
                 qcam=args.qcam,
                 headless=not args.windowed,
@@ -171,8 +126,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         ) from error
 
     print(f"Wrote clip: {result.output_path}")
-    if result.ui_mode:
-        print(f"UI mode: {result.ui_mode}")
     if result.acceleration:
         print(f"Acceleration: {result.acceleration}")
     return 0

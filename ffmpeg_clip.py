@@ -240,34 +240,6 @@ def render_video_clip(opts: VideoRenderOptions) -> VideoRenderResult:
     return VideoRenderResult(output_path=output_path, acceleration=accel.name)
 
 
-def make_ffmpeg_clip(
-    render_type: RenderType,
-    data_dir: str,
-    route_or_segment: str,
-    start_seconds: int,
-    length_seconds: int,
-    target_mb: int,
-    format: OutputFormat,
-    nvidia_hardware_rendering: bool,
-    forward_upon_wide_h: float,
-    output: str,
-) -> None:
-    render_video_clip(
-        VideoRenderOptions(
-            render_type=render_type,
-            data_dir=data_dir,
-            route_or_segment=route_or_segment,
-            start_seconds=start_seconds,
-            length_seconds=length_seconds,
-            target_mb=target_mb,
-            file_format=format,
-            acceleration="nvidia" if nvidia_hardware_rendering else "auto",
-            forward_upon_wide_h=forward_upon_wide_h,
-            output_path=output,
-        )
-    )
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Render non-UI clips with ffmpeg")
     parser.add_argument("--render-type", "-t", choices=[
@@ -282,7 +254,7 @@ if __name__ == "__main__":
     parser.add_argument("route_or_segment")
     parser.add_argument("start_seconds", type=int)
     parser.add_argument("length_seconds", type=int)
-    parser.add_argument("--target-mb", type=int, default=25)
+    parser.add_argument("--file-size-mb", type=int, default=25)
     parser.add_argument("--forward-upon-wide-h", type=float, default=2.2)
     parser.add_argument("--accel", choices=["auto", "cpu", "videotoolbox", "nvidia"], default="auto")
     parser.add_argument("--format", choices=["h264", "hevc"], default="h264")
@@ -296,7 +268,7 @@ if __name__ == "__main__":
             route_or_segment=args.route_or_segment,
             start_seconds=args.start_seconds,
             length_seconds=args.length_seconds,
-            target_mb=args.target_mb,
+            target_mb=args.file_size_mb,
             file_format=args.format,
             acceleration=args.accel,
             forward_upon_wide_h=args.forward_upon_wide_h,

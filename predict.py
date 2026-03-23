@@ -53,16 +53,6 @@ class Predictor(BasePredictor):
             default=1.0,
         ),
         metric: bool = Input(description="(UI only) Render in metric units (km/h).", default=False),
-        uiMode: str = Input(
-            description="(UI only) BIG-first UI mode handling. c4 / non-BIG is deferred.",
-            choices=["auto", "c3", "c3x", "big", "c4"],
-            default="auto",
-        ),
-        uiBackend: str = Input(
-            description="(UI only) Rendering backend. legacy is deprecated and maps to modern.",
-            choices=["auto", "modern", "legacy"],
-            default="modern",
-        ),
         forwardUponWideH: float = Input(
             description="(Forward Upon Wide only) Overlay height adjustment.",
             ge=1.0,
@@ -97,8 +87,6 @@ class Predictor(BasePredictor):
                 smear_seconds=smearAmount if renderType == "ui" else 0,
                 jwt_token=jwtToken or None,
                 metric=metric,
-                ui_mode=uiMode,  # type: ignore[arg-type]
-                ui_backend=uiBackend,  # type: ignore[arg-type]
                 speedhack_ratio=speedhackRatio,
                 forward_upon_wide_h=forwardUponWideH,
                 execution_context="cog",
