@@ -1,8 +1,9 @@
 out.mp4
 # Cog stuff
 .cog/
-# cog.yaml is generated as a workaround for cog having no COPY equivalent
+# Cog still can't read repo files from build.run, so these are generated from uv/setup inputs.
 cog.yaml
+requirements-cog.txt
 __pycache__/
 output.mp4
 .venv/
