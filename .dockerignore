@@ -24,7 +24,9 @@ __pycache__/
 .cog/*
 !.cog/tmp/
 !.cog/tmp/**
-cog.yaml
+!.cog/openapi_schema.json
+# Keep cog.yaml in the final image so `cog push` schema validation can load
+# the predictor config from /src/cog.yaml.
 requirements-cog.txt
 
 # Exclude local shared folder
