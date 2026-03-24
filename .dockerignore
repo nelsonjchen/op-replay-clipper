@@ -17,9 +17,13 @@ __pycache__/
 .venv/
 /venv/
 
-# Exclude local caches and generated Cog artifacts
+# Exclude local caches and generated Cog artifacts.
+# Keep `.cog/tmp` available so `cog predict` can build from its generated
+# wheel/requirements inputs.
 .cache/
-.cog/
+.cog/*
+!.cog/tmp/
+!.cog/tmp/**
 cog.yaml
 requirements-cog.txt
 
