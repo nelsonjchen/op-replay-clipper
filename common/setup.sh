@@ -5,7 +5,7 @@ set -euo pipefail
 # Shared bootstrap for Docker/Cog images that need a working openpilot clip environment.
 
 OPENPILOT_ROOT="${OPENPILOT_ROOT:-/home/batman/openpilot}"
-OPENPILOT_REPO_URL="${OPENPILOT_REPO_URL:-https://github.com/commaai/openpilot}"
+OPENPILOT_REPO_URL="${OPENPILOT_REPO_URL:-https://github.com/commaai/openpilot.git}"
 OPENPILOT_BRANCH="${OPENPILOT_BRANCH:-master}"
 OPENPILOT_CLONE_DEPTH="${OPENPILOT_CLONE_DEPTH:-1}"
 SCONS_JOBS="${SCONS_JOBS:-$(command -v nproc >/dev/null 2>&1 && nproc || echo 8)}"
@@ -53,7 +53,9 @@ clone_openpilot_checkout() {
   git clone \
     --branch "${OPENPILOT_BRANCH}" \
     --depth "${OPENPILOT_CLONE_DEPTH}" \
+    --filter=blob:none \
     --recurse-submodules \
+    --shallow-submodules \
     --single-branch \
     "${OPENPILOT_REPO_URL}" \
     "${OPENPILOT_ROOT}"

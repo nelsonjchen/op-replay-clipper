@@ -4,6 +4,31 @@ import platform
 import subprocess
 from pathlib import Path
 
+from openpilot_defaults import DEFAULT_OPENPILOT_REPO_URL
+
+
+GIT_CLONE_FLAGS = [
+    "--depth",
+    "1",
+    "--filter=blob:none",
+    "--recurse-submodules",
+    "--shallow-submodules",
+    "--single-branch",
+]
+GIT_FETCH_FLAGS = [
+    "--depth",
+    "1",
+    "--filter=blob:none",
+]
+GIT_SUBMODULE_UPDATE_FLAGS = [
+    "--init",
+    "--recursive",
+    "--depth",
+    "1",
+    "--jobs",
+    "8",
+]
+
 
 def _run(cmd: list[str], cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
     print(f"+ {' '.join(cmd)}")
@@ -59,28 +84,32 @@ def _resolve_openpilot_python(openpilot_dir: Path) -> str | None:
         return _capture(["uv", "python", "find", major_minor], cwd=openpilot_dir)
 
 
-def ensure_openpilot_checkout(openpilot_dir: Path, branch: str = "master") -> None:
+def ensure_openpilot_checkout(
+    openpilot_dir: Path,
+    branch: str = "master",
+    repo_url: str = DEFAULT_OPENPILOT_REPO_URL,
+) -> None:
     if not openpilot_dir.exists():
         openpilot_dir.parent.mkdir(parents=True, exist_ok=True)
         _run(
             [
                 "git",
                 "clone",
-                "--depth",
-                "1",
-                "--recurse-submodules",
+                *GIT_CLONE_FLAGS,
                 "--branch",
                 branch,
-                "https://github.com/commaai/openpilot.git",
+                repo_url,
                 str(openpilot_dir),
             ]
         )
         return
 
-    _run(["git", "fetch", "origin", branch, "--depth", "1"], cwd=openpilot_dir)
+    _run(["git", "remote", "set-url", "origin", repo_url], cwd=openpilot_dir)
+    _run(["git", "fetch", *GIT_FETCH_FLAGS, "origin", branch], cwd=openpilot_dir)
     _run(["git", "checkout", branch], cwd=openpilot_dir)
     _run(["git", "pull", "--ff-only", "--recurse-submodules", "origin", branch], cwd=openpilot_dir)
-    _run(["git", "submodule", "update", "--init", "--recursive"], cwd=openpilot_dir)
+    _run(["git", "submodule", "sync", "--recursive"], cwd=openpilot_dir)
+    _run(["git", "submodule", "update", *GIT_SUBMODULE_UPDATE_FLAGS], cwd=openpilot_dir)
 
 
 def ensure_macos_env_fix(openpilot_dir: Path) -> None:

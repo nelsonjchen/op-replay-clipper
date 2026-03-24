@@ -5,6 +5,7 @@ from __future__ import annotations
 from cog import BasePredictor, Input, Path as CogPath
 
 from clip_pipeline import ClipRequest, run_clip
+from openpilot_defaults import default_image_openpilot_root
 
 MIN_LENGTH_SECONDS = 5
 MAX_LENGTH_SECONDS = 300
@@ -93,7 +94,7 @@ class Predictor(BasePredictor):
                 minimum_length_seconds=MIN_LENGTH_SECONDS,
                 maximum_length_seconds=MAX_LENGTH_SECONDS,
                 local_acceleration="auto",
-                openpilot_dir="/home/batman/openpilot",
+                openpilot_dir=default_image_openpilot_root(),
                 qcam=False,
                 headless=True,
             )

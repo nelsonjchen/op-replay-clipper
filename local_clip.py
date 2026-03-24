@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Sequence
 
 from clip_pipeline import ClipRequest, RenderType, run_clip
+from openpilot_defaults import default_local_openpilot_root, default_openpilot_branch, default_openpilot_repo_url
 from openpilot_setup import bootstrap_openpilot, ensure_openpilot_checkout
 
 
@@ -36,8 +37,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--smear-seconds", type=int, default=5)
     parser.add_argument("-j", "--jwt-token", default="")
     parser.add_argument("-o", "--output", default="./shared/local-clip.mp4")
-    parser.add_argument("--openpilot-dir", default="./.cache/openpilot-local")
-    parser.add_argument("--openpilot-branch", default="master")
+    parser.add_argument("--openpilot-dir", default=default_local_openpilot_root())
+    parser.add_argument("--openpilot-branch", default=default_openpilot_branch())
+    parser.add_argument("--openpilot-repo-url", default=default_openpilot_repo_url())
     parser.add_argument("-m", "--file-size-mb", type=int, default=9)
     parser.add_argument("--file-format", choices=["auto", "h264", "hevc"], default="auto")
     parser.add_argument("-r", "--speedhack-ratio", type=float, default=1.0)
@@ -76,7 +78,11 @@ def _prepare_openpilot_if_needed(args: argparse.Namespace) -> str:
             f"Openpilot checkout not found at {openpilot_dir}. Remove --skip-openpilot-update or point --openpilot-dir at an existing checkout."
         )
     if not args.skip_openpilot_update:
-        ensure_openpilot_checkout(openpilot_path, branch=args.openpilot_branch)
+        ensure_openpilot_checkout(
+            openpilot_path,
+            branch=args.openpilot_branch,
+            repo_url=args.openpilot_repo_url,
+        )
     if not args.skip_openpilot_bootstrap:
         bootstrap_openpilot(openpilot_path)
     elif not (openpilot_path / ".venv/bin/python").exists():

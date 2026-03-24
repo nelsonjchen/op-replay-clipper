@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 import ffmpeg_clip
+from openpilot_defaults import default_image_openpilot_root
 import route_or_url
 import ui_clip
 
@@ -54,7 +55,7 @@ class ClipRequest:
     minimum_length_seconds: int = 1
     maximum_length_seconds: int = 300
     local_acceleration: LocalAccel = "auto"
-    openpilot_dir: str = "/home/batman/openpilot"
+    openpilot_dir: str = field(default_factory=default_image_openpilot_root)
     qcam: bool = False
     headless: bool = True
     skip_download: bool = False

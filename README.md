@@ -191,6 +191,7 @@ Notes:
 * `uv sync` bootstraps the local Python environment used by the local CLI
 * On macOS it prefers a local acceleration policy for ffmpeg-based renders where available
 * It clones/updates `openpilot` into `./.cache/openpilot-local` for UI renders
+* `--openpilot-repo-url` lets you point local bootstrap at an SSH remote if you want to reuse Git agent forwarding or a closer mirror
 * It runs `uv sync --frozen --all-extras` and builds the native modules needed by `tools/clip/run.py`
 * On macOS it applies the same `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` workaround used by upstream `tools/install_python_dependencies.sh`
 * `uv run pytest` runs the local refactor tests

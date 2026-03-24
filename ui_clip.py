@@ -3,9 +3,10 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
+from openpilot_defaults import default_image_openpilot_root
 from openpilot_compat import (
     build_openpilot_compatible_data_dir,
     patch_openpilot_framereader_compat,
@@ -26,7 +27,7 @@ class UIRenderOptions:
     output_path: str
     data_dir: str | None = None
     jwt_token: str | None = None
-    openpilot_dir: str = "/home/batman/openpilot"
+    openpilot_dir: str = field(default_factory=default_image_openpilot_root)
     headless: bool = True
 
 
