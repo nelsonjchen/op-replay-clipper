@@ -1,32 +1,27 @@
 .PHONY: build predict predict-360 push local-clip local-venv test-local
 
-# Unmodified cog
 build: cog/cog.template.yaml cog/generate.sh
 	./cog/generate.sh
 	cog build
 
-# Test downloader by itself
 downloader:
-	python downloader.py shared/data_dir "a2a0ccea32023010|2023-07-27--13-01-19" 5 300 60
+	uv run python downloader.py shared/data_dir "a2a0ccea32023010|2023-07-27--13-01-19" 5 300 60
 
-# Test downloader by itself for zstd
 downloader_zstd:
-	python downloader.py shared/data_dir "fe18f736cb0d7813|00000257--fb26599141" 5 573 12
+	uv run python downloader.py shared/data_dir "fe18f736cb0d7813|00000257--fb26599141" 5 573 12
 
-# Test the ffmpeg_clip by itself
 ffmpeg_clip:
-	python ffmpeg_clip.py --render-type driver "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 --accel nvidia
+	uv run python ffmpeg_clip.py --render-type driver "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 --accel nvidia
 
 ffmpeg_clip_fuw:
-	python ffmpeg_clip.py --render-type forward_upon_wide "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 --accel nvidia
+	uv run python ffmpeg_clip.py --render-type forward_upon_wide "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 --accel nvidia
 
 ffmpeg_clip_360:
-	python ffmpeg_clip.py --render-type 360 "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 --accel nvidia
+	uv run python ffmpeg_clip.py --render-type 360 "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 --accel nvidia
 
 ffmpeg_clip_360_fuw:
-	python ffmpeg_clip.py --render-type 360_forward_upon_wide "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 --accel nvidia
+	uv run python ffmpeg_clip.py --render-type 360_forward_upon_wide "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 --accel nvidia
 
-# These uses a modified cog up one directory.
 predict:
 	./cog/generate.sh
 	cog predict
@@ -91,19 +86,13 @@ predict-bug-all-number-360:
 	./cog/generate.sh
 	cog predict -i route="https://connect.comma.ai/fe18f736cb0d7813/00000497--5809888120/1611/1635" -i renderType=360
 
-
-# Push using modified cog
 push:
 	./cog/generate.sh
 	cog push r8.im/nelsonjchen/op-replay-clipper
 
-# Local Python dependencies for the non-Cog CLI
 local-venv:
 	uv sync
 
-# Local no-Docker full pipeline clip using the primary Python CLI
-# Example:
-# make local-clip RENDER=ui ROUTE="https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
 local-clip:
 	uv run python local_clip.py "$(RENDER)" "$(ROUTE)"
 

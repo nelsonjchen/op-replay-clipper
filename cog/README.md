@@ -10,3 +10,5 @@ Current upstream Cog already sets `NVIDIA_DRIVER_CAPABILITIES=all`, so a custom 
 2. It injects the shared `common/setup.sh` into `cog.yaml`, because official Cog still documents that repo files are not available to `build.run` commands.
 
 The shell entrypoint is intentionally thin now. The YAML rendering itself lives in `cog/render_cog_yaml.py` so the Cog-specific generation logic is testable without adding more shell branching.
+
+The project pins `attrs<24` in `pyproject.toml` on purpose so the exported Cog requirements remain compatible with Cog's own runtime dependency bounds.

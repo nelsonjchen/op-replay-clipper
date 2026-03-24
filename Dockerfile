@@ -23,6 +23,11 @@ FROM base AS clipper
 
 WORKDIR /workspace
 
+COPY ./pyproject.toml /workspace/pyproject.toml
+COPY ./uv.lock /workspace/uv.lock
+
+RUN uv sync --frozen --no-group test
+
 COPY ./local_clip.py /workspace/local_clip.py
 COPY ./clip_pipeline.py /workspace/clip_pipeline.py
 COPY ./ffmpeg_clip.py /workspace/ffmpeg_clip.py
@@ -33,7 +38,5 @@ COPY ./openpilot_setup.py /workspace/openpilot_setup.py
 COPY ./openpilot_compat.py /workspace/openpilot_compat.py
 COPY ./route_or_url.py /workspace/route_or_url.py
 COPY ./downloader.py /workspace/downloader.py
-COPY ./pyproject.toml /workspace/pyproject.toml
-COPY ./uv.lock /workspace/uv.lock
 
-CMD ["uv", "run", "python", "/workspace/local_clip.py", "ui"]
+CMD ["uv", "run", "--no-sync", "python", "/workspace/local_clip.py", "ui"]

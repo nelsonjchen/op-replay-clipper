@@ -188,6 +188,7 @@ uv run python local_clip.py ui --demo --qcam --length-seconds 2 --output ./share
 Notes:
 
 * `local_clip.py` is the primary local CLI for UI and non-UI renders
+* `pyproject.toml` declares compatible dependency ranges and `uv.lock` pins the exact resolved environment
 * `uv sync` bootstraps the local Python environment used by the local CLI
 * On macOS it prefers a local acceleration policy for ffmpeg-based renders where available
 * It clones/updates `openpilot` into `./.cache/openpilot-local` for UI renders
@@ -195,6 +196,7 @@ Notes:
 * It runs `uv sync --frozen --all-extras` and builds the native modules needed by `tools/clip/run.py`
 * On macOS it applies the same `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` workaround used by upstream `tools/install_python_dependencies.sh`
 * `uv run pytest` runs the local refactor tests
+* `./cog/generate.sh` exports `requirements-cog.txt` from `uv.lock` for Cog, so the local and Cog dependency sets stay aligned
 
 ### JWT Token Input
 
