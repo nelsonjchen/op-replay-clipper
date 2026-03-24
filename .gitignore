@@ -6,6 +6,9 @@ __pycache__/
 .venv/
 
 .cache/
+.env
+.env.*
+!.env.example
 
 shared/*
 !shared/.gitkeep

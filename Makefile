@@ -1,4 +1,8 @@
-.PHONY: build predict predict-360 push local-clip local-venv test-local
+.PHONY: build predict predict-360 push local-clip local-venv test-local replicate-remote
+
+REPLICATE_ROUTE ?= a2a0ccea32023010|2023-07-27--13-01-19
+REPLICATE_RENDER ?= forward
+REPLICATE_OUTPUT ?= ./shared/replicate-remote.mp4
 
 # Generate fresh Cog artifacts from uv metadata and build the image.
 build: cog/cog.template.yaml cog/generate.sh
@@ -105,3 +109,8 @@ local-clip:
 # Run the local pytest suite through uv.
 test-local:
 	uv run pytest
+
+# Example:
+# make replicate-remote REPLICATE_RENDER=ui REPLICATE_OUTPUT=./shared/replicate-remote-ui.mp4
+replicate-remote:
+	uv run python replicate_remote.py --route "$(REPLICATE_ROUTE)" --render-type "$(REPLICATE_RENDER)" --output "$(REPLICATE_OUTPUT)"

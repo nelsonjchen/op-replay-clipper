@@ -199,6 +199,41 @@ Notes:
 * `./cog/generate.sh` exports `requirements-cog.txt` from `uv.lock` for Cog, so the local and Cog dependency sets stay aligned
 * `cog.yaml` and `requirements-cog.txt` are generated artifacts and are intentionally not committed
 
+### Hosted Replicate runs with uv
+
+You can also run the hosted Replicate model from this repo with the Python client and a local `.env`.
+
+1. Put your API token in `.env`:
+
+```bash
+REPLICATE_API_TOKEN=...
+```
+
+2. Sync the uv environment:
+
+```bash
+uv sync
+```
+
+3. Run a hosted prediction and save the returned file locally:
+
+```bash
+uv run python replicate_remote.py \
+  --route 'a2a0ccea32023010|2023-07-27--13-01-19' \
+  --render-type forward \
+  --start-seconds 50 \
+  --length-seconds 5 \
+  --output ./shared/replicate-remote-forward.mp4
+```
+
+Notes:
+
+* `replicate_remote.py` uses the hosted Replicate model version, not local Docker
+* the script loads `REPLICATE_API_TOKEN` from `.env` via `python-dotenv`
+* it prints the remote file URL when Replicate returns one, then writes the file to the path you passed with `--output`
+* if you pass a full connect URL, the clip timing comes from that URL by design; for explicit `--start-seconds` and `--length-seconds`, use a route ID
+* `.env` is ignored by git; `.env.example` is the committed placeholder
+
 ### JWT Token Input
 
 There is a JWT Token input field.
