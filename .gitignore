@@ -1,10 +1,20 @@
+*.DS_Store
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+
+.cache/
+
+shared/*
+!shared/.gitkeep
+*.mp4
 out.mp4
+output.mp4
+
 # Cog stuff
 .cog/
 # Cog still can't read repo files from build.run, so these are generated from uv/setup inputs.
 cog.yaml
 requirements-cog.txt
-__pycache__/
-output.mp4
-.venv/
-.cache/openpilot-local/

@@ -8,13 +8,20 @@
 .gitignore
 
 # Exclude Python cache files
-__pycache__
+__pycache__/
 .mypy_cache
 .pytest_cache
 .ruff_cache
 
 # Exclude Python virtual environment
-/venv
+.venv/
+/venv/
+
+# Exclude local caches and generated Cog artifacts
+.cache/
+.cog/
+cog.yaml
+requirements-cog.txt
 
 # Exclude local shared folder
 shared/

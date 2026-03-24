@@ -1,15 +1,18 @@
 .PHONY: build predict predict-360 push local-clip local-venv test-local
 
+# Generate fresh Cog artifacts from uv metadata and build the image.
 build: cog/cog.template.yaml cog/generate.sh
 	./cog/generate.sh
 	cog build
 
+# Helper targets for manual downloader checks.
 downloader:
 	uv run python downloader.py shared/data_dir "a2a0ccea32023010|2023-07-27--13-01-19" 5 300 60
 
 downloader_zstd:
 	uv run python downloader.py shared/data_dir "fe18f736cb0d7813|00000257--fb26599141" 5 573 12
 
+# Helper targets for exercising ffmpeg-only renderers directly.
 ffmpeg_clip:
 	uv run python ffmpeg_clip.py --render-type driver "a2a0ccea32023010|2023-07-27--13-01-19" 242 30 --accel nvidia
 
@@ -90,11 +93,15 @@ push:
 	./cog/generate.sh
 	cog push r8.im/nelsonjchen/op-replay-clipper
 
+# Create or refresh the local uv environment.
 local-venv:
 	uv sync
 
+# Example:
+# make local-clip RENDER=ui ROUTE="https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
 local-clip:
 	uv run python local_clip.py "$(RENDER)" "$(ROUTE)"
 
+# Run the local pytest suite through uv.
 test-local:
 	uv run pytest

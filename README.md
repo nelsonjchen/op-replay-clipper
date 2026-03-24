@@ -167,7 +167,7 @@ With the car on, **within a minute** after an incident when it is safe to do so:
 
 ### Local-first development workflow
 
-Use `local_clip.py` as the primary non-Cog entrypoint for cheap local validation on macOS or Linux before paying for GCE runs.
+Use `local_clip.py` as the primary local entrypoint for cheap validation on macOS or Linux before paying for GCE runs.
 
 BIG UI is the supported UI target.
 
@@ -197,6 +197,7 @@ Notes:
 * On macOS it applies the same `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` workaround used by upstream `tools/install_python_dependencies.sh`
 * `uv run pytest` runs the local refactor tests
 * `./cog/generate.sh` exports `requirements-cog.txt` from `uv.lock` for Cog, so the local and Cog dependency sets stay aligned
+* `cog.yaml` and `requirements-cog.txt` are generated artifacts and are intentionally not committed
 
 ### JWT Token Input
 
