@@ -96,3 +96,27 @@ def test_patch_ui_application_record_skip_inserts_skip_logic(tmp_path) -> None:
     assert changed is True
     assert 'RECORD_SKIP_FRAMES = int(os.getenv("RECORD_SKIP_FRAMES", "0"))' in updated
     assert "if RECORD and self._frame >= RECORD_SKIP_FRAMES:" in updated
+
+
+def test_patch_augmented_road_view_fill_applies_upstream_zoom_fix(tmp_path) -> None:
+    view = tmp_path / "augmented_road_view.py"
+    view.write_text(
+        "    # Calculate center points and dimensions\n"
+        "    x, y = self._content_rect.x, self._content_rect.y\n"
+        "    w, h = self._content_rect.width, self._content_rect.height\n"
+        "    cx, cy = intrinsic[0, 2], intrinsic[1, 2]\n"
+        "    # Calculate max allowed offsets with margins\n"
+        "    margin = 5\n"
+        "    max_x_offset = cx * zoom - w / 2 - margin\n"
+        "    max_y_offset = cy * zoom - h / 2 - margin\n"
+        "    super()._render(rect)\n"
+    )
+
+    changed = openpilot_integration._patch_augmented_road_view_fill(view)
+    updated = view.read_text()
+
+    assert changed is True
+    assert "zoom = max(zoom, w / (2 * cx), h / (2 * cy))" in updated
+    assert "max_x_offset = max(0.0, cx * zoom - w / 2 - margin)" in updated
+    assert "max_y_offset = max(0.0, cy * zoom - h / 2 - margin)" in updated
+    assert "super()._render(self._content_rect)" in updated

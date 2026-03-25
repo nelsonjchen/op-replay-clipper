@@ -8,6 +8,7 @@ from pathlib import Path
 
 from core.openpilot_config import default_image_openpilot_root
 from core.openpilot_integration import (
+    patch_openpilot_augmented_road_view_fill,
     build_openpilot_compatible_data_dir,
     patch_openpilot_framereader_compat,
     patch_openpilot_ui_record_skip,
@@ -99,6 +100,7 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
 
     patch_openpilot_framereader_compat(openpilot_dir)
     patch_openpilot_ui_record_skip(openpilot_dir)
+    patch_openpilot_augmented_road_view_fill(openpilot_dir)
     _ensure_fonts(openpilot_dir)
 
     env = configure_ui_environment()

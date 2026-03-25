@@ -210,6 +210,34 @@ def _patch_ui_application_record_skip(path: Path) -> bool:
     return False
 
 
+def _patch_augmented_road_view_fill(path: Path) -> bool:
+    source = path.read_text()
+    updated = source
+
+    zoom_guard = """    # Ensure zoom views the whole area\n    zoom = max(zoom, w / (2 * cx), h / (2 * cy))\n\n"""
+    if zoom_guard not in updated:
+        needle = """    # Calculate max allowed offsets with margins\n"""
+        if needle in updated:
+            updated = updated.replace(needle, zoom_guard + needle, 1)
+
+    updated = updated.replace(
+        "    max_x_offset = cx * zoom - w / 2 - margin\n",
+        "    max_x_offset = max(0.0, cx * zoom - w / 2 - margin)\n",
+        1,
+    )
+    updated = updated.replace(
+        "    max_y_offset = cy * zoom - h / 2 - margin\n",
+        "    max_y_offset = max(0.0, cy * zoom - h / 2 - margin)\n",
+        1,
+    )
+    updated = updated.replace("    super()._render(rect)\n", "    super()._render(self._content_rect)\n", 1)
+
+    if updated != source:
+        path.write_text(updated)
+        return True
+    return False
+
+
 def patch_openpilot_framereader_compat(openpilot_dir: Path) -> None:
     framereader = openpilot_dir / "tools/lib/framereader.py"
     if not framereader.exists():
@@ -224,3 +252,15 @@ def patch_openpilot_ui_record_skip(openpilot_dir: Path) -> None:
         application = openpilot_dir / "openpilot/system/ui/lib/application.py"
     if application.exists():
         _patch_ui_application_record_skip(application)
+
+
+def patch_openpilot_augmented_road_view_fill(openpilot_dir: Path) -> None:
+    candidates = (
+        openpilot_dir / "selfdrive/ui/onroad/augmented_road_view.py",
+        openpilot_dir / "openpilot/selfdrive/ui/onroad/augmented_road_view.py",
+        openpilot_dir / "selfdrive/ui/mici/onroad/augmented_road_view.py",
+        openpilot_dir / "openpilot/selfdrive/ui/mici/onroad/augmented_road_view.py",
+    )
+    for path in candidates:
+        if path.exists():
+            _patch_augmented_road_view_fill(path)
