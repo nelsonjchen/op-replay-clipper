@@ -13,6 +13,13 @@ class ParsedRouteOrURL:
     start_seconds: int
     length_seconds: int
 
+
+def validate_connect_url(route_or_url: str, *, error_message: str | None = None) -> str:
+    parsed = urlparse(route_or_url)
+    if parsed.scheme != "https" or parsed.hostname != "connect.comma.ai":
+        raise ValueError(error_message or "Expected a full https://connect.comma.ai/... clip URL.")
+    return route_or_url
+
 # These have a dash in the 2nd part and 4 parts
 # https://connect.comma.ai/a2a0ccea32023010/2023-07-27--13-01-19/7/124
 # Notably, instead of looking at routes_segments, look at the route itself

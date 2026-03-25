@@ -6,6 +6,7 @@ from cog import BasePredictor, Input, Path as CogPath
 
 from clip_pipeline import ClipRequest, run_clip
 from openpilot_defaults import default_image_openpilot_root
+import route_or_url
 
 MIN_LENGTH_SECONDS = 5
 MAX_LENGTH_SECONDS = 300
@@ -31,15 +32,8 @@ class Predictor(BasePredictor):
             default="ui",
         ),
         route: str = Input(
-            description='One comma connect URL or one route ID (e.g. "a2a0ccea32023010|2023-07-27--13-01-19").',
+            description="One full https://connect.comma.ai/... clip URL.",
             default="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496",
-        ),
-        startSeconds: int = Input(description="Start time in seconds for route-id input.", ge=0, default=50),
-        lengthSeconds: int = Input(
-            description="Length of clip in seconds for route-id input.",
-            ge=MIN_LENGTH_SECONDS,
-            le=MAX_LENGTH_SECONDS,
-            default=20,
         ),
         smearAmount: int = Input(
             description="(UI only) Warm-up time before the visible clip start.",
@@ -75,13 +69,17 @@ class Predictor(BasePredictor):
         print("NOTES:")
         print(notes)
         print("")
+        route = route_or_url.validate_connect_url(
+            route,
+            error_message="Replicate/Cog route input must be a full https://connect.comma.ai/... clip URL.",
+        )
 
         result = run_clip(
             ClipRequest(
                 render_type=renderType,  # type: ignore[arg-type]
                 route_or_url=route,
-                start_seconds=startSeconds,
-                length_seconds=lengthSeconds,
+                start_seconds=0,
+                length_seconds=0,
                 target_mb=fileSize,
                 file_format=fileFormat,  # type: ignore[arg-type]
                 output_path="./shared/cog-clip.mp4",

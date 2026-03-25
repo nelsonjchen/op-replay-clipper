@@ -1,6 +1,6 @@
 .PHONY: build predict predict-360 push local-clip local-venv test-local replicate-remote
 
-REPLICATE_ROUTE ?= a2a0ccea32023010|2023-07-27--13-01-19
+REPLICATE_URL ?= https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496
 REPLICATE_RENDER ?= forward
 REPLICATE_OUTPUT ?= ./shared/replicate-remote.mp4
 
@@ -113,4 +113,4 @@ test-local:
 # Example:
 # make replicate-remote REPLICATE_RENDER=ui REPLICATE_OUTPUT=./shared/replicate-remote-ui.mp4
 replicate-remote:
-	uv run python replicate_remote.py --route "$(REPLICATE_ROUTE)" --render-type "$(REPLICATE_RENDER)" --output "$(REPLICATE_OUTPUT)"
+	uv run python replicate_remote.py --url "$(REPLICATE_URL)" --render-type "$(REPLICATE_RENDER)" --output "$(REPLICATE_OUTPUT)"

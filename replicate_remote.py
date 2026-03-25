@@ -8,16 +8,17 @@ from typing import Any
 
 from dotenv import load_dotenv
 import replicate
+import route_or_url
 
 DEFAULT_MODEL = "nelsonjchen/op-replay-clipper-beta:e2ea1155bcceb27dfb5609f866e65cb2f2f0728d114a84733cf790ff3ca679d6"
-DEFAULT_ROUTE = "https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496"
+DEFAULT_URL = "https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496"
 DEFAULT_OUTPUT = Path("./shared/replicate-remote-output.mp4")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the hosted Replicate clipper and save the returned video locally.")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Replicate model version ref.")
-    parser.add_argument("--route", default=DEFAULT_ROUTE, help="Route ID or connect.comma.ai URL.")
+    parser.add_argument("--url", default=DEFAULT_URL, help="connect.comma.ai clip URL.")
     parser.add_argument(
         "--render-type",
         choices=["ui", "forward", "wide", "driver", "360", "forward_upon_wide", "360_forward_upon_wide"],
@@ -25,8 +26,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Clip render type.",
     )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Where to write the returned MP4.")
-    parser.add_argument("--start-seconds", type=int, default=50, help="Used for route-id inputs.")
-    parser.add_argument("--length-seconds", type=int, default=20, help="Used for route-id inputs.")
     parser.add_argument("--smear-amount", type=int, default=5, help="UI smear amount.")
     parser.add_argument("--file-size", type=int, default=9, help="Target output size in MB.")
     parser.add_argument("--file-format", choices=["auto", "h264", "hevc"], default="auto")
@@ -38,18 +37,23 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def validate_connect_url(url: str) -> str:
+    try:
+        return route_or_url.validate_connect_url(url)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
 def build_input(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "notes": args.notes,
-        "route": args.route,
+        "route": args.url,
         "metric": args.metric,
         "fileSize": args.file_size,
         "jwtToken": args.jwt_token,
         "fileFormat": args.file_format,
         "renderType": args.render_type,
         "smearAmount": args.smear_amount,
-        "startSeconds": args.start_seconds,
-        "lengthSeconds": args.length_seconds,
         "speedhackRatio": args.speedhack_ratio,
         "forwardUponWideH": args.forward_upon_wide_h,
     }
@@ -86,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     require_api_token()
+    args.url = validate_connect_url(args.url)
     payload = build_input(args)
 
     print(f"Running {args.model}", flush=True)

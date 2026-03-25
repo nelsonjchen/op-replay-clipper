@@ -26,6 +26,8 @@ https://replicate.com/nelsonjchen/op-replay-clipper
 
 Replicate is an ultra-low-cost pay-as-you-go compute platform for running software jobs. Replicate is a great way to run this clipper as it's fast, easy to use, and you don't need to install anything on your computer or even deploy anything yourself. Just enter in the required information into the form, and Replicate will generate a clip. Expect to pay about ~$0.01 per clip but not even need to put in any payment details until you've reached a generously large level of usage.
 
+On Replicate and `cog predict`, the `route` input is now URL-only. The clip timing comes from the `connect.comma.ai` URL itself, so there are no separate `startSeconds` or `lengthSeconds` inputs anymore.
+
 > [!WARNING]
 > [comma devices should not be used as primary dashcams for numerous reasons!](https://github.com/commaai/openpilot/wiki/Video-Files#consider-another-device-for-serious-dashcam-purposes)
 >
@@ -219,10 +221,8 @@ uv sync
 
 ```bash
 uv run python replicate_remote.py \
-  --route 'a2a0ccea32023010|2023-07-27--13-01-19' \
+  --url 'https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496' \
   --render-type forward \
-  --start-seconds 50 \
-  --length-seconds 5 \
   --output ./shared/replicate-remote-forward.mp4
 ```
 
@@ -231,7 +231,7 @@ Notes:
 * `replicate_remote.py` uses the hosted Replicate model version, not local Docker
 * the script loads `REPLICATE_API_TOKEN` from `.env` via `python-dotenv`
 * it prints the remote file URL when Replicate returns one, then writes the file to the path you passed with `--output`
-* if you pass a full connect URL, the clip timing comes from that URL by design; for explicit `--start-seconds` and `--length-seconds`, use a route ID
+* the hosted helper now takes a full `connect.comma.ai` clip URL and does not expose separate `start-seconds` or `length-seconds` flags
 * `.env` is ignored by git; `.env.example` is the committed placeholder
 
 ### JWT Token Input
