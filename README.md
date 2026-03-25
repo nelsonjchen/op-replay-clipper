@@ -9,7 +9,7 @@ Capture and develop clips of [openpilot][op] from comma.ai's [Comma Connect](htt
 The clipper can produce clips of:
 
 * comma.ai openpilot UI (including desired path, lane lines, modes, etc.)
-  * Origin of codebase, Segment ID, and seconds marker branded into the clip for debugging/reporting. Useful for posting clips in the [comma.ai Discord's #driving-feedback and/or #openpilot-experience channel](https://discord.comma.ai), [reddit](https://www.reddit.com/r/comma_ai), [Facebook](https://www.facebook.com/groups/706398630066928), or anywhere else that takes video. Very useful for [making outstanding bug reports](https://github.com/commaai/openpilot/wiki/FAQ#how-do-i-report-a-bug) as well as feedback on good behavior.
+  * Route metadata is branded into the clip for debugging and reporting, including the route id, platform, git remote, branch, commit, `Dirty` state, and a running route timer. Useful for posting clips in the [comma.ai Discord's #driving-feedback and/or #openpilot-experience channel](https://discord.comma.ai), [reddit](https://www.reddit.com/r/comma_ai), [Facebook](https://www.facebook.com/groups/706398630066928), or anywhere else that takes video. Very useful for [making outstanding bug reports](https://github.com/commaai/openpilot/wiki/FAQ#how-do-i-report-a-bug) as well as feedback on good behavior.
 * Forward, Wide, and Driver Camera with no UI
   * Concatenate, cut, and convert the raw, low-compatibility, and separated HEVC files to one fairly compatible HEVC MP4 or super-compatible H.264 MP4 for easy sharing.
 * 360 Video
@@ -23,6 +23,10 @@ All clip options have a configurable target file size option as platforms like D
 The clipper is deployed on [Replicate](https://replicate.com):
 
 https://replicate.com/nelsonjchen/op-replay-clipper
+
+The latest in-progress changes are usually pushed to the beta model first:
+
+https://replicate.com/nelsonjchen/op-replay-clipper-beta
 
 Replicate is an ultra-low-cost pay-as-you-go compute platform for running software jobs. Replicate is a great way to run this clipper as it's fast, easy to use, and you don't need to install anything on your computer or even deploy anything yourself. Just enter in the required information into the form, and Replicate will generate a clip. Expect to pay about ~$0.01 per clip but not even need to put in any payment details until you've reached a generously large level of usage.
 
@@ -73,6 +77,7 @@ We assume you've already paired your device and have access to the device with y
    * When you were adjusting the selected portion of the route in a previous step, it was changing those last two numbers in the browser address bar URL which is the start time and end time respectively.
    * "Share This Route" button if it is present will work too. Choose "copy to clipboard" or similar.
 6. Visit https://replicate.com/nelsonjchen/op-replay-clipper
+   * If you want the freshest changes before they land on the main model, use https://replicate.com/nelsonjchen/op-replay-clipper-beta instead.
 7. Under `route`, paste the URL you copied in the previous step.
    * ![image](https://github.com/commaai/openpilot/assets/5363/15d286cc-057f-4a1c-be82-855c5b570b90)
 8. Tweak any settings you like.
@@ -87,7 +92,7 @@ We assume you've already paired your device and have access to the device with y
    
 ### UI Renders and Smearing
 
-UI rendering works by actually running the openpilot UI on the remote server, sending in recorded UI data inputs from the log, and then capturing the screen recording of that output. 
+UI rendering works by actually running the openpilot UI on the remote server, feeding it recorded route data, and then recording the rendered output.
 
 Unfortunately, there's sometimes some state tracked in the openpilot UI. Past data may be needed to be sent to get the UI to the correct state at the beginning of the clip. We need to smear the start.
 
@@ -210,7 +215,7 @@ Notes:
 * On macOS it prefers a local acceleration policy for ffmpeg-based renders where available
 * It clones/updates `openpilot` into `./.cache/openpilot-local` for UI renders
 * `--openpilot-repo-url` lets you point local bootstrap at an SSH remote if you want to reuse Git agent forwarding or a closer mirror
-* It runs `uv sync --frozen --all-extras` and builds the native modules needed by `tools/clip/run.py`
+* It runs `uv sync --frozen --all-extras` and builds the native modules needed by the repo-owned BIG UI exact-frame runner
 * On macOS it applies the same `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` workaround used by upstream `tools/install_python_dependencies.sh`
 * `uv run pytest` runs the local refactor tests
 * `./cog/render_artifacts.sh` exports `requirements-cog.txt` from `uv.lock` for Cog, so the local and Cog dependency sets stay aligned
@@ -244,6 +249,7 @@ uv run python replicate_run.py \
 Notes:
 
 * `replicate_run.py` uses the hosted Replicate model version, not local Docker
+* pass `--model nelsonjchen/op-replay-clipper-beta:<version>` if you want to smoke the beta model instead of the main one
 * the script loads `REPLICATE_API_TOKEN` from `.env` via `python-dotenv`
 * it prints the remote file URL when Replicate returns one, then writes the file to the path you passed with `--output`
 * the hosted helper now takes a full `connect.comma.ai` clip URL and does not expose separate `start-seconds` or `length-seconds` flags
