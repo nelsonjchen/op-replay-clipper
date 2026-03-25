@@ -305,7 +305,7 @@ def draw_text_box(text, x, y, size, gui_app, font, color=None, center=False) -> 
     rl.draw_text_ex(font, text, rl.Vector2(x, y), size, 0, text_color)
 
 
-def render_overlays(gui_app, font, big, metadata, title, route_seconds, frame_idx, show_metadata, show_time) -> None:
+def render_overlays(gui_app, font, big, metadata, title, route_seconds, show_metadata, show_time) -> None:
     from openpilot.system.ui.lib.text_measure import measure_text_cached
     from openpilot.system.ui.lib.wrap_text import wrap_text
 
@@ -319,7 +319,7 @@ def render_overlays(gui_app, font, big, metadata, title, route_seconds, frame_id
         time_width = int(measure_text_cached(font, time_text, time_size).x)
         draw_text_box(time_text, gui_app.width - time_width - 5, 0, time_size, gui_app, font)
 
-    if show_metadata and metadata and frame_idx < FRAMERATE * 5:
+    if show_metadata and metadata:
         text = ", ".join(
             [
                 f"openpilot v{metadata['version']}",
@@ -426,7 +426,6 @@ def clip(
                         metadata,
                         title,
                         step.route_seconds,
-                        frame_idx,
                         show_metadata,
                         show_time,
                     )
