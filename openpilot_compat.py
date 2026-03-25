@@ -190,9 +190,37 @@ def _patch_framereader_ast(path: Path) -> bool:
     return modified
 
 
+def _patch_ui_application_record_skip(path: Path) -> bool:
+    source = path.read_text()
+    updated = source
+
+    record_speed_line = 'RECORD_SPEED = int(os.getenv("RECORD_SPEED", "1"))  # Speed multiplier\n'
+    record_skip_line = 'RECORD_SKIP_FRAMES = int(os.getenv("RECORD_SKIP_FRAMES", "0"))  # Warmup frames to drop before recording\n'
+    if record_skip_line not in updated and record_speed_line in updated:
+        updated = updated.replace(record_speed_line, record_speed_line + record_skip_line, 1)
+
+    old_block = """        if RECORD:\n          image = rl.load_image_from_texture(self._render_texture.texture)\n          data_size = image.width * image.height * 4\n          data = bytes(rl.ffi.buffer(image.data, data_size))\n          self._ffmpeg_queue.put(data)  # Async write via background thread\n          rl.unload_image(image)\n"""
+    new_block = """        if RECORD and self._frame >= RECORD_SKIP_FRAMES:\n          image = rl.load_image_from_texture(self._render_texture.texture)\n          data_size = image.width * image.height * 4\n          data = bytes(rl.ffi.buffer(image.data, data_size))\n          self._ffmpeg_queue.put(data)  # Async write via background thread\n          rl.unload_image(image)\n"""
+    if old_block in updated:
+        updated = updated.replace(old_block, new_block, 1)
+
+    if updated != source:
+        path.write_text(updated)
+        return True
+    return False
+
+
 def patch_openpilot_framereader_compat(openpilot_dir: Path) -> None:
     framereader = openpilot_dir / "tools/lib/framereader.py"
     if not framereader.exists():
         framereader = openpilot_dir / "openpilot/tools/lib/framereader.py"
     if framereader.exists():
         _patch_framereader_ast(framereader)
+
+
+def patch_openpilot_ui_record_skip(openpilot_dir: Path) -> None:
+    application = openpilot_dir / "system/ui/lib/application.py"
+    if not application.exists():
+        application = openpilot_dir / "openpilot/system/ui/lib/application.py"
+    if application.exists():
+        _patch_ui_application_record_skip(application)

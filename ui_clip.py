@@ -10,8 +10,13 @@ from openpilot_defaults import default_image_openpilot_root
 from openpilot_compat import (
     build_openpilot_compatible_data_dir,
     patch_openpilot_framereader_compat,
+    patch_openpilot_ui_record_skip,
 )
 from runtime_env import configure_ui_environment, temporary_headless_display
+
+
+UI_STARTUP_WARMUP_SECONDS = 1
+UI_FRAMERATE = 20
 
 @dataclass(frozen=True)
 class UIRenderOptions:
@@ -93,12 +98,17 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
         raise FileNotFoundError(f"Modern clip tool not found at {openpilot_dir}/tools/clip/run.py")
 
     patch_openpilot_framereader_compat(openpilot_dir)
+    patch_openpilot_ui_record_skip(openpilot_dir)
     _ensure_fonts(openpilot_dir)
 
     env = configure_ui_environment()
-    render_start = max(0, opts.start_seconds - max(0, opts.smear_seconds))
+    smear_seconds = max(0, opts.smear_seconds)
+    warmup_seconds = min(UI_STARTUP_WARMUP_SECONDS, max(0, opts.start_seconds - smear_seconds))
+    render_start = max(0, opts.start_seconds - smear_seconds - warmup_seconds)
     render_end = opts.start_seconds + opts.length_seconds
-    trim_front = opts.start_seconds - render_start
+    trim_front = smear_seconds
+    if warmup_seconds > 0:
+        env["RECORD_SKIP_FRAMES"] = str(warmup_seconds * UI_FRAMERATE)
 
     clip_cmd = [
         *_openpilot_python_cmd(openpilot_dir),

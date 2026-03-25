@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import forked_openpilot_clip
+import openpilot_compat
 import runtime_env
 
 
@@ -60,3 +61,23 @@ def test_build_render_steps_uses_exact_model_frame_mapping() -> None:
 def test_ui_environment_forces_scale_one() -> None:
     env = runtime_env.configure_ui_environment({})
     assert env["SCALE"] == "1"
+
+
+def test_patch_ui_application_record_skip_inserts_skip_logic(tmp_path) -> None:
+    app = tmp_path / "application.py"
+    app.write_text(
+        'RECORD_SPEED = int(os.getenv("RECORD_SPEED", "1"))  # Speed multiplier\n'
+        "        if RECORD:\n"
+        "          image = rl.load_image_from_texture(self._render_texture.texture)\n"
+        "          data_size = image.width * image.height * 4\n"
+        "          data = bytes(rl.ffi.buffer(image.data, data_size))\n"
+        "          self._ffmpeg_queue.put(data)  # Async write via background thread\n"
+        "          rl.unload_image(image)\n"
+    )
+
+    changed = openpilot_compat._patch_ui_application_record_skip(app)
+    updated = app.read_text()
+
+    assert changed is True
+    assert 'RECORD_SKIP_FRAMES = int(os.getenv("RECORD_SKIP_FRAMES", "0"))' in updated
+    assert "if RECORD and self._frame >= RECORD_SKIP_FRAMES:" in updated
