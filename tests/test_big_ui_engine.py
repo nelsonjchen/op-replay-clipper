@@ -40,9 +40,9 @@ def test_build_camera_frame_refs_tracks_local_indexes_per_segment() -> None:
 def test_build_render_steps_uses_exact_model_frame_mapping() -> None:
     segments = [
         [
-            FakeMsg("roadEncodeIdx", 0, SimpleNamespace(frameId=971, timestampSof=1_000, timestampEof=2_000)),
-            FakeMsg("roadCameraState", 10_000_000, SimpleNamespace(frameId=971, timestampEof=2_000)),
-            FakeMsg("modelV2", 30_000_000, SimpleNamespace(frameId=971, timestampEof=2_000)),
+            FakeMsg("roadEncodeIdx", 0, SimpleNamespace(frameId=10, timestampSof=1_000, timestampEof=2_000)),
+            FakeMsg("roadCameraState", 10_000_000, SimpleNamespace(frameId=10, timestampEof=2_000)),
+            FakeMsg("modelV2", 30_000_000, SimpleNamespace(frameId=10, timestampEof=2_000)),
         ]
     ]
 
@@ -50,11 +50,27 @@ def test_build_render_steps_uses_exact_model_frame_mapping() -> None:
 
     assert len(steps) == 1
     step = steps[0]
-    assert step.route_frame_id == 971
+    assert step.route_frame_id == 10
     assert step.camera_ref.local_index == 0
-    assert step.camera_ref.route_frame_id == 971
-    assert step.state["roadCameraState"].roadCameraState.frameId == 971
-    assert step.state["modelV2"].modelV2.frameId == 971
+    assert step.camera_ref.route_frame_id == 10
+    assert step.state["roadCameraState"].roadCameraState.frameId == 10
+    assert step.state["modelV2"].modelV2.frameId == 10
+    assert step.route_seconds == 0.5
+
+
+def test_build_render_steps_uses_frame_ids_instead_of_log_mono_time() -> None:
+    segments = [
+        [
+            FakeMsg("roadEncodeIdx", 0, SimpleNamespace(frameId=1202, timestampSof=1_000, timestampEof=2_000)),
+            FakeMsg("roadCameraState", 61_000_000_000, SimpleNamespace(frameId=1202, timestampEof=2_000)),
+            FakeMsg("modelV2", 61_001_000_000, SimpleNamespace(frameId=1202, timestampEof=2_000)),
+        ]
+    ]
+
+    steps = big_ui_engine.build_render_steps(segments, seg_start=1, start=60, end=61)
+
+    assert len(steps) == 1
+    assert steps[0].route_seconds == 60.1
 
 
 def test_ui_environment_forces_scale_one() -> None:

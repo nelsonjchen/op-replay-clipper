@@ -117,23 +117,21 @@ def build_camera_frame_refs(messages_by_segment: list[list]) -> tuple[dict[int, 
     return refs_by_frame_id, refs_by_timestamp
 
 
-def _route_seconds(msg, *, first_log_mono_time: int, seg_start: int) -> float:
-    return seg_start * 60 + (msg.logMonoTime - first_log_mono_time) / 1e9
+def _route_seconds_for_frame(frame_id: int) -> float:
+    return frame_id / FRAMERATE
 
 
 def build_render_steps(messages_by_segment: list[list], *, seg_start: int, start: int, end: int) -> list[RenderStep]:
     refs_by_frame_id, refs_by_timestamp = build_camera_frame_refs(messages_by_segment)
     ordered_messages = [msg for segment in messages_by_segment for msg in segment]
-    first_log_mono_time = ordered_messages[0].logMonoTime
 
     current_state: dict = {}
     render_steps: list[RenderStep] = []
     for msg in ordered_messages:
-        route_seconds = _route_seconds(msg, first_log_mono_time=first_log_mono_time, seg_start=seg_start)
         which = msg.which()
         current_state[which] = msg
 
-        if which != MODEL_SERVICE or route_seconds < start or route_seconds >= end:
+        if which != MODEL_SERVICE:
             continue
 
         model = msg.modelV2
@@ -141,7 +139,10 @@ def build_render_steps(messages_by_segment: list[list], *, seg_start: int, start
         if camera_ref is None and hasattr(model, "timestampEof"):
             camera_ref = refs_by_timestamp.get(int(model.timestampEof))
         if camera_ref is None:
-            logger.warning("Skipping model frame %s at %.3fs because no matching camera frame was found", model.frameId, route_seconds)
+            logger.warning("Skipping model frame %s because no matching camera frame was found", model.frameId)
+            continue
+        route_seconds = _route_seconds_for_frame(camera_ref.route_frame_id)
+        if route_seconds < start or route_seconds >= end:
             continue
 
         render_steps.append(
