@@ -190,53 +190,9 @@ def _patch_framereader_ast(path: Path) -> bool:
     return modified
 
 
-def _patch_clip_run_ast(path: Path) -> bool:
-    original_src = path.read_text()
-    lines = original_src.splitlines(keepends=True)
-    tree = ast.parse(original_src)
-    modified = False
-
-    for node in tree.body:
-        if not isinstance(node, ast.FunctionDef) or node.name != "iter_segment_frames":
-            continue
-        use_qcam_if = next((stmt for stmt in node.body if isinstance(stmt, ast.For)), None)
-        if use_qcam_if is None:
-            continue
-        for inner in ast.walk(use_qcam_if):
-            if isinstance(inner, ast.If) and _is_name(inner.test, "use_qcam"):
-                if any(_is_os_path_exists_call(desc, "path") for desc in ast.walk(inner)):
-                    return False
-                decode_stmt = next((stmt for stmt in inner.body if isinstance(stmt, ast.With)), None)
-                if decode_stmt is None:
-                    return False
-                unit = _indent((decode_stmt.body[0].col_offset - decode_stmt.col_offset) if decode_stmt.body else 2)
-                replacement = [
-                    f"{_indent(decode_stmt.col_offset)}if os.path.exists(path):\n",
-                    f"{_indent(decode_stmt.col_offset)}{unit}result = subprocess.run([\"ffmpeg\", \"-v\", \"quiet\", \"-i\", path, \"-f\", \"rawvideo\", \"-pix_fmt\", \"nv12\", \"-\"],\n",
-                    f"{_indent(decode_stmt.col_offset)}{unit}{unit}capture_output=True)\n",
-                    f"{_indent(decode_stmt.col_offset)}else:\n",
-                    f"{_indent(decode_stmt.col_offset)}{unit}with FileReader(path) as handle:\n",
-                    f"{_indent(decode_stmt.col_offset)}{unit}{unit}result = subprocess.run([\"ffmpeg\", \"-v\", \"quiet\", \"-i\", \"-\", \"-f\", \"rawvideo\", \"-pix_fmt\", \"nv12\", \"-\"],\n",
-                    f"{_indent(decode_stmt.col_offset)}{unit}{unit}{unit}input=handle.read(), capture_output=True)\n",
-                ]
-                lines = _replace_source_range(lines, decode_stmt.lineno, decode_stmt.end_lineno, replacement)
-                modified = True
-                break
-
-    if modified:
-        path.write_text("".join(lines))
-    return modified
-
-
 def patch_openpilot_framereader_compat(openpilot_dir: Path) -> None:
     framereader = openpilot_dir / "tools/lib/framereader.py"
     if not framereader.exists():
         framereader = openpilot_dir / "openpilot/tools/lib/framereader.py"
     if framereader.exists():
         _patch_framereader_ast(framereader)
-
-
-def patch_openpilot_qcam_local_decode(openpilot_dir: Path) -> None:
-    clip_run = openpilot_dir / "tools/clip/run.py"
-    if clip_run.exists():
-        _patch_clip_run_ast(clip_run)

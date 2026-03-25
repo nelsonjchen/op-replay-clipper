@@ -10,7 +10,6 @@ from openpilot_defaults import default_image_openpilot_root
 from openpilot_compat import (
     build_openpilot_compatible_data_dir,
     patch_openpilot_framereader_compat,
-    patch_openpilot_qcam_local_decode,
 )
 from runtime_env import configure_ui_environment, temporary_headless_display
 
@@ -94,7 +93,6 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
         raise FileNotFoundError(f"Modern clip tool not found at {openpilot_dir}/tools/clip/run.py")
 
     patch_openpilot_framereader_compat(openpilot_dir)
-    patch_openpilot_qcam_local_decode(openpilot_dir)
     _ensure_fonts(openpilot_dir)
 
     env = configure_ui_environment()
@@ -104,8 +102,10 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
 
     clip_cmd = [
         *_openpilot_python_cmd(openpilot_dir),
-        "tools/clip/run.py",
+        str((Path(__file__).resolve().parent / "forked_openpilot_clip.py").resolve()),
         opts.route.replace("|", "/"),
+        "--openpilot-dir",
+        str(openpilot_dir),
         "-s",
         str(render_start),
         "-e",

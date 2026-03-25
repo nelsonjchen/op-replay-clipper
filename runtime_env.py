@@ -15,6 +15,7 @@ def configure_ui_environment(base_env: dict[str, str] | None = None) -> dict[str
     if platform.system() == "Darwin":
         env["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
         env.setdefault("FFMPEG_HWACCEL", "none")
+    env.setdefault("SCALE", "1")
     return env
 
 
