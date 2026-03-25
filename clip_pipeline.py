@@ -47,7 +47,6 @@ class ClipRequest:
     smear_seconds: int = 0
     jwt_token: str | None = None
     metric: bool = False
-    speedhack_ratio: float = 1.0
     forward_upon_wide_h: float = 2.2
     explicit_data_dir: str | None = None
     data_root: str = "./shared/data_dir"
@@ -187,7 +186,6 @@ def run_clip(request: ClipRequest) -> ClipResult:
                 smear_seconds=plan.smear_seconds,
                 target_mb=plan.target_mb,
                 file_format=plan.file_format,
-                speedhack_ratio=request.speedhack_ratio,
                 metric=plan.metric,
                 output_path=str(plan.output_path),
                 data_dir=str(plan.data_dir),

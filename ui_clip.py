@@ -22,7 +22,6 @@ class UIRenderOptions:
     smear_seconds: int
     target_mb: int
     file_format: str
-    speedhack_ratio: float
     metric: bool
     output_path: str
     data_dir: str | None = None
@@ -115,8 +114,6 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
         str(Path(opts.output_path).resolve()),
         "-f",
         str(opts.target_mb),
-        "-x",
-        str(max(1, int(round(opts.speedhack_ratio)))),
         "--big",
     ]
     if opts.data_dir:

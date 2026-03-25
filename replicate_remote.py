@@ -32,7 +32,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--metric", action="store_true", help="Render UI clips in metric units.")
     parser.add_argument("--jwt-token", default="", help="Optional comma JWT token for private routes.")
     parser.add_argument("--notes", default="", help="Optional notes string.")
-    parser.add_argument("--speedhack-ratio", type=float, default=1.0, help="UI replay speedhack ratio.")
     parser.add_argument("--forward-upon-wide-h", type=float, default=2.2, help="Forward-upon-wide height adjustment.")
     return parser
 
@@ -54,7 +53,6 @@ def build_input(args: argparse.Namespace) -> dict[str, Any]:
         "fileFormat": args.file_format,
         "renderType": args.render_type,
         "smearAmount": args.smear_amount,
-        "speedhackRatio": args.speedhack_ratio,
         "forwardUponWideH": args.forward_upon_wide_h,
     }
 

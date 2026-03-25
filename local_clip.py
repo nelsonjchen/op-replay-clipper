@@ -42,7 +42,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--openpilot-repo-url", default=default_openpilot_repo_url())
     parser.add_argument("-m", "--file-size-mb", type=int, default=9)
     parser.add_argument("--file-format", choices=["auto", "h264", "hevc"], default="auto")
-    parser.add_argument("-r", "--speedhack-ratio", type=float, default=1.0)
     parser.add_argument("--metric", action="store_true")
     parser.add_argument("--forward-upon-wide-h", type=float, default=2.2)
     parser.add_argument("--qcam", action="store_true")
@@ -112,7 +111,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 smear_seconds=args.smear_seconds if args.render_type == "ui" else 0,
                 jwt_token=args.jwt_token or None,
                 metric=args.metric,
-                speedhack_ratio=args.speedhack_ratio,
                 forward_upon_wide_h=args.forward_upon_wide_h,
                 explicit_data_dir=args.data_dir or None,
                 data_root=args.data_root,

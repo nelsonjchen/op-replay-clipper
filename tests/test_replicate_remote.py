@@ -25,7 +25,6 @@ def test_build_input_uses_cog_field_names() -> None:
         file_format="auto",
         render_type="ui",
         smear_amount=5,
-        speedhack_ratio=1.0,
         forward_upon_wide_h=2.2,
     )
     payload = replicate_remote.build_input(args)
