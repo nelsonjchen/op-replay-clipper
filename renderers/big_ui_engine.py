@@ -263,31 +263,28 @@ class IndexedFrameQueue:
 
 
 def load_route_metadata(route) -> dict[str, str]:
-    from openpilot.common.params import Params, UnknownKeyName
     from openpilot.tools.lib.logreader import LogReader
+    from openpilot.tools.lib.route import Segment
 
     path = next((item for item in route.log_paths() if item), None)
     if not path:
         raise RuntimeError("error getting route metadata: cannot find any uploaded logs")
     lr = LogReader(path)
-    init_data, car_params = lr.first("initData"), lr.first("carParams")
+    init_data = lr.first("initData")
 
-    params = Params()
-    for entry in init_data.params.entries:
-        try:
-            params.put(entry.key, params.cpp2python(entry.key, entry.value))
-        except UnknownKeyName:
-            pass
+    route_info = {}
+    try:
+        route_info = Segment._get_route_metadata(route.name.canonical_name)
+    except Exception:
+        route_info = {}
 
-    origin = init_data.gitRemote.split("/")[3] if len(init_data.gitRemote.split("/")) > 3 else "unknown"
     return {
-        "version": init_data.version,
         "route": route.name.canonical_name,
-        "car": car_params.carFingerprint if car_params else "unknown",
-        "origin": origin,
-        "branch": init_data.gitBranch,
-        "commit": init_data.gitCommit[:7],
-        "modified": str(init_data.dirty).lower(),
+        "platform": route_info.get("platform") or "unknown",
+        "remote": init_data.gitRemote or route_info.get("git_remote") or "unknown",
+        "branch": init_data.gitBranch or route_info.get("git_branch") or "unknown",
+        "commit": (init_data.gitCommit or route_info.get("git_commit") or "unknown")[:8],
+        "dirty": str(init_data.dirty).lower(),
     }
 
 
@@ -322,13 +319,12 @@ def render_overlays(gui_app, font, big, metadata, title, route_seconds, show_met
     if show_metadata and metadata:
         text = ", ".join(
             [
-                f"openpilot v{metadata['version']}",
                 f"route: {metadata['route']}",
-                f"car: {metadata['car']}",
-                f"origin: {metadata['origin']}",
-                f"branch: {metadata['branch']}",
-                f"commit: {metadata['commit']}",
-                f"modified: {metadata['modified']}",
+                metadata["platform"],
+                metadata["remote"],
+                metadata["branch"],
+                metadata["commit"],
+                f"Dirty: {metadata['dirty']}",
             ]
         )
         margin = 2 * (time_width + 10 if show_time else 20)
