@@ -3,7 +3,7 @@ build:
   python_version: "3.12"
   cuda: "12.4"
   python_requirements: requirements-cog.txt
-  # setup.sh is shared with local tooling, but Cog build.run still cannot read repo files directly.
+  # bootstrap_image_env.sh is shared with local tooling, but Cog build.run still cannot read repo files directly.
   run:
-    - "echo ENCODED_SCRIPT | base64 -d > setup.sh && bash setup.sh"
-predict: "predict.py:Predictor"
+    - "echo ENCODED_SCRIPT | base64 -d > bootstrap_image_env.sh && bash bootstrap_image_env.sh"
+predict: "cog_predictor.py:Predictor"

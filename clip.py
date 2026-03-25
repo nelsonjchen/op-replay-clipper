@@ -6,9 +6,9 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
-from clip_pipeline import ClipRequest, RenderType, run_clip
-from openpilot_defaults import default_local_openpilot_root, default_openpilot_branch, default_openpilot_repo_url
-from openpilot_setup import bootstrap_openpilot, ensure_openpilot_checkout
+from core.clip_orchestrator import ClipRequest, RenderType, run_clip
+from core.openpilot_bootstrap import bootstrap_openpilot, ensure_openpilot_checkout
+from core.openpilot_config import default_local_openpilot_root, default_openpilot_branch, default_openpilot_repo_url
 
 
 DEMO_ROUTE = "a2a0ccea32023010|2023-07-27--13-01-19"
@@ -126,7 +126,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     except ModuleNotFoundError as error:
         raise SystemExit(
-            f"Missing local dependency: {error.name}. Run `uv sync` and then use `uv run python local_clip.py ...`."
+            f"Missing local dependency: {error.name}. Run `uv sync` and then use `uv run python clip.py ...`."
         ) from error
 
     print(f"Wrote clip: {result.output_path}")

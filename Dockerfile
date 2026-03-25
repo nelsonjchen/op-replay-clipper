@@ -1,8 +1,8 @@
 FROM ubuntu:24.04 AS base
 
-COPY ./common/setup.sh /setup.sh
+COPY ./common/bootstrap_image_env.sh /bootstrap_image_env.sh
 
-RUN /setup.sh
+RUN /bootstrap_image_env.sh
 
 ARG USERNAME=ubuntu
 ARG USER_UID=1000
@@ -28,15 +28,10 @@ COPY ./uv.lock /workspace/uv.lock
 
 RUN uv sync --frozen --no-group test
 
-COPY ./local_clip.py /workspace/local_clip.py
-COPY ./clip_pipeline.py /workspace/clip_pipeline.py
-COPY ./ffmpeg_clip.py /workspace/ffmpeg_clip.py
-COPY ./ui_clip.py /workspace/ui_clip.py
-COPY ./runtime_env.py /workspace/runtime_env.py
-COPY ./openpilot_defaults.py /workspace/openpilot_defaults.py
-COPY ./openpilot_setup.py /workspace/openpilot_setup.py
-COPY ./openpilot_compat.py /workspace/openpilot_compat.py
-COPY ./route_or_url.py /workspace/route_or_url.py
-COPY ./downloader.py /workspace/downloader.py
+COPY ./clip.py /workspace/clip.py
+COPY ./cog_predictor.py /workspace/cog_predictor.py
+COPY ./replicate_run.py /workspace/replicate_run.py
+COPY ./core /workspace/core
+COPY ./renderers /workspace/renderers
 
-CMD ["uv", "run", "--no-sync", "python", "/workspace/local_clip.py", "ui"]
+CMD ["uv", "run", "--no-sync", "python", "/workspace/clip.py", "ui"]

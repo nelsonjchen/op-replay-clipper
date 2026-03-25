@@ -169,7 +169,14 @@ With the car on, **within a minute** after an incident when it is safe to do so:
 
 ### Local-first development workflow
 
-Use `local_clip.py` as the primary local entrypoint for cheap validation on macOS or Linux before paying for GCE runs.
+Use `clip.py` as the primary local entrypoint for cheap validation on macOS or Linux before paying for GCE runs.
+
+Repo layout:
+
+* repo root: user-facing entrypoints such as `clip.py`, `cog_predictor.py`, and `replicate_run.py`
+* `core/`: shared runtime modules for orchestration, route inputs, downloading, integration, and bootstrap
+* `renderers/`: UI and video renderer implementations
+* `cog/` and `common/`: build/bootstrap helpers for Cog, Docker, and image setup
 
 BIG UI is the supported UI target.
 
@@ -177,19 +184,27 @@ Examples:
 
 ```bash
 uv sync
-uv run python local_clip.py ui "https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
-uv run python local_clip.py forward "a2a0ccea32023010|2023-07-27--13-01-19" --demo
+uv run python clip.py ui "https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
+uv run python clip.py forward "a2a0ccea32023010|2023-07-27--13-01-19" --demo
 ```
 
 BIG UI smoke test:
 
 ```bash
-uv run python local_clip.py ui --demo --qcam --length-seconds 2 --output ./shared/demo-big-ui-clip.mp4
+uv run python clip.py ui --demo --qcam --length-seconds 2 --output ./shared/demo-big-ui-clip.mp4
+```
+
+Exact-sync BIG UI smoke test:
+
+```bash
+make ui-exact-smoke
 ```
 
 Notes:
 
-* `local_clip.py` is the primary local CLI for UI and non-UI renders
+* `clip.py` is the primary local CLI for UI and non-UI renders
+* BIG UI renders now use a repo-owned exact-frame runner instead of the old coarse 20 Hz chunk mapping, so lane lines and path overlays stay aligned to the logged road camera frames
+* The BIG UI renderer also does a hidden 1-second warmup before recording so the visible clip starts with initialized video/UI state instead of a blank opening
 * `pyproject.toml` declares compatible dependency ranges and `uv.lock` pins the exact resolved environment
 * `uv sync` bootstraps the local Python environment used by the local CLI
 * On macOS it prefers a local acceleration policy for ffmpeg-based renders where available
@@ -198,7 +213,7 @@ Notes:
 * It runs `uv sync --frozen --all-extras` and builds the native modules needed by `tools/clip/run.py`
 * On macOS it applies the same `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` workaround used by upstream `tools/install_python_dependencies.sh`
 * `uv run pytest` runs the local refactor tests
-* `./cog/generate.sh` exports `requirements-cog.txt` from `uv.lock` for Cog, so the local and Cog dependency sets stay aligned
+* `./cog/render_artifacts.sh` exports `requirements-cog.txt` from `uv.lock` for Cog, so the local and Cog dependency sets stay aligned
 * `cog.yaml` and `requirements-cog.txt` are generated artifacts and are intentionally not committed
 
 ### Hosted Replicate runs with uv
@@ -220,15 +235,15 @@ uv sync
 3. Run a hosted prediction and save the returned file locally:
 
 ```bash
-uv run python replicate_remote.py \
+uv run python replicate_run.py \
   --url 'https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496' \
   --render-type forward \
-  --output ./shared/replicate-remote-forward.mp4
+  --output ./shared/replicate-run-forward.mp4
 ```
 
 Notes:
 
-* `replicate_remote.py` uses the hosted Replicate model version, not local Docker
+* `replicate_run.py` uses the hosted Replicate model version, not local Docker
 * the script loads `REPLICATE_API_TOKEN` from `.env` via `python-dotenv`
 * it prints the remote file URL when Replicate returns one, then writes the file to the path you passed with `--output`
 * the hosted helper now takes a full `connect.comma.ai` clip URL and does not expose separate `start-seconds` or `length-seconds` flags

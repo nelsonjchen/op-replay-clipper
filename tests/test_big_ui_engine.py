@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import forked_openpilot_clip
-import openpilot_compat
-import runtime_env
+from core import openpilot_integration, render_runtime
+from renderers import big_ui_engine
 
 
 class FakeMsg:
@@ -28,7 +27,7 @@ def test_build_camera_frame_refs_tracks_local_indexes_per_segment() -> None:
         ],
     ]
 
-    refs_by_frame_id, refs_by_timestamp = forked_openpilot_clip.build_camera_frame_refs(segments)
+    refs_by_frame_id, refs_by_timestamp = big_ui_engine.build_camera_frame_refs(segments)
 
     assert refs_by_frame_id[10].segment_index == 0
     assert refs_by_frame_id[10].local_index == 0
@@ -47,7 +46,7 @@ def test_build_render_steps_uses_exact_model_frame_mapping() -> None:
         ]
     ]
 
-    steps = forked_openpilot_clip.build_render_steps(segments, seg_start=0, start=0, end=1)
+    steps = big_ui_engine.build_render_steps(segments, seg_start=0, start=0, end=1)
 
     assert len(steps) == 1
     step = steps[0]
@@ -59,7 +58,7 @@ def test_build_render_steps_uses_exact_model_frame_mapping() -> None:
 
 
 def test_ui_environment_forces_scale_one() -> None:
-    env = runtime_env.configure_ui_environment({})
+    env = render_runtime.configure_ui_environment({})
     assert env["SCALE"] == "1"
 
 
@@ -75,7 +74,7 @@ def test_patch_ui_application_record_skip_inserts_skip_logic(tmp_path) -> None:
         "          rl.unload_image(image)\n"
     )
 
-    changed = openpilot_compat._patch_ui_application_record_skip(app)
+    changed = openpilot_integration._patch_ui_application_record_skip(app)
     updated = app.read_text()
 
     assert changed is True

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import platform
+import shutil
 import subprocess
+import os
 from pathlib import Path
 
-from openpilot_defaults import DEFAULT_OPENPILOT_REPO_URL
+from core.openpilot_config import DEFAULT_OPENPILOT_REPO_URL, default_local_openpilot_root
 
 
 GIT_CLONE_FLAGS = [
@@ -32,17 +34,18 @@ GIT_SUBMODULE_UPDATE_FLAGS = [
 
 def _run(cmd: list[str], cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
     print(f"+ {' '.join(cmd)}")
-    run_env = None if env is None else dict(env)
+    run_env = dict(os.environ)
+    if env is not None:
+        run_env.update(env)
     if cwd:
-        run_env = dict(run_env or {})
         run_env["PWD"] = str(cwd)
     subprocess.run(cmd, cwd=str(cwd) if cwd else None, env=run_env, check=True)
 
 
 def _capture(cmd: list[str], cwd: Path | None = None) -> str:
-    run_env = None
+    run_env = dict(os.environ)
     if cwd:
-        run_env = {"PWD": str(cwd)}
+        run_env["PWD"] = str(cwd)
     completed = subprocess.run(
         cmd,
         cwd=str(cwd) if cwd else None,
@@ -84,32 +87,48 @@ def _resolve_openpilot_python(openpilot_dir: Path) -> str | None:
         return _capture(["uv", "python", "find", major_minor], cwd=openpilot_dir)
 
 
+def _clone_checkout(openpilot_dir: Path, branch: str, repo_url: str) -> None:
+    openpilot_dir.parent.mkdir(parents=True, exist_ok=True)
+    _run(
+        [
+            "git",
+            "clone",
+            *GIT_CLONE_FLAGS,
+            "--branch",
+            branch,
+            repo_url,
+            str(openpilot_dir),
+        ]
+    )
+
+
+def _is_managed_local_checkout(openpilot_dir: Path) -> bool:
+    managed_root = Path(default_local_openpilot_root()).expanduser()
+    return openpilot_dir == managed_root.resolve()
+
+
 def ensure_openpilot_checkout(
     openpilot_dir: Path,
     branch: str = "master",
     repo_url: str = DEFAULT_OPENPILOT_REPO_URL,
 ) -> None:
     if not openpilot_dir.exists():
-        openpilot_dir.parent.mkdir(parents=True, exist_ok=True)
-        _run(
-            [
-                "git",
-                "clone",
-                *GIT_CLONE_FLAGS,
-                "--branch",
-                branch,
-                repo_url,
-                str(openpilot_dir),
-            ]
-        )
+        _clone_checkout(openpilot_dir, branch, repo_url)
         return
 
-    _run(["git", "remote", "set-url", "origin", repo_url], cwd=openpilot_dir)
-    _run(["git", "fetch", *GIT_FETCH_FLAGS, "origin", branch], cwd=openpilot_dir)
-    _run(["git", "checkout", branch], cwd=openpilot_dir)
-    _run(["git", "pull", "--ff-only", "--recurse-submodules", "origin", branch], cwd=openpilot_dir)
-    _run(["git", "submodule", "sync", "--recursive"], cwd=openpilot_dir)
-    _run(["git", "submodule", "update", *GIT_SUBMODULE_UPDATE_FLAGS], cwd=openpilot_dir)
+    try:
+        _run(["git", "remote", "set-url", "origin", repo_url], cwd=openpilot_dir)
+        _run(["git", "fetch", *GIT_FETCH_FLAGS, "origin", branch], cwd=openpilot_dir)
+        _run(["git", "checkout", branch], cwd=openpilot_dir)
+        _run(["git", "pull", "--ff-only", "--recurse-submodules", "origin", branch], cwd=openpilot_dir)
+        _run(["git", "submodule", "sync", "--recursive"], cwd=openpilot_dir)
+        _run(["git", "submodule", "update", *GIT_SUBMODULE_UPDATE_FLAGS], cwd=openpilot_dir)
+    except subprocess.CalledProcessError:
+        if not _is_managed_local_checkout(openpilot_dir):
+            raise
+        print(f"Managed openpilot cache at {openpilot_dir} drifted; recloning a fresh checkout.")
+        shutil.rmtree(openpilot_dir)
+        _clone_checkout(openpilot_dir, branch, repo_url)
 
 
 def ensure_macos_env_fix(openpilot_dir: Path) -> None:

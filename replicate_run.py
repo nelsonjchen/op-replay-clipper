@@ -8,11 +8,11 @@ from typing import Any
 
 from dotenv import load_dotenv
 import replicate
-import route_or_url
+from core import route_inputs
 
 DEFAULT_MODEL = "nelsonjchen/op-replay-clipper-beta:e2ea1155bcceb27dfb5609f866e65cb2f2f0728d114a84733cf790ff3ca679d6"
 DEFAULT_URL = "https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496"
-DEFAULT_OUTPUT = Path("./shared/replicate-remote-output.mp4")
+DEFAULT_OUTPUT = Path("./shared/replicate-run-output.mp4")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -38,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def validate_connect_url(url: str) -> str:
     try:
-        return route_or_url.validate_connect_url(url)
+        return route_inputs.validate_connect_url(url)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 

@@ -4,10 +4,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-import ffmpeg_clip
-from openpilot_defaults import default_image_openpilot_root
-import route_or_url
-import ui_clip
+from core import route_downloader, route_inputs
+from core.openpilot_config import default_image_openpilot_root
+from renderers import ui_renderer, video_renderer
 
 
 RenderType = Literal[
@@ -120,7 +119,7 @@ def resolve_data_dir(route: str, data_root: str, explicit_data_dir: str | None) 
 
 
 def build_clip_plan(request: ClipRequest) -> ClipPlan:
-    parsed = route_or_url.parseRouteOrUrl(
+    parsed = route_inputs.parseRouteOrUrl(
         route_or_url=request.route_or_url,
         start_seconds=request.start_seconds,
         length_seconds=request.length_seconds,
@@ -164,9 +163,7 @@ def run_clip(request: ClipRequest) -> ClipResult:
         plan.output_path.unlink()
 
     if not request.skip_download:
-        import downloader
-
-        downloader.downloadSegments(
+        route_downloader.downloadSegments(
             route_or_segment=plan.route,
             start_seconds=plan.start_seconds,
             length=plan.length_seconds,
@@ -178,8 +175,8 @@ def run_clip(request: ClipRequest) -> ClipResult:
         )
 
     if plan.render_type == "ui":
-        ui_result = ui_clip.render_ui_clip(
-            ui_clip.UIRenderOptions(
+        ui_result = ui_renderer.render_ui_clip(
+            ui_renderer.UIRenderOptions(
                 route=plan.route,
                 start_seconds=plan.start_seconds,
                 length_seconds=plan.length_seconds,
@@ -202,8 +199,8 @@ def run_clip(request: ClipRequest) -> ClipResult:
             file_format=plan.file_format,
         )
 
-    video_result = ffmpeg_clip.render_video_clip(
-        ffmpeg_clip.VideoRenderOptions(
+    video_result = video_renderer.render_video_clip(
+        video_renderer.VideoRenderOptions(
             render_type=plan.render_type,
             data_dir=str(plan.data_dir),
             route_or_segment=plan.route,

@@ -6,13 +6,13 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from openpilot_defaults import default_image_openpilot_root
-from openpilot_compat import (
+from core.openpilot_config import default_image_openpilot_root
+from core.openpilot_integration import (
     build_openpilot_compatible_data_dir,
     patch_openpilot_framereader_compat,
     patch_openpilot_ui_record_skip,
 )
-from runtime_env import configure_ui_environment, temporary_headless_display
+from core.render_runtime import configure_ui_environment, temporary_headless_display
 
 
 UI_STARTUP_WARMUP_SECONDS = 1
@@ -112,7 +112,7 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
 
     clip_cmd = [
         *_openpilot_python_cmd(openpilot_dir),
-        str((Path(__file__).resolve().parent / "forked_openpilot_clip.py").resolve()),
+        str((Path(__file__).resolve().parent / "big_ui_engine.py").resolve()),
         opts.route.replace("|", "/"),
         "--openpilot-dir",
         str(openpilot_dir),

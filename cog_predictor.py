@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from cog import BasePredictor, Input, Path as CogPath
 
-from clip_pipeline import ClipRequest, run_clip
-from openpilot_defaults import default_image_openpilot_root
-import route_or_url
+from core import route_inputs
+from core.clip_orchestrator import ClipRequest, run_clip
+from core.openpilot_config import default_image_openpilot_root
 
 MIN_LENGTH_SECONDS = 5
 MAX_LENGTH_SECONDS = 300
@@ -63,7 +63,7 @@ class Predictor(BasePredictor):
         print("NOTES:")
         print(notes)
         print("")
-        route = route_or_url.validate_connect_url(
+        route = route_inputs.validate_connect_url(
             route,
             error_message="Replicate/Cog route input must be a full https://connect.comma.ai/... clip URL.",
         )

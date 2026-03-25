@@ -15,7 +15,7 @@ from pathlib import Path
 FRAMERATE = 20
 CAMERA_SERVICE = "roadEncodeIdx"
 MODEL_SERVICE = "modelV2"
-logger = logging.getLogger("forked_openpilot_clip")
+logger = logging.getLogger("big_ui_engine")
 
 
 def _add_openpilot_to_sys_path(openpilot_dir: Path) -> None:

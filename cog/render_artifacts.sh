@@ -13,7 +13,7 @@ uv export \
   --no-group test \
   --output-file "${ROOT_DIR}/requirements-cog.txt"
 
-python3 "${SCRIPT_DIR}/render_cog_yaml.py" \
+python3 "${SCRIPT_DIR}/render_config.py" \
   --template "${SCRIPT_DIR}/cog.template.yaml" \
-  --setup-script "${ROOT_DIR}/common/setup.sh" \
+  --setup-script "${ROOT_DIR}/common/bootstrap_image_env.sh" \
   --output "${ROOT_DIR}/cog.yaml"
