@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from core import openpilot_integration, render_runtime
-from renderers import big_ui_engine
+from renderers import big_ui_engine, ui_renderer
 
 
 class FakeMsg:
@@ -82,6 +82,29 @@ def test_patch_ui_application_record_skip_inserts_skip_logic(tmp_path) -> None:
     app = tmp_path / "application.py"
     app.write_text(
         'RECORD_SPEED = int(os.getenv("RECORD_SPEED", "1"))  # Speed multiplier\n'
+        '        ffmpeg_args = [\n'
+        "          'ffmpeg',\n"
+        "          '-v', 'warning',          # Reduce ffmpeg log spam\n"
+        "          '-nostats',               # Suppress encoding progress\n"
+        "          '-f', 'rawvideo',         # Input format\n"
+        "          '-pix_fmt', 'rgba',       # Input pixel format\n"
+        "          '-s', f'{self._scaled_width}x{self._scaled_height}',  # Input resolution\n"
+        "          '-r', str(fps),           # Input frame rate\n"
+        "          '-i', 'pipe:0',           # Input from stdin\n"
+        "          '-vf', 'vflip,format=yuv420p',  # Flip vertically and convert to yuv420p\n"
+        "          '-r', str(output_fps),    # Output frame rate (for speed multiplier)\n"
+        "          '-c:v', 'libx264',\n"
+        "          '-preset', 'veryfast',\n"
+        "          '-crf', str(RECORD_QUALITY)\n"
+        "        ]\n"
+        "        if RECORD_BITRATE:\n"
+        "          # NOTE: custom bitrate overrides crf setting\n"
+        "          ffmpeg_args += ['-b:v', RECORD_BITRATE, '-maxrate', RECORD_BITRATE, '-bufsize', RECORD_BITRATE]\n"
+        "        ffmpeg_args += [\n"
+        "          '-y',                     # Overwrite existing file\n"
+        "          '-f', 'mp4',              # Output format\n"
+        "          RECORD_OUTPUT,            # Output file path\n"
+        "        ]\n"
         "        if RECORD:\n"
         "          image = rl.load_image_from_texture(self._render_texture.texture)\n"
         "          data_size = image.width * image.height * 4\n"
@@ -95,6 +118,10 @@ def test_patch_ui_application_record_skip_inserts_skip_logic(tmp_path) -> None:
 
     assert changed is True
     assert 'RECORD_SKIP_FRAMES = int(os.getenv("RECORD_SKIP_FRAMES", "0"))' in updated
+    assert 'RECORD_CODEC = os.getenv("RECORD_CODEC", "libx264")' in updated
+    assert "'-c:v', RECORD_CODEC" in updated
+    assert "if RECORD_CODEC.startswith('libx'):" in updated
+    assert "if RECORD_TAG:" in updated
     assert "if RECORD and self._frame >= RECORD_SKIP_FRAMES:" in updated
 
 
@@ -120,3 +147,65 @@ def test_patch_augmented_road_view_fill_applies_upstream_zoom_fix(tmp_path) -> N
     assert "max_x_offset = max(0.0, cx * zoom - w / 2 - margin)" in updated
     assert "max_y_offset = max(0.0, cy * zoom - h / 2 - margin)" in updated
     assert "super()._render(self._content_rect)" in updated
+
+
+def test_render_overlays_includes_device_type_in_metadata(monkeypatch) -> None:
+    calls: list[str] = []
+
+    monkeypatch.setattr(big_ui_engine, "draw_text_box", lambda text, *args, **kwargs: calls.append(text))
+
+    def fake_measure(_font, text, _size):
+        return SimpleNamespace(x=len(text) * 8, y=16)
+
+    def fake_wrap(_font, text, _size, _max_width):
+        return [text]
+
+    monkeypatch.setitem(__import__("sys").modules, "openpilot.system.ui.lib.text_measure", SimpleNamespace(measure_text_cached=fake_measure))
+    monkeypatch.setitem(__import__("sys").modules, "openpilot.system.ui.lib.wrap_text", SimpleNamespace(wrap_text=fake_wrap))
+
+    metadata = {
+        "route": "dongle|route",
+        "device_type": "mici",
+        "platform": "FORD_BRONCO_SPORT_MK1",
+        "remote": "commaai",
+        "branch": "master",
+        "commit": "deadbeef",
+        "dirty": "false",
+    }
+
+    big_ui_engine.render_overlays(
+        SimpleNamespace(width=2160),
+        font=object(),
+        big=True,
+        metadata=metadata,
+        title=None,
+        route_seconds=90,
+        show_metadata=True,
+        show_time=False,
+    )
+
+    assert any("mici" in text for text in calls)
+
+
+def test_ui_recording_encoder_prefers_nvidia(monkeypatch) -> None:
+    env: dict[str, str] = {}
+    monkeypatch.setattr(ui_renderer, "_has_nvidia", lambda: True)
+
+    acceleration = ui_renderer._configure_ui_recording_encoder(env, "hevc")
+
+    assert acceleration == "nvidia"
+    assert env["RECORD_CODEC"] == "hevc_nvenc"
+    assert env["RECORD_PRESET"] == "p4"
+    assert env["RECORD_TAG"] == "hvc1"
+
+
+def test_ui_recording_encoder_falls_back_to_cpu(monkeypatch) -> None:
+    env: dict[str, str] = {}
+    monkeypatch.setattr(ui_renderer, "_has_nvidia", lambda: False)
+
+    acceleration = ui_renderer._configure_ui_recording_encoder(env, "h264")
+
+    assert acceleration == "cpu"
+    assert env["RECORD_CODEC"] == "libx264"
+    assert env["RECORD_PRESET"] == "veryfast"
+    assert "RECORD_TAG" not in env

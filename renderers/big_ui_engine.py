@@ -281,6 +281,7 @@ def load_route_metadata(route) -> dict[str, str]:
 
     return {
         "route": route.name.canonical_name,
+        "device_type": str(getattr(init_data, "deviceType", None) or "unknown"),
         "platform": route_info.get("platform") or "unknown",
         "remote": init_data.gitRemote or route_info.get("git_remote") or "unknown",
         "branch": init_data.gitBranch or route_info.get("git_branch") or "unknown",
@@ -321,6 +322,7 @@ def render_overlays(gui_app, font, big, metadata, title, route_seconds, show_met
         text = ", ".join(
             [
                 f"route: {metadata['route']}",
+                metadata["device_type"],
                 metadata["platform"],
                 metadata["remote"],
                 metadata["branch"],

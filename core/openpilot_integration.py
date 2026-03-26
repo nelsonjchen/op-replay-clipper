@@ -196,13 +196,23 @@ def _patch_ui_application_record_skip(path: Path) -> bool:
 
     record_speed_line = 'RECORD_SPEED = int(os.getenv("RECORD_SPEED", "1"))  # Speed multiplier\n'
     record_skip_line = 'RECORD_SKIP_FRAMES = int(os.getenv("RECORD_SKIP_FRAMES", "0"))  # Warmup frames to drop before recording\n'
+    record_codec_line = 'RECORD_CODEC = os.getenv("RECORD_CODEC", "libx264")  # ffmpeg video encoder\n'
+    record_preset_line = 'RECORD_PRESET = os.getenv("RECORD_PRESET", "veryfast")  # ffmpeg encoder preset\n'
+    record_tag_line = 'RECORD_TAG = os.getenv("RECORD_TAG", "")  # Optional ffmpeg codec tag\n'
     if record_skip_line not in updated and record_speed_line in updated:
         updated = updated.replace(record_speed_line, record_speed_line + record_skip_line, 1)
+    if record_codec_line not in updated and record_skip_line in updated:
+        updated = updated.replace(record_skip_line, record_skip_line + record_codec_line + record_preset_line + record_tag_line, 1)
 
     old_block = """        if RECORD:\n          image = rl.load_image_from_texture(self._render_texture.texture)\n          data_size = image.width * image.height * 4\n          data = bytes(rl.ffi.buffer(image.data, data_size))\n          self._ffmpeg_queue.put(data)  # Async write via background thread\n          rl.unload_image(image)\n"""
     new_block = """        if RECORD and self._frame >= RECORD_SKIP_FRAMES:\n          image = rl.load_image_from_texture(self._render_texture.texture)\n          data_size = image.width * image.height * 4\n          data = bytes(rl.ffi.buffer(image.data, data_size))\n          self._ffmpeg_queue.put(data)  # Async write via background thread\n          rl.unload_image(image)\n"""
     if old_block in updated:
         updated = updated.replace(old_block, new_block, 1)
+
+    old_ffmpeg_block = """        ffmpeg_args = [\n          'ffmpeg',\n          '-v', 'warning',          # Reduce ffmpeg log spam\n          '-nostats',               # Suppress encoding progress\n          '-f', 'rawvideo',         # Input format\n          '-pix_fmt', 'rgba',       # Input pixel format\n          '-s', f'{self._scaled_width}x{self._scaled_height}',  # Input resolution\n          '-r', str(fps),           # Input frame rate\n          '-i', 'pipe:0',           # Input from stdin\n          '-vf', 'vflip,format=yuv420p',  # Flip vertically and convert to yuv420p\n          '-r', str(output_fps),    # Output frame rate (for speed multiplier)\n          '-c:v', 'libx264',\n          '-preset', 'veryfast',\n          '-crf', str(RECORD_QUALITY)\n        ]\n        if RECORD_BITRATE:\n          # NOTE: custom bitrate overrides crf setting\n          ffmpeg_args += ['-b:v', RECORD_BITRATE, '-maxrate', RECORD_BITRATE, '-bufsize', RECORD_BITRATE]\n        ffmpeg_args += [\n          '-y',                     # Overwrite existing file\n          '-f', 'mp4',              # Output format\n          RECORD_OUTPUT,            # Output file path\n        ]\n"""
+    new_ffmpeg_block = """        ffmpeg_args = [\n          'ffmpeg',\n          '-v', 'warning',          # Reduce ffmpeg log spam\n          '-nostats',               # Suppress encoding progress\n          '-f', 'rawvideo',         # Input format\n          '-pix_fmt', 'rgba',       # Input pixel format\n          '-s', f'{self._scaled_width}x{self._scaled_height}',  # Input resolution\n          '-r', str(fps),           # Input frame rate\n          '-i', 'pipe:0',           # Input from stdin\n          '-vf', 'vflip,format=yuv420p',  # Flip vertically and convert to yuv420p\n          '-r', str(output_fps),    # Output frame rate (for speed multiplier)\n          '-c:v', RECORD_CODEC,\n          '-preset', RECORD_PRESET,\n        ]\n        if RECORD_CODEC.startswith('libx'):\n          ffmpeg_args += ['-crf', str(RECORD_QUALITY)]\n        if RECORD_BITRATE:\n          # NOTE: custom bitrate overrides crf setting\n          ffmpeg_args += ['-b:v', RECORD_BITRATE, '-maxrate', RECORD_BITRATE, '-bufsize', RECORD_BITRATE]\n        if RECORD_TAG:\n          ffmpeg_args += ['-tag:v', RECORD_TAG]\n        ffmpeg_args += [\n          '-y',                     # Overwrite existing file\n          '-f', 'mp4',              # Output format\n          RECORD_OUTPUT,            # Output file path\n        ]\n"""
+    if old_ffmpeg_block in updated:
+        updated = updated.replace(old_ffmpeg_block, new_ffmpeg_block, 1)
 
     if updated != source:
         path.write_text(updated)

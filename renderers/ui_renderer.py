@@ -40,6 +40,32 @@ class UIRenderResult:
     output_path: Path
 
 
+def _has_nvidia() -> bool:
+    nvidia_smi = shutil.which("nvidia-smi")
+    if not nvidia_smi:
+        return False
+    return subprocess.run([nvidia_smi, "-L"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode == 0
+
+
+def _configure_ui_recording_encoder(env: dict[str, str], file_format: str) -> str:
+    if _has_nvidia():
+        env["RECORD_CODEC"] = "h264_nvenc" if file_format == "h264" else "hevc_nvenc"
+        env["RECORD_PRESET"] = "p4"
+        if file_format == "hevc":
+            env["RECORD_TAG"] = "hvc1"
+        else:
+            env.pop("RECORD_TAG", None)
+        return "nvidia"
+
+    env["RECORD_CODEC"] = "libx264" if file_format == "h264" else "libx265"
+    env["RECORD_PRESET"] = "veryfast" if file_format == "h264" else "medium"
+    if file_format == "hevc":
+        env["RECORD_TAG"] = "hvc1"
+    else:
+        env.pop("RECORD_TAG", None)
+    return "cpu"
+
+
 def _run(cmd: list[str], cwd: str | Path | None = None, env: dict[str, str] | None = None) -> None:
     print(f"+ {' '.join(cmd)}")
     run_env = None if env is None else dict(env)
@@ -104,6 +130,8 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
     _ensure_fonts(openpilot_dir)
 
     env = configure_ui_environment()
+    recording_acceleration = _configure_ui_recording_encoder(env, opts.file_format)
+    print(f"UI recording encoder: {env['RECORD_CODEC']} ({recording_acceleration})")
     smear_seconds = max(0, opts.smear_seconds)
     warmup_seconds = min(UI_STARTUP_WARMUP_SECONDS, max(0, opts.start_seconds - smear_seconds))
     render_start = max(0, opts.start_seconds - smear_seconds - warmup_seconds)
