@@ -400,6 +400,9 @@ def clip(
         timer.lap("setup")
 
         frame_idx = 0
+        render_started_at = time.perf_counter()
+        last_log_at = render_started_at
+        last_log_frame_idx = 0
         with tqdm.tqdm(total=len(render_steps), desc="Rendering", unit="frame") as progress:
             for should_render in gui_app.render():
                 if frame_idx >= len(render_steps):
@@ -430,6 +433,22 @@ def clip(
                     )
                 frame_idx += 1
                 progress.update(1)
+                now = time.perf_counter()
+                if frame_idx == len(render_steps) or now - last_log_at >= 5.0:
+                    total_elapsed = max(now - render_started_at, 1e-6)
+                    interval_elapsed = max(now - last_log_at, 1e-6)
+                    avg_fps = frame_idx / total_elapsed
+                    interval_fps = (frame_idx - last_log_frame_idx) / interval_elapsed
+                    logger.info(
+                        "Render progress: %s/%s frames, avg %.2f fps, recent %.2f fps, route %.2fs",
+                        frame_idx,
+                        len(render_steps),
+                        avg_fps,
+                        interval_fps,
+                        step.route_seconds,
+                    )
+                    last_log_at = now
+                    last_log_frame_idx = frame_idx
         timer.lap("render")
 
         frame_queue.stop()
@@ -437,6 +456,14 @@ def clip(
         timer.lap("ffmpeg")
 
     logger.info("Clip saved to: %s", Path(output).resolve())
+    if frame_idx:
+        render_seconds = max(getattr(timer, "_sections", {}).get("render", 0.0), 1e-6)
+        logger.info(
+            "Render stats: frames=%s, render_seconds=%.2f, avg_fps=%.2f",
+            frame_idx,
+            render_seconds,
+            frame_idx / render_seconds,
+        )
     logger.info("Generated %s", timer.fmt(duration))
 
 

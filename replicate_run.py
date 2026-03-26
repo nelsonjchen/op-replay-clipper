@@ -38,7 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def validate_connect_url(url: str) -> str:
     try:
-        return route_inputs.validate_connect_url(url)
+        route_inputs.validate_connect_url(url)
+        return url
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
