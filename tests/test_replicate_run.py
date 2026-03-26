@@ -31,7 +31,6 @@ def test_build_input_uses_cog_field_names() -> None:
     args = SimpleNamespace(
         notes="",
         url="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496",
-        metric=False,
         file_size=9,
         jwt_token="",
         file_format="auto",
@@ -43,6 +42,7 @@ def test_build_input_uses_cog_field_names() -> None:
     assert payload["renderType"] == "ui"
     assert payload["fileSize"] == 9
     assert payload["route"].startswith("literal:https://connect.comma.ai/")
+    assert "metric" not in payload
 
 
 def test_encode_replicate_route_input_preserves_existing_literal_prefix() -> None:

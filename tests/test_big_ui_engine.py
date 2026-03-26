@@ -78,6 +78,60 @@ def test_ui_environment_forces_scale_one() -> None:
     assert env["SCALE"] == "1"
 
 
+def test_find_metric_source_log_prefers_lowest_segment(tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    (data_dir / "2023-07-27--13-01-19--2").mkdir(parents=True)
+    (data_dir / "2023-07-27--13-01-19--2" / "rlog.zst").write_bytes(b"")
+    (data_dir / "2023-07-27--13-01-19--0").mkdir(parents=True)
+    (data_dir / "2023-07-27--13-01-19--0" / "rlog.bz2").write_bytes(b"")
+
+    found = ui_renderer._find_metric_source_log("dongle|2023-07-27--13-01-19", str(data_dir))
+
+    assert found == (data_dir / "2023-07-27--13-01-19--0" / "rlog.bz2")
+
+
+def test_detect_logged_metric_defaults_to_imperial_when_key_missing(monkeypatch, tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    openpilot_dir = tmp_path / "openpilot"
+    openpilot_dir.mkdir()
+    segment_dir = data_dir / "2023-07-27--13-01-19--0"
+    segment_dir.mkdir(parents=True)
+    (segment_dir / "rlog.zst").write_bytes(b"")
+
+    monkeypatch.setattr(
+        ui_renderer.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="missing\n", stderr=""),
+    )
+
+    assert ui_renderer.detect_logged_metric(
+        "dongle|2023-07-27--13-01-19",
+        data_dir=str(data_dir),
+        openpilot_dir=openpilot_dir,
+    ) is False
+
+
+def test_detect_logged_metric_reads_metric_from_openpilot_helper(monkeypatch, tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    openpilot_dir = tmp_path / "openpilot"
+    openpilot_dir.mkdir()
+    segment_dir = data_dir / "2023-07-27--13-01-19--0"
+    segment_dir.mkdir(parents=True)
+    (segment_dir / "rlog.zst").write_bytes(b"")
+
+    monkeypatch.setattr(
+        ui_renderer.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="1\n", stderr=""),
+    )
+
+    assert ui_renderer.detect_logged_metric(
+        "dongle|2023-07-27--13-01-19",
+        data_dir=str(data_dir),
+        openpilot_dir=openpilot_dir,
+    ) is True
+
+
 def test_patch_ui_application_record_skip_inserts_skip_logic(tmp_path) -> None:
     app = tmp_path / "application.py"
     app.write_text(

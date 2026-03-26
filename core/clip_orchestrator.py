@@ -45,7 +45,6 @@ class ClipRequest:
     output_path: str = "./shared/cog-clip.mp4"
     smear_seconds: int = 0
     jwt_token: str | None = None
-    metric: bool = False
     forward_upon_wide_h: float = 2.2
     explicit_data_dir: str | None = None
     data_root: str = "./shared/data_dir"
@@ -75,7 +74,6 @@ class ClipPlan:
     local_acceleration: LocalAccel
     forward_upon_wide_h: float
     jwt_token: str | None
-    metric: bool
     openpilot_dir: str
     headless: bool
     qcam: bool
@@ -149,7 +147,6 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
         local_acceleration=request.local_acceleration,
         forward_upon_wide_h=request.forward_upon_wide_h,
         jwt_token=request.jwt_token or None,
-        metric=request.metric,
         openpilot_dir=request.openpilot_dir,
         headless=request.headless,
         qcam=request.qcam,
@@ -183,7 +180,6 @@ def run_clip(request: ClipRequest) -> ClipResult:
                 smear_seconds=plan.smear_seconds,
                 target_mb=plan.target_mb,
                 file_format=plan.file_format,
-                metric=plan.metric,
                 output_path=str(plan.output_path),
                 data_dir=str(plan.data_dir),
                 jwt_token=plan.jwt_token,

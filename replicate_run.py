@@ -29,7 +29,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--smear-amount", type=int, default=5, help="UI smear amount.")
     parser.add_argument("--file-size", type=int, default=9, help="Target output size in MB.")
     parser.add_argument("--file-format", choices=["auto", "h264", "hevc"], default="auto")
-    parser.add_argument("--metric", action="store_true", help="Render UI clips in metric units.")
     parser.add_argument("--jwt-token", default="", help="Optional comma JWT token for private routes.")
     parser.add_argument("--notes", default="", help="Optional notes string.")
     parser.add_argument("--forward-upon-wide-h", type=float, default=2.2, help="Forward-upon-wide height adjustment.")
@@ -48,7 +47,6 @@ def build_input(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "notes": args.notes,
         "route": encode_replicate_route_input(args.url),
-        "metric": args.metric,
         "fileSize": args.file_size,
         "jwtToken": args.jwt_token,
         "fileFormat": args.file_format,

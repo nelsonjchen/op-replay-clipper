@@ -39,7 +39,6 @@ class Predictor(BasePredictor):
             le=40,
             default=5,
         ),
-        metric: bool = Input(description="(UI only) Render in metric units (km/h).", default=False),
         forwardUponWideH: float = Input(
             description="(Forward Upon Wide only) Overlay height adjustment.",
             ge=1.0,
@@ -77,7 +76,6 @@ class Predictor(BasePredictor):
                 output_path="./shared/cog-clip.mp4",
                 smear_seconds=smearAmount if renderType == "ui" else 0,
                 jwt_token=jwtToken or None,
-                metric=metric,
                 forward_upon_wide_h=forwardUponWideH,
                 execution_context="cog",
                 minimum_length_seconds=MIN_LENGTH_SECONDS,

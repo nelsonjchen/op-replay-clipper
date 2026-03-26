@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -26,7 +27,6 @@ class UIRenderOptions:
     smear_seconds: int
     target_mb: int
     file_format: str
-    metric: bool
     output_path: str
     data_dir: str | None = None
     jwt_token: str | None = None
@@ -37,6 +37,89 @@ class UIRenderOptions:
 @dataclass(frozen=True)
 class UIRenderResult:
     output_path: Path
+
+
+def _segment_suffix_key(path: Path) -> int:
+    try:
+        return int(path.name.rsplit("--", 1)[1])
+    except (IndexError, ValueError):
+        return sys.maxsize
+
+
+def _find_metric_source_log(route: str, data_dir: str | None) -> Path | None:
+    if not data_dir:
+        return None
+
+    route_suffix = route.split("|", 1)[1]
+    route_root = Path(data_dir)
+    segment_dirs = sorted(route_root.glob(f"{route_suffix}--*"), key=_segment_suffix_key)
+    for segment_dir in segment_dirs:
+        for candidate in ("rlog.zst", "rlog.bz2", "rlog"):
+            log_path = segment_dir / candidate
+            if log_path.exists():
+                return log_path
+    return None
+
+
+def detect_logged_metric(route: str, *, data_dir: str | None, openpilot_dir: Path) -> bool:
+    log_path = _find_metric_source_log(route, data_dir)
+    if log_path is None:
+        print("UI units: no downloaded rlog found for metric detection; defaulting to imperial")
+        return False
+
+    detect_script = """
+from openpilot.tools.lib.logreader import LogReader
+import sys
+
+log_path = sys.argv[1]
+init_msg = next((msg for msg in LogReader(log_path) if msg.which() == "initData"), None)
+if init_msg is None:
+    print("missing")
+    raise SystemExit(0)
+entries = init_msg.to_dict(verbose=True)["initData"]["params"]["entries"]
+for entry in entries:
+    if entry.get("key") != "IsMetric":
+        continue
+    value = entry.get("value")
+    if value in (b"1", "1", True):
+        print("1")
+    else:
+        print("0")
+    raise SystemExit(0)
+print("missing")
+"""
+    proc = subprocess.run(
+        [*_openpilot_python_cmd(openpilot_dir), "-c", detect_script, str(log_path)],
+        cwd=openpilot_dir,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        detail = proc.stderr.strip() or proc.stdout.strip() or f"exit {proc.returncode}"
+        print(f"UI units: failed to inspect {log_path.name} ({detail}); defaulting to imperial")
+        return False
+    verdict = proc.stdout.strip().splitlines()[-1] if proc.stdout.strip() else "missing"
+    if verdict == "missing":
+        print(f"UI units: IsMetric missing in {log_path.name}; defaulting to imperial")
+        return False
+    is_metric = verdict == "1"
+    print(f"UI units: detected {'metric' if is_metric else 'imperial'} from {log_path.name}")
+    return is_metric
+
+
+def _seed_ui_metric_param(openpilot_dir: Path, env: dict[str, str], *, is_metric: bool) -> None:
+    seed_script = """
+from openpilot.common.params import Params
+
+Params().put_bool("IsMetric", %s)
+""" % ("True" if is_metric else "False")
+    subprocess.run(
+        [*_openpilot_python_cmd(openpilot_dir), "-c", seed_script],
+        cwd=openpilot_dir,
+        env=env,
+        check=True,
+    )
 
 
 def _has_nvidia() -> bool:
@@ -146,6 +229,7 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
     env = configure_ui_environment()
     recording_acceleration = _configure_ui_recording_encoder(env, opts.file_format)
     print(f"UI recording encoder: {env['RECORD_CODEC']} ({recording_acceleration})")
+    is_metric = detect_logged_metric(opts.route, data_dir=opts.data_dir, openpilot_dir=openpilot_dir)
     smear_seconds = max(0, opts.smear_seconds)
     warmup_seconds = min(UI_STARTUP_WARMUP_SECONDS, max(0, opts.start_seconds - smear_seconds))
     render_start = max(0, opts.start_seconds - smear_seconds - warmup_seconds)
@@ -175,12 +259,13 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
         clip_cmd += ["-d", str(compat_root)]
     if not opts.headless:
         clip_cmd.append("--windowed")
-    if opts.metric:
-        print("warning: modern BIG UI render does not expose a metric toggle; ignoring")
 
     use_headless_display = opts.headless and os.name != "nt" and "DISPLAY" not in env
-    with temporary_headless_display(env, enabled=use_headless_display) as render_env:
-        _run(clip_cmd, cwd=openpilot_dir, env=render_env)
+    with tempfile.TemporaryDirectory(prefix="ui-params-") as params_root:
+        env["PARAMS_ROOT"] = params_root
+        _seed_ui_metric_param(openpilot_dir, env, is_metric=is_metric)
+        with temporary_headless_display(env, enabled=use_headless_display) as render_env:
+            _run(clip_cmd, cwd=openpilot_dir, env=render_env)
 
     output_path = Path(opts.output_path).resolve()
     _trim_mp4_in_place(output_path, trim_front)
