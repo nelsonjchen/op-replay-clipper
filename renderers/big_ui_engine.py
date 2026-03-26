@@ -468,7 +468,7 @@ def clip(
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s\t%(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s\t%(message)s", force=True)
     args = parse_args()
     openpilot_dir = Path(args.openpilot_dir).resolve()
     os.chdir(openpilot_dir)
