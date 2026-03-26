@@ -29,9 +29,7 @@ def _can_use_xorg() -> bool:
 def _has_nvidia_egl() -> bool:
     if platform.system() != "Linux":
         return False
-    if shutil.which("nvidia-smi") is None:
-        return False
-    return any(Path(path).exists() for path in ("/usr/lib/x86_64-linux-gnu/libEGL_nvidia.so.0", "/usr/lib64/libEGL_nvidia.so.0"))
+    return shutil.which("nvidia-smi") is not None
 
 
 def _xorg_command(display: str, log_path: Path) -> list[str]:
@@ -95,6 +93,7 @@ def _temporary_null_egl_environment(env: dict[str, str]):
     render_env["EGL_PLATFORM"] = "surfaceless"
     render_env["__EGL_VENDOR_LIBRARY_FILENAMES"] = str(vendor_json)
     render_env["XDG_RUNTIME_DIR"] = str(runtime_dir)
+    render_env.pop("DISPLAY", None)
     try:
         yield render_env
     finally:
