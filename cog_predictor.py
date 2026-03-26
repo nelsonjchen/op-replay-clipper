@@ -34,28 +34,28 @@ class Predictor(BasePredictor):
             default="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496",
         ),
         smearAmount: int = Input(
-            description="(UI Render only) Smear amount (Let the video start this time before beginning recording, useful for making sure important UI state is present to be rendered at the visible start)",
+            description="(UI only) Seconds of hidden preroll before the visible clip start. Increase this if important UI state is missing at the beginning of the clip.",
             ge=5,
             le=40,
             default=5,
         ),
         forwardUponWideH: float = Input(
-            description="(Forward Upon Wide Renders only) H-position of the forward video overlay on wide. Different devices can have different offsets from differing user mounting or factory calibration.",
+            description="(Forward Upon Wide only) Vertical position of the forward overlay on the wide video. Different devices and calibrations may need different values.",
             ge=1.0,
             le=3.0,
             default=2.2,
         ),
-        fileSize: int = Input(description="Rough size of clip output in MB.", ge=5, le=200, default=9),
+        fileSize: int = Input(description="Target output size in MB. Actual size may vary.", ge=5, le=200, default=9),
         fileFormat: str = Input(
-            description="Auto, H.264, or HEVC (HEVC is 50-60 percent higher quality for its filesize but may not be compatible with all web browsers or devices). Auto, which is recommended, will choose HEVC for 360 renders and H.264 for all other renders.",
+            description="Output codec. Auto is recommended: it uses HEVC for 360 renders and H.264 for the others. HEVC usually gives better quality for the size, but some browsers and devices do not play it well.",
             choices=["auto", "h264", "hevc"],
             default="auto",
         ),
         jwtToken: str = Input(
-            description='Optional JWT Token from https://jwt.comma.ai for non-"Public access" routes. DO NOT SHARE THIS TOKEN WITH ANYONE as https://jwt.comma.ai generates JWT tokens valid for 90 days and they are irrevocable. Please use the safer, optionally temporary, more granular, and revocable "Public Access" toggle option on comma connect if possible. For more info, please see https://github.com/nelsonjchen/op-replay-clipper#jwt-token-input .',
+            description="Optional JWT Token from https://jwt.comma.ai for routes without Public Access. Do not share this token: it is valid for 90 days and cannot be revoked early. Public Access is usually the safer option.",
             default="",
         ),
-        notes: str = Input(description="Notes Text field. Doesn't affect output. For your own reference.", default=""),
+        notes: str = Input(description="Optional notes for your own reference. Does not affect output.", default=""),
     ) -> CogPath:
         print("NOTES:")
         print(notes)
