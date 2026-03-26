@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import platform
 import re
@@ -65,6 +66,38 @@ def _concat_string(data_dir: str, route: str, segments: list[int], filename: str
     route_date = _route_date(route)
     inputs = [f"{data_dir}/{route_date}--{segment}/{filename}" for segment in segments]
     return f"concat:{'|'.join(inputs)}"
+
+
+def _segment_file_path(data_dir: str, route: str, segment: int, filename: str) -> Path:
+    return Path(data_dir) / f"{_route_date(route)}--{segment}" / filename
+
+
+def _probe_video_dimensions(path: Path) -> tuple[int, int] | None:
+    proc = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "json",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    try:
+        data = json.loads(proc.stdout)
+        stream = data["streams"][0]
+        return int(stream["width"]), int(stream["height"])
+    except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
+        return None
 
 
 def _target_bitrate(target_mb: int, length_seconds: int) -> int:
@@ -201,6 +234,9 @@ def render_video_clip(opts: VideoRenderOptions) -> VideoRenderResult:
     forward_input = _concat_string(opts.data_dir, route, segments, "fcamera.hevc")
     wide_input = _concat_string(opts.data_dir, route, segments, "ecamera.hevc")
     driver_input = _concat_string(opts.data_dir, route, segments, "dcamera.hevc")
+    first_segment = segments[0]
+    wide_dimensions = _probe_video_dimensions(_segment_file_path(opts.data_dir, route, first_segment, "ecamera.hevc"))
+    wide_height = wide_dimensions[1] if wide_dimensions is not None else 1208
 
     if opts.render_type == "forward":
         command = _simple_render_command(opts, accel, forward_input)
@@ -220,14 +256,14 @@ def render_video_clip(opts: VideoRenderOptions) -> VideoRenderResult:
             opts,
             accel,
             [driver_input, wide_input],
-            "[0:v]pad=iw:ih+290:0:290:color=#160000,crop=iw:1208[driver];[driver][1:v]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
+            f"[0:v]pad=iw:ih+290:0:290:color=#160000,crop=iw:{wide_height}[driver];[driver][1:v]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
         )
     elif opts.render_type == "360_forward_upon_wide":
         command = _complex_render_command(
             opts,
             accel,
             [driver_input, wide_input, forward_input],
-            f"[2:v]scale=iw/2.25:ih/2.25,format=yuva420p,colorchannelmixer=aa=1[front];[1:v]scale=iw*2:ih*2[wide];[wide][front]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/{opts.forward_upon_wide_h}[fuw];[0:v]scale=iw*2:ih*2,pad=iw:ih+290:0:290:color=#160000,crop=iw:2416[driver];[driver][fuw]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
+            f"[2:v]scale=iw/2.25:ih/2.25,format=yuva420p,colorchannelmixer=aa=1[front];[1:v]scale=iw*2:ih*2[wide];[wide][front]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/{opts.forward_upon_wide_h}[fuw];[0:v]scale=iw*2:ih*2,pad=iw:ih+290:0:290:color=#160000,crop=iw:{wide_height * 2}[driver];[driver][fuw]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
         )
     else:
         raise ValueError(f"Invalid render_type: {opts.render_type}")

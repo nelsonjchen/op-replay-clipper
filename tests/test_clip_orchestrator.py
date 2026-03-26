@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -95,3 +96,72 @@ def test_non_ui_command_uses_requested_accel(ensure_checkout: mock.Mock, bootstr
     bootstrap.assert_not_called()
     request = run_clip.call_args.args[0]
     assert request.local_acceleration == "videotoolbox"
+
+
+def test_probe_video_dimensions_reads_ffprobe_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    video_path = tmp_path / "ecamera.hevc"
+    video_path.write_bytes(b"")
+
+    monkeypatch.setattr(
+        video_renderer.subprocess,
+        "run",
+        lambda *args, **kwargs: mock.Mock(returncode=0, stdout='{"streams":[{"width":1344,"height":760}]}'),
+    )
+
+    assert video_renderer._probe_video_dimensions(video_path) == (1344, 760)
+
+
+def test_360_render_uses_probed_wide_height(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    (data_dir / "2025-02-25--route--1").mkdir(parents=True)
+    output_path = tmp_path / "out.mp4"
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(video_renderer, "_probe_video_dimensions", lambda path: (1344, 760))
+    monkeypatch.setattr(video_renderer, "_run_logged", lambda command: commands.append(command))
+    monkeypatch.setattr(video_renderer, "_inject_360_metadata", lambda path: None)
+
+    video_renderer.render_video_clip(
+        video_renderer.VideoRenderOptions(
+            render_type="360",
+            data_dir=str(data_dir),
+            route_or_segment="dongle|2025-02-25--route",
+            start_seconds=90,
+            length_seconds=15,
+            target_mb=9,
+            file_format="hevc",
+            acceleration="cpu",
+            output_path=str(output_path),
+        )
+    )
+
+    filter_index = commands[0].index("-filter_complex") + 1
+    assert "crop=iw:760[driver]" in commands[0][filter_index]
+
+
+def test_360_forward_upon_wide_uses_scaled_wide_height(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    (data_dir / "2025-02-25--route--1").mkdir(parents=True)
+    output_path = tmp_path / "out.mp4"
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(video_renderer, "_probe_video_dimensions", lambda path: (1344, 760))
+    monkeypatch.setattr(video_renderer, "_run_logged", lambda command: commands.append(command))
+    monkeypatch.setattr(video_renderer, "_inject_360_metadata", lambda path: None)
+
+    video_renderer.render_video_clip(
+        video_renderer.VideoRenderOptions(
+            render_type="360_forward_upon_wide",
+            data_dir=str(data_dir),
+            route_or_segment="dongle|2025-02-25--route",
+            start_seconds=90,
+            length_seconds=15,
+            target_mb=9,
+            file_format="hevc",
+            acceleration="cpu",
+            output_path=str(output_path),
+        )
+    )
+
+    filter_index = commands[0].index("-filter_complex") + 1
+    assert "crop=iw:1520[driver]" in commands[0][filter_index]
