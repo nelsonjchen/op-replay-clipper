@@ -181,7 +181,7 @@ Repo layout:
 * repo root: user-facing entrypoints such as `clip.py`, `cog_predictor.py`, and `replicate_run.py`
 * `core/`: shared runtime modules for orchestration, route inputs, downloading, integration, and bootstrap
 * `renderers/`: UI and video renderer implementations
-* `cog/` and `common/`: build/bootstrap helpers for Cog, Docker, and image setup
+* `cog/` and `common/`: build/bootstrap helpers for Cog and image setup
 
 BIG UI is the supported UI target.
 
@@ -214,6 +214,7 @@ Notes:
 * `clip.py` is the primary local CLI for UI and non-UI renders
 * BIG UI renders now use a repo-owned exact-frame runner instead of the old coarse 20 Hz chunk mapping, so lane lines and path overlays stay aligned to the logged road camera frames
 * The BIG UI renderer also does a hidden 1-second warmup before recording so the visible clip starts with initialized video/UI state instead of a blank opening
+* BIG UI units are auto-detected from the route's logged `IsMetric` param when present, and otherwise default to imperial
 * `pyproject.toml` declares compatible dependency ranges and `uv.lock` pins the exact resolved environment
 * `uv sync` bootstraps the local Python environment used by the local CLI
 * On macOS it prefers a local acceleration policy for ffmpeg-based renders where available
@@ -252,7 +253,7 @@ uv run python replicate_run.py \
 
 Notes:
 
-* `replicate_run.py` uses the hosted Replicate model version, not local Docker
+* `replicate_run.py` uses the hosted Replicate model version, not a local Cog/container run
 * pass `--model nelsonjchen/op-replay-clipper-beta:<version>` if you want to smoke the beta model instead of the main one
 * the script loads `REPLICATE_API_TOKEN` from `.env` via `python-dotenv`
 * it prints the remote file URL when Replicate returns one, then writes the file to the path you passed with `--output`
@@ -277,6 +278,10 @@ That folder builds:
 Those wheels are then injected into a normal `cog push`, so fresh beta
 versions on Replicate keep accepting a normal raw
 `https://connect.comma.ai/...` input on the hosted surface.
+
+For local `cog predict`, stock Cog `0.17` still has the URL-coercion regression.
+Use the patched runtime from `cog/runtime_patch`, or pass `literal:https://...`
+as the route input when you are testing with an unpatched local Cog install.
 
 ### JWT Token Input
 

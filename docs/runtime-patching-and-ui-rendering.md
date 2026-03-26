@@ -165,6 +165,26 @@ The relevant pieces are:
 The result is that hosted Replicate beta can now show real render-loop
 throughput around 20 fps instead of the older software-rendered ~8 fps class.
 
+## Route-Driven UI Units
+
+The BIG UI renderer no longer exposes a manual `metric` toggle.
+
+Instead, [renderers/ui_renderer.py](../renderers/ui_renderer.py):
+
+- inspects the earliest downloaded segment `rlog`
+- reads `initData.params`
+- uses `IsMetric` when it is present
+- defaults to imperial when the key is missing
+
+That matches how openpilot params behave in practice:
+
+- `IsMetric=true` means metric
+- `IsMetric=false` means imperial
+- missing also behaves as imperial
+
+For hosted Replicate, this gives the least surprising behavior while keeping the
+public model surface smaller and simpler.
+
 ## Why The Parent Renderer Streams Child Logs
 
 The BIG UI engine runs as a child process launched by

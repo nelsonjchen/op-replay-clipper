@@ -35,22 +35,22 @@ cog-predict:
 
 cog-predict-url-wide:
 	./cog/render_artifacts.sh
-	cog predict -i route="https://connect.comma.ai/a2a0ccea32023010/1690488163535/1690488170140" -i renderType=wide
+	cog predict -i route="literal:https://connect.comma.ai/a2a0ccea32023010/1690488163535/1690488170140" -i renderType=wide
 
 # This is a private URL
 cog-predict-url-wide-new-format:
 	./cog/render_artifacts.sh
-	cog predict -i route="https://connect.comma.ai/fe18f736cb0d7813/1710110122129/1710110166074" -i renderType=wide
+	cog predict -i route="literal:https://connect.comma.ai/fe18f736cb0d7813/1710110122129/1710110166074" -i renderType=wide
 
 # This is a private URL
 cog-predict-url-ui-new-format:
 	./cog/render_artifacts.sh
-	cog predict -i route="https://connect.comma.ai/fe18f736cb0d7813/1712798688347/1712798721553" -i renderType=ui
+	cog predict -i route="literal:https://connect.comma.ai/fe18f736cb0d7813/1712798688347/1712798721553" -i renderType=ui
 
 # This is a private URL
 cog-predict-url-ui-route-url-format:
 	./cog/render_artifacts.sh
-	cog predict -i route="https://connect.comma.ai/fe18f736cb0d7813/000001a9--b4153e8c21/436/450" -i jwtToken="xxx" -i renderType=ui
+	cog predict -i route="literal:https://connect.comma.ai/fe18f736cb0d7813/000001a9--b4153e8c21/436/450" -i jwtToken="xxx" -i renderType=ui
 
 cog-predict-wide:
 	./cog/render_artifacts.sh
@@ -79,19 +79,19 @@ cog-predict-non-public-forward:
 
 cog-predict-zstd:
 	./cog/render_artifacts.sh
-	cog predict -i route="https://connect.comma.ai/fe18f736cb0d7813/00000257--fb26599141/573/585" -i renderType=ui
+	cog predict -i route="literal:https://connect.comma.ai/fe18f736cb0d7813/00000257--fb26599141/573/585" -i renderType=ui
 
 cog-predict-bug-report-2024-09-01:
 	./cog/render_artifacts.sh
-	cog predict -i route="https://connect.comma.ai/a4653a9be878a408/00000029--e1c8705a52/132/144" -i renderType=ui
+	cog predict -i route="literal:https://connect.comma.ai/a4653a9be878a408/00000029--e1c8705a52/132/144" -i renderType=ui
 
 cog-predict-bug-all-number:
 	./cog/render_artifacts.sh
-	cog predict -i route="https://connect.comma.ai/fe18f736cb0d7813/00000497--5809888120/1611/1635" -i renderType=ui
+	cog predict -i route="literal:https://connect.comma.ai/fe18f736cb0d7813/00000497--5809888120/1611/1635" -i renderType=ui
 
 cog-predict-bug-all-number-360:
 	./cog/render_artifacts.sh
-	cog predict -i route="https://connect.comma.ai/fe18f736cb0d7813/00000497--5809888120/1611/1635" -i renderType=360
+	cog predict -i route="literal:https://connect.comma.ai/fe18f736cb0d7813/00000497--5809888120/1611/1635" -i renderType=360
 
 cog-push:
 	./cog/render_artifacts.sh
