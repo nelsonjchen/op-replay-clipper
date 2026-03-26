@@ -1,5 +1,4 @@
-# "Prediction" interface for Cog
-
+import os
 from pathlib import Path
 
 from cog import BasePredictor, Input, Path as CogPath
@@ -63,6 +62,19 @@ class Predictor(BasePredictor):
         print("NOTES:")
         print(notes)
         print("")
+        print(f"ROUTE_INPUT_TYPE: {type(route)!r}")
+        print(f"ROUTE_INPUT_REPR: {route!r}")
+        print(f"ROUTE_INPUT_SOURCE: {getattr(route, 'source', None)!r}")
+        if isinstance(route, os.PathLike):
+            route_path = Path(os.fspath(route))
+            print(f"ROUTE_INPUT_PATH: {route_path}")
+            print(f"ROUTE_INPUT_PATH_EXISTS: {route_path.exists()}")
+            if route_path.exists():
+                try:
+                    preview = route_path.read_bytes()[:200]
+                    print(f"ROUTE_INPUT_PATH_BYTES: {preview!r}")
+                except OSError as exc:
+                    print(f"ROUTE_INPUT_PATH_READ_ERROR: {exc!r}")
         route = route_inputs.validate_connect_url(
             route,
             error_message="Replicate/Cog route input must be a full https://connect.comma.ai/... clip URL.",
