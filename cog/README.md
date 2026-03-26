@@ -15,6 +15,12 @@ The shell entrypoint is intentionally thin now. The YAML rendering itself lives 
 
 The project pins `attrs<24` in `pyproject.toml` on purpose so the exported Cog requirements remain compatible with Cog's own runtime dependency bounds.
 
+For the broader runtime-patching background, see
+[`../docs/runtime-patching-and-ui-rendering.md`](../docs/runtime-patching-and-ui-rendering.md)
+and
+[`../docs/upstream-modifications.md`](../docs/upstream-modifications.md).
+For the higher-level project history, see [`../CHANGELOG.md`](../CHANGELOG.md).
+
 ## Patched Cog 0.17 runtime
 
 This repo also contains a reproducible builder for the `cog 0.17` URL-coercion regression fix in [`runtime_patch/`](./runtime_patch).

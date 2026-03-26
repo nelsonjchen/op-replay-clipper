@@ -188,6 +188,11 @@ BIG UI is the supported UI target.
 If you want the detailed background on the repo-owned BIG UI engine, runtime
 patches, and the headless acceleration path, see
 [docs/runtime-patching-and-ui-rendering.md](docs/runtime-patching-and-ui-rendering.md).
+If you want the inventory of upstream/openpilot/Cog modifications that this
+repo currently depends on, see
+[docs/upstream-modifications.md](docs/upstream-modifications.md). For a
+milestone-oriented history of how the project got here, see
+[CHANGELOG.md](CHANGELOG.md).
 
 Examples:
 

@@ -12,6 +12,12 @@ This document explains:
 - when AST patching is used and why it is the exception
 - how the accelerated headless rendering path works on NVIDIA/Cog/Replicate
 
+For the file-by-file inventory of the current upstream/openpilot/Cog
+modifications, see
+[upstream-modifications.md](upstream-modifications.md). For the broader
+project history and milestones, see
+[../CHANGELOG.md](../CHANGELOG.md).
+
 ## Big Picture
 
 The runtime split today looks like this:
