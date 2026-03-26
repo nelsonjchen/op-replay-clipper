@@ -1,10 +1,40 @@
 from __future__ import annotations
 
+"""
+Minimal runtime patch layer for openpilot integration.
+
+Most of the patches here are simple source rewrites because we know the exact
+upstream snippets we need to adjust. The one exception is framereader
+compatibility, where the surrounding code shape has drifted enough across
+upstream revisions that a small AST-guided patch is still the least brittle
+option.
+"""
+
 import ast
 import os
 import re
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
+
+
+@dataclass(frozen=True)
+class OpenpilotPatchReport:
+    framereader_compat: bool = False
+    ui_recording: bool = False
+    ui_null_egl: bool = False
+    augmented_road_fill: bool = False
+
+    @property
+    def changed(self) -> bool:
+        return any(
+            (
+                self.framereader_compat,
+                self.ui_recording,
+                self.ui_null_egl,
+                self.augmented_road_fill,
+            )
+        )
 
 
 def build_openpilot_compatible_data_dir(route: str, downloader_data_dir: Path) -> Path:
@@ -95,6 +125,9 @@ def _indent(width: int) -> str:
 
 
 def _patch_framereader_ast(path: Path) -> bool:
+    # This patch touches multiple statements whose exact line structure has
+    # drifted across upstream revisions. We keep the AST-guided approach here
+    # because it is more resilient than raw string replacement for this file.
     original_src = path.read_text()
     lines = original_src.splitlines(keepends=True)
     tree = ast.parse(original_src)
@@ -266,24 +299,37 @@ def _patch_augmented_road_view_fill(path: Path) -> bool:
     return False
 
 
-def patch_openpilot_framereader_compat(openpilot_dir: Path) -> None:
-    framereader = openpilot_dir / "tools/lib/framereader.py"
-    if not framereader.exists():
-        framereader = openpilot_dir / "openpilot/tools/lib/framereader.py"
-    if framereader.exists():
-        _patch_framereader_ast(framereader)
+def _first_existing(*paths: Path) -> Path | None:
+    for path in paths:
+        if path.exists():
+            return path
+    return None
 
 
-def patch_openpilot_ui_record_skip(openpilot_dir: Path) -> None:
-    application = openpilot_dir / "system/ui/lib/application.py"
-    if not application.exists():
-        application = openpilot_dir / "openpilot/system/ui/lib/application.py"
-    if application.exists():
-        _patch_ui_application_record_skip(application)
-        _patch_ui_application_null_egl(application)
+def patch_openpilot_framereader_compat(openpilot_dir: Path) -> bool:
+    framereader = _first_existing(
+        openpilot_dir / "tools/lib/framereader.py",
+        openpilot_dir / "openpilot/tools/lib/framereader.py",
+    )
+    if framereader is None:
+        return False
+    return _patch_framereader_ast(framereader)
 
 
-def patch_openpilot_augmented_road_view_fill(openpilot_dir: Path) -> None:
+def patch_openpilot_ui_record_skip(openpilot_dir: Path) -> tuple[bool, bool]:
+    application = _first_existing(
+        openpilot_dir / "system/ui/lib/application.py",
+        openpilot_dir / "openpilot/system/ui/lib/application.py",
+    )
+    if application is None:
+        return False, False
+    return (
+        _patch_ui_application_record_skip(application),
+        _patch_ui_application_null_egl(application),
+    )
+
+
+def patch_openpilot_augmented_road_view_fill(openpilot_dir: Path) -> bool:
     candidates = (
         openpilot_dir / "selfdrive/ui/onroad/augmented_road_view.py",
         openpilot_dir / "openpilot/selfdrive/ui/onroad/augmented_road_view.py",
@@ -292,4 +338,17 @@ def patch_openpilot_augmented_road_view_fill(openpilot_dir: Path) -> None:
     )
     for path in candidates:
         if path.exists():
-            _patch_augmented_road_view_fill(path)
+            return _patch_augmented_road_view_fill(path)
+    return False
+
+
+def apply_openpilot_runtime_patches(openpilot_dir: Path) -> OpenpilotPatchReport:
+    framereader_compat = patch_openpilot_framereader_compat(openpilot_dir)
+    ui_recording, ui_null_egl = patch_openpilot_ui_record_skip(openpilot_dir)
+    augmented_road_fill = patch_openpilot_augmented_road_view_fill(openpilot_dir)
+    return OpenpilotPatchReport(
+        framereader_compat=framereader_compat,
+        ui_recording=ui_recording,
+        ui_null_egl=ui_null_egl,
+        augmented_road_fill=augmented_road_fill,
+    )

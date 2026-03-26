@@ -185,6 +185,10 @@ Repo layout:
 
 BIG UI is the supported UI target.
 
+If you want the detailed background on the repo-owned BIG UI engine, runtime
+patches, and the headless acceleration path, see
+[docs/runtime-patching-and-ui-rendering.md](docs/runtime-patching-and-ui-rendering.md).
+
 Examples:
 
 ```bash

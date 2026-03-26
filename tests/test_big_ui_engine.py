@@ -149,6 +149,76 @@ def test_patch_augmented_road_view_fill_applies_upstream_zoom_fix(tmp_path) -> N
     assert "super()._render(self._content_rect)" in updated
 
 
+def test_apply_openpilot_runtime_patches_reports_changed_files(tmp_path) -> None:
+    openpilot_dir = tmp_path / "openpilot"
+    (openpilot_dir / "tools/lib").mkdir(parents=True)
+    (openpilot_dir / "system/ui/lib").mkdir(parents=True)
+    (openpilot_dir / "selfdrive/ui/onroad").mkdir(parents=True)
+
+    (openpilot_dir / "tools/lib/framereader.py").write_text(
+        "def decompress_video_data(fn, fmt, threads=0, hwaccel=None):\n"
+        "    threads = threads or 0\n"
+        "    args = ['ffmpeg', '-i', '-', 'x']\n"
+        "def ffprobe(fn):\n"
+        "    cmd += ['-i', '-']\n"
+        "    try:\n"
+        "      ffprobe_output = subprocess.check_output(cmd, input=FileReader(fn).read(4096))\n"
+        "    except subprocess.CalledProcessError as error:\n"
+        "      raise DataUnreadableError(fn) from error\n"
+    )
+    (openpilot_dir / "system/ui/lib/application.py").write_text(
+        'RECORD_SPEED = int(os.getenv("RECORD_SPEED", "1"))  # Speed multiplier\n'
+        '      flags = rl.ConfigFlags.FLAG_MSAA_4X_HINT\n'
+        '      if ENABLE_VSYNC:\n'
+        '        flags |= rl.ConfigFlags.FLAG_VSYNC_HINT\n'
+        '      rl.set_config_flags(flags)\n\n'
+        '      rl.init_window(self._scaled_width, self._scaled_height, title)\n'
+        "        ffmpeg_args = [\n"
+        "          'ffmpeg',\n"
+        "          '-v', 'warning',\n"
+        "          '-nostats',\n"
+        "          '-f', 'rawvideo',\n"
+        "          '-pix_fmt', 'rgba',\n"
+        "          '-s', f'{self._scaled_width}x{self._scaled_height}',\n"
+        "          '-r', str(fps),\n"
+        "          '-i', 'pipe:0',\n"
+        "          '-vf', 'vflip,format=yuv420p',\n"
+        "          '-r', str(output_fps),\n"
+        "          '-c:v', 'libx264',\n"
+        "          '-preset', 'veryfast',\n"
+        "          '-crf', str(RECORD_QUALITY)\n"
+        "        ]\n"
+        "        if RECORD_BITRATE:\n"
+        "          ffmpeg_args += ['-b:v', RECORD_BITRATE, '-maxrate', RECORD_BITRATE, '-bufsize', RECORD_BITRATE]\n"
+        "        ffmpeg_args += ['-y', '-f', 'mp4', RECORD_OUTPUT]\n"
+        "        if RECORD:\n"
+        "          image = rl.load_image_from_texture(self._render_texture.texture)\n"
+        "          data_size = image.width * image.height * 4\n"
+        "          data = bytes(rl.ffi.buffer(image.data, data_size))\n"
+        "          self._ffmpeg_queue.put(data)  # Async write via background thread\n"
+        "          rl.unload_image(image)\n"
+    )
+    (openpilot_dir / "selfdrive/ui/onroad/augmented_road_view.py").write_text(
+        "    # Calculate center points and dimensions\n"
+        "    x, y = self._content_rect.x, self._content_rect.y\n"
+        "    w, h = self._content_rect.width, self._content_rect.height\n"
+        "    cx, cy = intrinsic[0, 2], intrinsic[1, 2]\n"
+        "    # Calculate max allowed offsets with margins\n"
+        "    margin = 5\n"
+        "    max_x_offset = cx * zoom - w / 2 - margin\n"
+        "    max_y_offset = cy * zoom - h / 2 - margin\n"
+        "    super()._render(rect)\n"
+    )
+
+    report = openpilot_integration.apply_openpilot_runtime_patches(openpilot_dir)
+
+    assert report.changed is True
+    assert report.framereader_compat is True
+    assert report.ui_recording is True
+    assert report.ui_null_egl is True
+    assert report.augmented_road_fill is True
+
+
 def test_render_overlays_includes_device_type_in_metadata(monkeypatch) -> None:
     calls: list[str] = []
 

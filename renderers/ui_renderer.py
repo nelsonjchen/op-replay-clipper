@@ -9,10 +9,8 @@ from pathlib import Path
 
 from core.openpilot_config import default_image_openpilot_root
 from core.openpilot_integration import (
-    patch_openpilot_augmented_road_view_fill,
+    apply_openpilot_runtime_patches,
     build_openpilot_compatible_data_dir,
-    patch_openpilot_framereader_compat,
-    patch_openpilot_ui_record_skip,
 )
 from core.render_runtime import configure_ui_environment, temporary_headless_display
 
@@ -140,9 +138,9 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
     if not _has_modern_openpilot(openpilot_dir):
         raise FileNotFoundError(f"Modern clip tool not found at {openpilot_dir}/tools/clip/run.py")
 
-    patch_openpilot_framereader_compat(openpilot_dir)
-    patch_openpilot_ui_record_skip(openpilot_dir)
-    patch_openpilot_augmented_road_view_fill(openpilot_dir)
+    patch_report = apply_openpilot_runtime_patches(openpilot_dir)
+    if patch_report.changed:
+        print(f"Applied openpilot runtime patches: {patch_report}")
     _ensure_fonts(openpilot_dir)
 
     env = configure_ui_environment()
