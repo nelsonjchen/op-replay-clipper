@@ -40,6 +40,10 @@ external rendering/runtime components that the clipper depends on.
 The repo also carries a small Cog 0.17 patch set so Replicate can keep
 accepting normal raw route URLs.
 
+Related upstream issue:
+
+- [replicate/cog#2868](https://github.com/issues/created?issue=replicate%7Ccog%7C2868)
+
 | Upstream target | Local files | Why it is modified |
 | --- | --- | --- |
 | Cog 0.17 input coercion behavior in `coglet` / SDK runtime | [cog/runtime_patch/0001-only-coerce-url-strings-for-file-and-path-inputs.patch](../cog/runtime_patch/0001-only-coerce-url-strings-for-file-and-path-inputs.patch), [cog/runtime_patch/Dockerfile](../cog/runtime_patch/Dockerfile), [cog/runtime_patch/build_wheels.sh](../cog/runtime_patch/build_wheels.sh), [cog/runtime_patch/push_beta.sh](../cog/runtime_patch/push_beta.sh), [cog/runtime_patch/README.md](../cog/runtime_patch/README.md) | Stock Cog 0.17 started coercing raw URL-looking `str` inputs into file/path inputs too early. The patched runtime keeps plain route URLs as strings so Replicate model versions can accept normal `https://connect.comma.ai/...` inputs again. |
