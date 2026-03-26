@@ -15,6 +15,18 @@ class FakeFileOutput:
         return self._payload
 
 
+class FakeSourcePath:
+    def __init__(self, source: str, rendered_path: str = "/tmp/cog-input") -> None:
+        self.source = source
+        self._rendered_path = rendered_path
+
+    def __fspath__(self) -> str:
+        return self._rendered_path
+
+    def __str__(self) -> str:
+        return self._rendered_path
+
+
 def test_build_input_uses_cog_field_names() -> None:
     args = SimpleNamespace(
         notes="",
@@ -50,6 +62,11 @@ def test_route_validator_accepts_connect_url() -> None:
 def test_route_validator_accepts_literal_prefixed_connect_url() -> None:
     url = "literal:https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496"
     assert route_inputs.validate_connect_url(url) == url.removeprefix("literal:")
+
+
+def test_route_validator_prefers_source_url_over_rendered_path() -> None:
+    url = "https://connect.comma.ai/5beb9b58bd12b691/0000010a--a51155e496/90/105"
+    assert route_inputs.validate_connect_url(FakeSourcePath(url)) == url
 
 
 def test_save_file_output_writes_single_file(tmp_path) -> None:

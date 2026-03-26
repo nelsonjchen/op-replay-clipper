@@ -12,7 +12,9 @@ def _coerce_route_text(route_or_url: Any) -> str:
     if isinstance(route_or_url, str):
         return route_or_url
     if hasattr(route_or_url, "source"):
-        return str(route_or_url)
+        source = getattr(route_or_url, "source")
+        if isinstance(source, str) and source:
+            return source
     if isinstance(route_or_url, os.PathLike):
         return os.fspath(route_or_url)
     return str(route_or_url)
