@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from cog import BasePredictor, Input, Path as CogPath
+from cog import BasePredictor, Input, Path as CogPath, Secret
 
 from core import route_inputs
 from core.clip_orchestrator import ClipRequest, run_clip
@@ -30,7 +30,7 @@ class Predictor(BasePredictor):
             ],
             default="ui",
         ),
-        route: str = Input(
+        route: Secret = Input(
             description="One full https://connect.comma.ai/... clip URL.",
             default="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496",
         ),
@@ -62,23 +62,9 @@ class Predictor(BasePredictor):
         print("NOTES:")
         print(notes)
         print("")
-        print(f"ROUTE_INPUT_TYPE: {type(route)!r}")
-        print(f"ROUTE_INPUT_REPR: {route!r}")
-        print(f"ROUTE_INPUT_SOURCE: {getattr(route, 'source', None)!r}")
-        print(f"ROUTE_INPUT_DICT: {getattr(route, '__dict__', None)!r}")
-        print(f"ROUTE_INPUT_DIR: {[name for name in dir(route) if 'source' in name or 'url' in name or 'path' in name]!r}")
-        if isinstance(route, os.PathLike):
-            route_path = Path(os.fspath(route))
-            print(f"ROUTE_INPUT_PATH: {route_path}")
-            print(f"ROUTE_INPUT_PATH_EXISTS: {route_path.exists()}")
-            if route_path.exists():
-                try:
-                    preview = route_path.read_bytes()[:200]
-                    print(f"ROUTE_INPUT_PATH_BYTES: {preview!r}")
-                except OSError as exc:
-                    print(f"ROUTE_INPUT_PATH_READ_ERROR: {exc!r}")
+        route_text = route.get_secret_value() or ""
         route = route_inputs.validate_connect_url(
-            route,
+            route_text,
             error_message="Replicate/Cog route input must be a full https://connect.comma.ai/... clip URL.",
         )
 
