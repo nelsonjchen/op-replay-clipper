@@ -18,6 +18,10 @@ MODEL_SERVICE = "modelV2"
 logger = logging.getLogger("big_ui_engine")
 
 
+def emit_runtime_log(message: str) -> None:
+    print(message, flush=True)
+
+
 def _add_openpilot_to_sys_path(openpilot_dir: Path) -> None:
     resolved = openpilot_dir.resolve()
     if str(resolved) not in sys.path:
@@ -439,13 +443,10 @@ def clip(
                     interval_elapsed = max(now - last_log_at, 1e-6)
                     avg_fps = frame_idx / total_elapsed
                     interval_fps = (frame_idx - last_log_frame_idx) / interval_elapsed
-                    logger.info(
-                        "Render progress: %s/%s frames, avg %.2f fps, recent %.2f fps, route %.2fs",
-                        frame_idx,
-                        len(render_steps),
-                        avg_fps,
-                        interval_fps,
-                        step.route_seconds,
+                    emit_runtime_log(
+                        f"Render progress: {frame_idx}/{len(render_steps)} frames, "
+                        f"avg {avg_fps:.2f} fps, recent {interval_fps:.2f} fps, "
+                        f"route {step.route_seconds:.2f}s"
                     )
                     last_log_at = now
                     last_log_frame_idx = frame_idx
@@ -458,11 +459,9 @@ def clip(
     logger.info("Clip saved to: %s", Path(output).resolve())
     if frame_idx:
         render_seconds = max(getattr(timer, "_sections", {}).get("render", 0.0), 1e-6)
-        logger.info(
-            "Render stats: frames=%s, render_seconds=%.2f, avg_fps=%.2f",
-            frame_idx,
-            render_seconds,
-            frame_idx / render_seconds,
+        emit_runtime_log(
+            "Render stats: "
+            f"frames={frame_idx}, render_seconds={render_seconds:.2f}, avg_fps={frame_idx / render_seconds:.2f}"
         )
     logger.info("Generated %s", timer.fmt(duration))
 
