@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -72,7 +73,22 @@ def _run(cmd: list[str], cwd: str | Path | None = None, env: dict[str, str] | No
     if cwd:
         run_env = dict(run_env or {})
         run_env["PWD"] = str(cwd)
-    subprocess.run(cmd, cwd=str(cwd) if cwd else None, env=run_env, check=True)
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(cwd) if cwd else None,
+        env=run_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        sys.stdout.write(line)
+        sys.stdout.flush()
+    returncode = proc.wait()
+    if returncode != 0:
+        raise subprocess.CalledProcessError(returncode, cmd)
 
 
 def _has_modern_openpilot(openpilot_dir: Path) -> bool:
