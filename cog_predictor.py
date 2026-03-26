@@ -1,7 +1,6 @@
-import os
 from pathlib import Path
 
-from cog import BasePredictor, Input, Path as CogPath, Secret
+from cog import BasePredictor, Input, Path as CogPath
 
 from core import route_inputs
 from core.clip_orchestrator import ClipRequest, run_clip
@@ -30,7 +29,7 @@ class Predictor(BasePredictor):
             ],
             default="ui",
         ),
-        route: Secret = Input(
+        route: str = Input(
             description="One full https://connect.comma.ai/... clip URL.",
             default="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496",
         ),
@@ -62,9 +61,8 @@ class Predictor(BasePredictor):
         print("NOTES:")
         print(notes)
         print("")
-        route_text = route.get_secret_value() or ""
         route = route_inputs.validate_connect_url(
-            route_text,
+            route,
             error_message="Replicate/Cog route input must be a full https://connect.comma.ai/... clip URL.",
         )
 

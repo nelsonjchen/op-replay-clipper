@@ -42,7 +42,17 @@ def test_build_input_uses_cog_field_names() -> None:
     payload = replicate_run.build_input(args)
     assert payload["renderType"] == "ui"
     assert payload["fileSize"] == 9
-    assert payload["route"].startswith("https://connect.comma.ai/")
+    assert payload["route"].startswith("literal:https://connect.comma.ai/")
+
+
+def test_encode_replicate_route_input_preserves_existing_literal_prefix() -> None:
+    url = "literal:https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496"
+    assert replicate_run.encode_replicate_route_input(url) == url
+
+
+def test_encode_replicate_route_input_wraps_plain_connect_url() -> None:
+    url = "https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496"
+    assert replicate_run.encode_replicate_route_input(url) == f"literal:{url}"
 
 
 def test_validate_connect_url_rejects_non_connect_hosts() -> None:

@@ -47,7 +47,7 @@ def validate_connect_url(url: str) -> str:
 def build_input(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "notes": args.notes,
-        "route": args.url,
+        "route": encode_replicate_route_input(args.url),
         "metric": args.metric,
         "fileSize": args.file_size,
         "jwtToken": args.jwt_token,
@@ -64,6 +64,12 @@ def require_api_token() -> str:
     if not token:
         raise SystemExit("REPLICATE_API_TOKEN is not set. Put it in .env or export it before running this script.")
     return token
+
+
+def encode_replicate_route_input(url: str) -> str:
+    if url.startswith(route_inputs.LITERAL_URL_PREFIX):
+        return url
+    return f"{route_inputs.LITERAL_URL_PREFIX}{url}"
 
 
 def unwrap_file_output(output: Any) -> Any:
