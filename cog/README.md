@@ -12,3 +12,9 @@ Current upstream Cog already sets `NVIDIA_DRIVER_CAPABILITIES=all`, so a custom 
 The shell entrypoint is intentionally thin now. The YAML rendering itself lives in `cog/render_config.py` so the Cog-specific generation logic is testable without adding more shell branching.
 
 The project pins `attrs<24` in `pyproject.toml` on purpose so the exported Cog requirements remain compatible with Cog's own runtime dependency bounds.
+
+## Patched Cog 0.17 runtime
+
+This repo also contains a reproducible builder for the `cog 0.17` URL-coercion regression fix in [`runtime_patch/`](./runtime_patch).
+
+Use that folder when you need to rebuild the patched Linux `coglet` runtime wheel and matching SDK wheel for beta pushes from macOS or any other non-Linux development machine.

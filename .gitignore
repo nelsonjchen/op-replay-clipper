@@ -21,3 +21,7 @@ output.mp4
 # Cog still can't read repo files from build.run, so these are generated from uv/setup inputs.
 cog.yaml
 requirements-cog.txt
+
+# Patched Cog runtime build artifacts
+cog/runtime_patch/dist/
+cog/runtime_patch/.docker-output/

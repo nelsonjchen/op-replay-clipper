@@ -259,6 +259,25 @@ Notes:
 * the hosted helper now takes a full `connect.comma.ai` clip URL and does not expose separate `start-seconds` or `length-seconds` flags
 * `.env` is ignored by git; `.env.example` is the committed placeholder
 
+### Patched Cog beta pushes
+
+Stock `cog 0.17` regressed plain `https://...` string handling for this
+project's `route: str` input by coercing raw URLs into downloaded file/path
+objects too early.
+
+This repo keeps a reproducible builder for the patched beta runtime in:
+
+* [cog/runtime_patch](cog/runtime_patch)
+
+That folder builds:
+
+* a patched `cog` SDK wheel
+* a patched Linux `coglet` wheel
+
+Those wheels are then injected into a normal `cog push`, so fresh beta
+versions on Replicate keep accepting a normal raw
+`https://connect.comma.ai/...` input on the hosted surface.
+
 ### JWT Token Input
 
 There is a JWT Token input field.

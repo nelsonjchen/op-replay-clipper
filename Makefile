@@ -1,4 +1,4 @@
-.PHONY: build cog-predict cog-predict-360 cog-push clip ui-exact-smoke local-venv test-local replicate-run video-renderer video-renderer-fuw video-renderer-360 video-renderer-360-fuw
+.PHONY: build cog-predict cog-predict-360 cog-push cog-runtime-build cog-push-beta-patched clip ui-exact-smoke local-venv test-local replicate-run video-renderer video-renderer-fuw video-renderer-360 video-renderer-360-fuw
 
 REPLICATE_URL ?= https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496
 REPLICATE_RENDER ?= forward
@@ -96,6 +96,14 @@ cog-predict-bug-all-number-360:
 cog-push:
 	./cog/render_artifacts.sh
 	cog push r8.im/nelsonjchen/op-replay-clipper
+
+# Build patched Cog 0.17 runtime wheels in Docker for reproducible beta pushes.
+cog-runtime-build:
+	./cog/runtime_patch/build_wheels.sh
+
+# Push beta with the patched Cog runtime wheels baked into the image.
+cog-push-beta-patched:
+	./cog/runtime_patch/push_beta.sh
 
 # Create or refresh the local uv environment.
 local-venv:
