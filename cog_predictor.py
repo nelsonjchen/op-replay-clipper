@@ -17,7 +17,7 @@ class Predictor(BasePredictor):
     def predict(
         self,
         renderType: str = Input(
-            description="UI renders with the comma openpilot UI. Forward, Wide, and Driver process the raw, segmented, and low-compatibility HEVC video files into a portable HEVC or H264 MP4 file. 360 and Forward Upon Wide variants remain available as before.",
+            description="UI renders with the comma openpilot UI. Forward, Wide, and Driver process the raw, segmented, and low-compatibility HEVC video files into a portable HEVC or H264 MP4 file, are fast transcodes, and are great for quick previews. 360 requires viewing/uploading the video file in VLC or YouTube to pan around in a sphere or post-processing with software such as Insta360 Studio or similar software for reframing. Forward Upon Wide roughly overlays Forward video on Wide video for increased detail in Forward video. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video and scales up to render at 8K for reframing with Insta360 Studio or similar software.",
             choices=[
                 "ui",
                 "forward",
@@ -30,32 +30,32 @@ class Predictor(BasePredictor):
             default="ui",
         ),
         route: str = Input(
-            description="One full https://connect.comma.ai/... clip URL.",
+            description='One full comma connect clip URL (e.g. https://connect.comma.ai/18277b1abce7bbe4/00000029--e1c8705a52/132/144). Public Access must be enabled or a valid JWT Token must be provided. All required files for the selected render type in Comma Connect must be uploaded from device. Please see the Quick Usage section of the README on GitHub at https://github.com/nelsonjchen/op-replay-clipper#quick-usage for instructions on generating an appropriate comma connect URL.',
             default="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496",
         ),
         smearAmount: int = Input(
-            description="(UI only) Warm-up time before the visible clip start.",
+            description="(UI Render only) Smear amount (Let the video start this time before beginning recording, useful for making sure important UI state is present to be rendered at the visible start)",
             ge=5,
             le=40,
             default=5,
         ),
         forwardUponWideH: float = Input(
-            description="(Forward Upon Wide only) Overlay height adjustment.",
+            description="(Forward Upon Wide Renders only) H-position of the forward video overlay on wide. Different devices can have different offsets from differing user mounting or factory calibration.",
             ge=1.0,
             le=3.0,
             default=2.2,
         ),
         fileSize: int = Input(description="Rough size of clip output in MB.", ge=5, le=200, default=9),
         fileFormat: str = Input(
-            description="Auto, H.264, or HEVC.",
+            description="Auto, H.264, or HEVC (HEVC is 50-60 percent higher quality for its filesize but may not be compatible with all web browsers or devices). Auto, which is recommended, will choose HEVC for 360 renders and H.264 for all other renders.",
             choices=["auto", "h264", "hevc"],
             default="auto",
         ),
         jwtToken: str = Input(
-            description="Optional JWT token for private routes.",
+            description='Optional JWT Token from https://jwt.comma.ai for non-"Public access" routes. DO NOT SHARE THIS TOKEN WITH ANYONE as https://jwt.comma.ai generates JWT tokens valid for 90 days and they are irrevocable. Please use the safer, optionally temporary, more granular, and revocable "Public Access" toggle option on comma connect if possible. For more info, please see https://github.com/nelsonjchen/op-replay-clipper#jwt-token-input .',
             default="",
         ),
-        notes: str = Input(description="Notes field. Does not affect output.", default=""),
+        notes: str = Input(description="Notes Text field. Doesn't affect output. For your own reference.", default=""),
     ) -> CogPath:
         print("NOTES:")
         print(notes)
