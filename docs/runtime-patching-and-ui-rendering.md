@@ -168,7 +168,7 @@ The relevant pieces are:
 - [renderers/ui_renderer.py](../renderers/ui_renderer.py)
   Chooses the recording encoder and launches the engine.
 
-The result is that hosted Replicate beta can now show real render-loop
+The result is that the Replicate environment can now show real render-loop
 throughput around 20 fps instead of the older software-rendered ~8 fps class.
 
 ## Route-Driven UI Units
@@ -188,7 +188,7 @@ That matches how openpilot params behave in practice:
 - `IsMetric=false` means imperial
 - missing also behaves as imperial
 
-For hosted Replicate, this gives the least surprising behavior while keeping the
+For Replicate, this gives the least surprising behavior while keeping the
 public model surface smaller and simpler.
 
 ## Why The Parent Renderer Streams Child Logs
@@ -203,7 +203,7 @@ That is why the renderer now captures and re-emits child output explicitly:
 
 - the engine prints render progress and final render stats
 - the parent process streams those lines back out
-- hosted Replicate logs can now show the BIG UI render FPS
+- Replicate logs can now show the BIG UI render FPS
 
 Without that extra plumbing, the detailed render timing was often invisible even
 when the engine itself was printing it.
@@ -215,7 +215,7 @@ The current design is intentionally pragmatic.
 Good:
 
 - correctness is owned in-repo where it matters
-- acceleration works in local Cog, GCE, and hosted beta
+- acceleration works in local Cog, GCE, and the Replicate environment
 - the patch layer is smaller than a full openpilot fork
 
 Not ideal:

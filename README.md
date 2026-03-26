@@ -24,7 +24,7 @@ The clipper is deployed on [Replicate](https://replicate.com):
 
 https://replicate.com/nelsonjchen/op-replay-clipper
 
-The latest in-progress changes are usually pushed to the beta model first:
+The latest in-progress changes are usually pushed to the staging Replicate model first:
 
 https://replicate.com/nelsonjchen/op-replay-clipper-beta
 
@@ -77,7 +77,8 @@ We assume you've already paired your device and have access to the device with y
    * When you were adjusting the selected portion of the route in a previous step, it was changing those last two numbers in the browser address bar URL which is the start time and end time respectively.
    * "Share This Route" button if it is present will work too. Choose "copy to clipboard" or similar.
 6. Visit https://replicate.com/nelsonjchen/op-replay-clipper
-   * If you want the freshest changes before they land on the main model, use https://replicate.com/nelsonjchen/op-replay-clipper-beta instead.
+   * If you want the freshest changes before they land on the main model, use the staging Replicate model instead:
+     https://replicate.com/nelsonjchen/op-replay-clipper-beta
 7. Under `route`, paste the URL you copied in the previous step.
    * ![image](https://github.com/commaai/openpilot/assets/5363/15d286cc-057f-4a1c-be82-855c5b570b90)
 8. Tweak any settings you like.
@@ -193,6 +194,8 @@ repo currently depends on, see
 [docs/upstream-modifications.md](docs/upstream-modifications.md). For a
 milestone-oriented history of how the project got here, see
 [CHANGELOG.md](CHANGELOG.md).
+For a concrete pre-promotion smoke checklist, see
+[docs/prod-readiness-checklist.md](docs/prod-readiness-checklist.md).
 
 Examples:
 
@@ -259,19 +262,19 @@ uv run python replicate_run.py \
 Notes:
 
 * `replicate_run.py` uses the hosted Replicate model version, not a local Cog/container run
-* pass `--model nelsonjchen/op-replay-clipper-beta:<version>` if you want to smoke the beta model instead of the main one
+* pass `--model nelsonjchen/op-replay-clipper-beta:<version>` if you want to smoke the staging model instead of the main one
 * the script loads `REPLICATE_API_TOKEN` from `.env` via `python-dotenv`
 * it prints the remote file URL when Replicate returns one, then writes the file to the path you passed with `--output`
 * the hosted helper now takes a full `connect.comma.ai` clip URL and does not expose separate `start-seconds` or `length-seconds` flags
 * `.env` is ignored by git; `.env.example` is the committed placeholder
 
-### Patched Cog beta pushes
+### Patched Cog runtime pushes
 
 Stock `cog 0.17` regressed plain `https://...` string handling for this
 project's `route: str` input by coercing raw URLs into downloaded file/path
 objects too early.
 
-This repo keeps a reproducible builder for the patched beta runtime in:
+This repo keeps a reproducible builder for the patched Replicate runtime in:
 
 * [cog/runtime_patch](cog/runtime_patch)
 
@@ -280,8 +283,8 @@ That folder builds:
 * a patched `cog` SDK wheel
 * a patched Linux `coglet` wheel
 
-Those wheels are then injected into a normal `cog push`, so fresh beta
-versions on Replicate keep accepting a normal raw
+Those wheels are then injected into a normal `cog push`, so fresh Replicate
+model versions keep accepting a normal raw
 `https://connect.comma.ai/...` input on the hosted surface.
 
 For local `cog predict`, stock Cog `0.17` still has the URL-coercion regression.

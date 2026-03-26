@@ -26,12 +26,12 @@ For the higher-level project history, see [`../CHANGELOG.md`](../CHANGELOG.md).
 This repo also contains a reproducible builder for the `cog 0.17` URL-coercion regression fix in [`runtime_patch/`](./runtime_patch).
 
 Use that folder when you need to rebuild the patched Linux `coglet` runtime
-wheel and matching SDK wheel for beta pushes from macOS or any other non-Linux
-development machine.
+wheel and matching SDK wheel for Replicate pushes from macOS or any other
+non-Linux development machine.
 
 That patch matters for this project because:
 
-1. Hosted Replicate beta should accept a normal raw `https://connect.comma.ai/...` route URL.
+1. The Replicate model should accept a normal raw `https://connect.comma.ai/...` route URL.
 2. Stock local `cog predict` on Cog `0.17` still coerces raw URL-like `str`
    inputs too early, so unpatched local testing may still need the
    `literal:https://...` workaround.
