@@ -47,6 +47,11 @@ def test_route_validator_accepts_connect_url() -> None:
     assert route_inputs.validate_connect_url(url) == url
 
 
+def test_route_validator_accepts_literal_prefixed_connect_url() -> None:
+    url = "literal:https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496"
+    assert route_inputs.validate_connect_url(url) == url.removeprefix("literal:")
+
+
 def test_save_file_output_writes_single_file(tmp_path) -> None:
     output_path = tmp_path / "clip.mp4"
     written = replicate_run.save_file_output(FakeFileOutput(b"video-bytes"), output_path)

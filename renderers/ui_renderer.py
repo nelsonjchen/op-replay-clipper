@@ -164,7 +164,7 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
     if opts.metric:
         print("warning: modern BIG UI render does not expose a metric toggle; ignoring")
 
-    use_headless_display = opts.headless and os.name != "nt" and "DISPLAY" not in env and shutil.which("Xtigervnc") is not None
+    use_headless_display = opts.headless and os.name != "nt" and "DISPLAY" not in env
     with temporary_headless_display(env, enabled=use_headless_display) as render_env:
         _run(clip_cmd, cwd=openpilot_dir, env=render_env)
 

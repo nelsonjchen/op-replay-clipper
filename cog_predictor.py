@@ -1,6 +1,6 @@
 # "Prediction" interface for Cog
 
-from __future__ import annotations
+from pathlib import Path
 
 from cog import BasePredictor, Input, Path as CogPath
 
@@ -90,4 +90,4 @@ class Predictor(BasePredictor):
                 headless=True,
             )
         )
-        return CogPath(str(result.output_path))
+        return Path(result.output_path)

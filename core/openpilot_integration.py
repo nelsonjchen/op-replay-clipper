@@ -220,6 +220,24 @@ def _patch_ui_application_record_skip(path: Path) -> bool:
     return False
 
 
+def _patch_ui_application_null_egl(path: Path) -> bool:
+    source = path.read_text()
+    updated = source
+
+    old_flags = """      flags = rl.ConfigFlags.FLAG_MSAA_4X_HINT\n      if ENABLE_VSYNC:\n        flags |= rl.ConfigFlags.FLAG_VSYNC_HINT\n      rl.set_config_flags(flags)\n\n      rl.init_window(self._scaled_width, self._scaled_height, title)\n"""
+    wrong_flags = """      flags = rl.ConfigFlags.FLAG_MSAA_4X_HINT\n      if ENABLE_VSYNC:\n        flags |= rl.ConfigFlags.FLAG_VSYNC_HINT\n      if os.getenv(\"OPENPILOT_UI_NULL_EGL\"):\n        rl.glfwInitHint(rl.GLFW_PLATFORM, rl.GLFW_PLATFORM_NULL)\n        rl.glfwInitHint(rl.GLFW_CONTEXT_CREATION_API, rl.GLFW_EGL_CONTEXT_API)\n        flags |= rl.ConfigFlags.FLAG_WINDOW_HIDDEN\n      rl.set_config_flags(flags)\n\n      rl.init_window(self._scaled_width, self._scaled_height, title)\n"""
+    new_flags = """      flags = rl.ConfigFlags.FLAG_MSAA_4X_HINT\n      if ENABLE_VSYNC:\n        flags |= rl.ConfigFlags.FLAG_VSYNC_HINT\n      if os.getenv(\"OPENPILOT_UI_NULL_EGL\"):\n        rl.rl.glfwInitHint(rl.GLFW_PLATFORM, rl.GLFW_PLATFORM_NULL)\n        rl.rl.glfwInitHint(rl.GLFW_CONTEXT_CREATION_API, rl.GLFW_EGL_CONTEXT_API)\n        flags |= rl.ConfigFlags.FLAG_WINDOW_HIDDEN\n      rl.set_config_flags(flags)\n\n      rl.init_window(self._scaled_width, self._scaled_height, title)\n"""
+    if old_flags in updated:
+        updated = updated.replace(old_flags, new_flags, 1)
+    if wrong_flags in updated:
+        updated = updated.replace(wrong_flags, new_flags, 1)
+
+    if updated != source:
+        path.write_text(updated)
+        return True
+    return False
+
+
 def _patch_augmented_road_view_fill(path: Path) -> bool:
     source = path.read_text()
     updated = source
@@ -262,6 +280,7 @@ def patch_openpilot_ui_record_skip(openpilot_dir: Path) -> None:
         application = openpilot_dir / "openpilot/system/ui/lib/application.py"
     if application.exists():
         _patch_ui_application_record_skip(application)
+        _patch_ui_application_null_egl(application)
 
 
 def patch_openpilot_augmented_road_view_fill(openpilot_dir: Path) -> None:

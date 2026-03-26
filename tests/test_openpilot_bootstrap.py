@@ -27,7 +27,9 @@ def test_clone_checkout_uses_blobless_public_repo_flags(run: mock.Mock, tmp_path
         repo_url="git@github.com:commaai/openpilot.git",
     )
 
-    command = run.call_args.args[0]
+    commands = [call.args[0] for call in run.call_args_list]
+    assert commands[0] == ["git", "lfs", "install"]
+    command = commands[1]
     assert command[:2] == ["git", "clone"]
     assert "--filter=blob:none" in command
     assert "--shallow-submodules" in command
@@ -35,6 +37,7 @@ def test_clone_checkout_uses_blobless_public_repo_flags(run: mock.Mock, tmp_path
     assert "git@github.com:commaai/openpilot.git" in command
     assert "feature/test" in command
     assert str(openpilot_dir) == command[-1]
+    assert commands[2] == ["git", "lfs", "pull"]
 
 
 @mock.patch("core.openpilot_bootstrap._run")
@@ -49,10 +52,12 @@ def test_existing_checkout_updates_remote_fetch_and_submodules(run: mock.Mock, t
     )
 
     commands = [call.args[0] for call in run.call_args_list]
+    assert ["git", "lfs", "install"] in commands
     assert ["git", "remote", "set-url", "origin", "https://github.com/commaai/openpilot.git"] in commands
     assert ["git", "fetch", "--depth", "1", "--filter=blob:none", "origin", "master"] in commands
     assert ["git", "submodule", "sync", "--recursive"] in commands
     assert ["git", "submodule", "update", "--init", "--recursive", "--depth", "1", "--jobs", "8"] in commands
+    assert ["git", "lfs", "pull"] in commands
 
 
 @mock.patch("core.openpilot_bootstrap.shutil.rmtree")
@@ -82,4 +87,6 @@ def test_managed_checkout_reclones_when_ff_only_update_fails(
 
     rmtree.assert_called_once_with(openpilot_dir)
     commands = [call.args[0] for call in run.call_args_list]
+    assert ["git", "lfs", "install"] in commands
     assert ["git", "clone", *openpilot_bootstrap.GIT_CLONE_FLAGS, "--branch", "master", "https://github.com/commaai/openpilot.git", str(openpilot_dir)] in commands
+    assert ["git", "lfs", "pull"] in commands

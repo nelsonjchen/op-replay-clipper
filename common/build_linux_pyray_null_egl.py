@@ -1,132 +1,6 @@
-#!/usr/bin/env bash
-
-set -euo pipefail
-
-# Shared bootstrap for Docker/Cog images that need a working openpilot clip environment.
-
-OPENPILOT_ROOT="${OPENPILOT_ROOT:-/home/batman/openpilot}"
-OPENPILOT_REPO_URL="${OPENPILOT_REPO_URL:-https://github.com/commaai/openpilot.git}"
-OPENPILOT_BRANCH="${OPENPILOT_BRANCH:-master}"
-OPENPILOT_CLONE_DEPTH="${OPENPILOT_CLONE_DEPTH:-1}"
-SCONS_JOBS="${SCONS_JOBS:-$(command -v nproc >/dev/null 2>&1 && nproc || echo 8)}"
-export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
-
-APT_PACKAGES=(
-  build-essential
-  cmake
-  jq
-  xserver-xorg-core
-  ffmpeg
-  faketime
-  eatmydata
-  htop
-  mesa-utils
-  xserver-xorg-video-nvidia-525
-  bc
-  net-tools
-  sudo
-  wget
-  curl
-  capnproto
-  git-lfs
-  tzdata
-  zstd
-  git
-  libxrandr-dev
-  libxinerama-dev
-  libxcursor-dev
-  libxi-dev
-  libxext-dev
-  libegl1-mesa-dev
-  xorg-dev
-)
-
-log_step() {
-  printf '\n==> %s\n' "$1"
-}
-
-install_system_packages() {
-  log_step "Installing system packages"
-  apt-get update -y
-  apt-get install -y "${APT_PACKAGES[@]}"
-}
-
-configure_git_lfs() {
-  log_step "Configuring git-lfs"
-  git lfs install
-}
-
-clone_openpilot_checkout() {
-  log_step "Cloning openpilot into ${OPENPILOT_ROOT}"
-  rm -rf "${OPENPILOT_ROOT}"
-  git clone \
-    --branch "${OPENPILOT_BRANCH}" \
-    --depth "${OPENPILOT_CLONE_DEPTH}" \
-    --filter=blob:none \
-    --recurse-submodules \
-    --shallow-submodules \
-    --single-branch \
-    "${OPENPILOT_REPO_URL}" \
-    "${OPENPILOT_ROOT}"
-}
-
-install_openpilot_dependencies() {
-  log_step "Installing openpilot dependencies"
-  cd "${OPENPILOT_ROOT}"
-
-  if [[ -x ./tools/setup_dependencies.sh ]]; then
-    ./tools/setup_dependencies.sh
-    return
-  fi
-
-  if [[ -x ./tools/ubuntu_setup.sh ]]; then
-    INSTALL_EXTRA_PACKAGES=yes ./tools/ubuntu_setup.sh
-    ./tools/install_python_dependencies.sh
-    return
-  fi
-
-  echo "No supported openpilot dependency setup scripts found" >&2
-  exit 1
-}
-
-ensure_uv_on_path() {
-  if [[ ! -x /root/.local/bin/uv ]]; then
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-  fi
-  ln -sf /root/.local/bin/uv /usr/local/bin/uv
-  export PATH="/root/.local/bin:${PATH}"
-}
-
-fix_vendored_tool_permissions() {
-  if [[ ! -d "${OPENPILOT_ROOT}/.venv/lib" ]]; then
-    return
-  fi
-
-  log_step "Fixing vendored tool permissions"
-  find "${OPENPILOT_ROOT}/.venv/lib" -type f \
-    \( -name 'arm-none-eabi-*' -o -name 'capnp' -o -name 'capnpc*' -o -name 'ffmpeg' -o -name 'ffprobe' \) \
-    -exec chmod +x {} + || true
-}
-
-build_openpilot_clip_dependencies() {
-  log_step "Building native openpilot clip dependencies"
-  cd "${OPENPILOT_ROOT}"
-  uv run --no-sync scons -j"${SCONS_JOBS}" \
-    msgq_repo/msgq/ipc_pyx.so \
-    msgq_repo/msgq/visionipc/visionipc_pyx.so \
-    common/params_pyx.so \
-    selfdrive/controls/lib/longitudinal_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so \
-    selfdrive/controls/lib/lateral_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so
-}
-
-install_accelerated_linux_pyray() {
-  if [[ ! -x "${OPENPILOT_ROOT}/.venv/bin/python" ]]; then
-    return
-  fi
-  log_step "Installing accelerated Linux pyray wheel"
-  python3 - "${OPENPILOT_ROOT}/.venv/bin/python" <<'PY'
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 import subprocess
@@ -134,10 +8,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-python_bin = sys.argv[1]
-raylib_repo = "https://github.com/commaai/raylib.git"
-pyray_repo = "https://github.com/commaai/raylib-python-cffi.git"
-raygui_url = (
+
+RAYLIB_REPO = "https://github.com/commaai/raylib.git"
+PYRAY_REPO = "https://github.com/commaai/raylib-python-cffi.git"
+RAYGUI_URL = (
     "https://raw.githubusercontent.com/raysan5/raygui/"
     "76b36b597edb70ffaf96f046076adc20d67e7827/src/raygui.h"
 )
@@ -189,9 +63,8 @@ def replace_once(text: str, needle: str, replacement: str, *, label: str) -> str
     return text.replace(needle, replacement, 1)
 
 
-def patch_checkout(raylib_dir: Path) -> None:
-    internal = raylib_dir / "src/external/glfw/src/internal.h"
-    text = internal.read_text()
+def patch_internal_h(path: Path) -> None:
+    text = path.read_text()
     text = replace_once(
         text,
         "#define EGL_WINDOW_BIT 0x0004\n",
@@ -225,10 +98,11 @@ def patch_checkout(raylib_dir: Path) -> None:
         "        PFN_eglCreatePbufferSurface CreatePbufferSurface;\n",
         label="CreatePbufferSurface field",
     )
-    internal.write_text(text)
+    path.write_text(text)
 
-    platform_c = raylib_dir / "src/external/glfw/src/platform.c"
-    text = platform_c.read_text()
+
+def patch_platform_c(path: Path) -> None:
+    text = path.read_text()
     text = replace_once(
         text,
         "#if defined(_GLFW_X11)\n    { GLFW_PLATFORM_X11, _glfwConnectX11 },\n#endif\n};\n",
@@ -246,10 +120,11 @@ def patch_checkout(raylib_dir: Path) -> None:
         "    }\n\n",
         label="null platform env override",
     )
-    platform_c.write_text(text)
+    path.write_text(text)
 
-    rcore = raylib_dir / "src/platforms/rcore_desktop_glfw.c"
-    text = rcore.read_text()
+
+def patch_rcore_glfw(path: Path) -> None:
+    text = path.read_text()
     text = replace_once(
         text,
         "#if defined(__APPLE__)\n    glfwInitHint(GLFW_COCOA_CHDIR_RESOURCES, GLFW_FALSE);\n#endif\n    // Initialize GLFW internal global state\n",
@@ -265,10 +140,11 @@ def patch_checkout(raylib_dir: Path) -> None:
         "    if (getenv(\"OPENPILOT_UI_NULL_EGL\")) glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);\n",
         label="glfw EGL hint",
     )
-    rcore.write_text(text)
+    path.write_text(text)
 
-    egl = raylib_dir / "src/external/glfw/src/egl_context.c"
-    text = egl.read_text()
+
+def patch_egl_context(path: Path) -> None:
+    text = path.read_text()
     text = replace_once(
         text,
         "    _glfw.egl.CreateWindowSurface = (PFN_eglCreateWindowSurface)\n        _glfwPlatformGetModuleSymbol(_glfw.egl.handle, \"eglCreateWindowSurface\");\n",
@@ -344,7 +220,14 @@ def patch_checkout(raylib_dir: Path) -> None:
         "    }\n",
         label="null pbuffer surface creation",
     )
-    egl.write_text(text)
+    path.write_text(text)
+
+
+def patch_raylib_checkout(raylib_dir: Path) -> None:
+    patch_internal_h(raylib_dir / "src/external/glfw/src/internal.h")
+    patch_platform_c(raylib_dir / "src/external/glfw/src/platform.c")
+    patch_rcore_glfw(raylib_dir / "src/platforms/rcore_desktop_glfw.c")
+    patch_egl_context(raylib_dir / "src/external/glfw/src/egl_context.c")
 
 
 def patch_pyray_checkout(pyray_dir: Path) -> None:
@@ -361,90 +244,76 @@ def patch_pyray_checkout(pyray_dir: Path) -> None:
     build_py.write_text(text)
 
 
-with tempfile.TemporaryDirectory(prefix="pyray-null-egl-") as tmp:
-    tmpdir = Path(tmp)
-    raylib_dir = tmpdir / "raylib"
-    pyray_dir = tmpdir / "raylib-python-cffi"
-    stage_dir = tmpdir / "stage"
-    include_dir = stage_dir / "include"
-    glfw_include_dir = include_dir / "GLFW"
-    lib_dir = stage_dir / "lib"
-    glfw_include_dir.mkdir(parents=True, exist_ok=True)
-    lib_dir.mkdir(parents=True, exist_ok=True)
+def build_and_install(*, python_bin: str, work_dir: Path | None) -> None:
+    with tempfile.TemporaryDirectory(dir=str(work_dir) if work_dir else None, prefix="pyray-null-egl-") as tmp:
+        tmpdir = Path(tmp)
+        raylib_dir = tmpdir / "raylib"
+        pyray_dir = tmpdir / "raylib-python-cffi"
+        stage_dir = tmpdir / "stage"
+        include_dir = stage_dir / "include"
+        glfw_include_dir = include_dir / "GLFW"
+        lib_dir = stage_dir / "lib"
+        glfw_include_dir.mkdir(parents=True, exist_ok=True)
+        lib_dir.mkdir(parents=True, exist_ok=True)
 
-    run(["git", "clone", "--depth=1", raylib_repo, str(raylib_dir)])
-    patch_checkout(raylib_dir)
-    run(
-        [
-            "cmake",
-            "-S",
-            str(raylib_dir),
-            "-B",
-            str(raylib_dir / "build"),
-            "-DPLATFORM=Desktop",
-            "-DGLFW_BUILD_WAYLAND=OFF",
-            "-DGLFW_BUILD_X11=ON",
-            "-DBUILD_SHARED_LIBS=OFF",
-            "-DCMAKE_BUILD_TYPE=Release",
-            "-DWITH_PIC=ON",
-            "-DBUILD_EXAMPLES=OFF",
-            "-DBUILD_GAMES=OFF",
-        ]
+        run(["git", "clone", "--depth=1", RAYLIB_REPO, str(raylib_dir)])
+        patch_raylib_checkout(raylib_dir)
+
+        run(
+            [
+                "cmake",
+                "-S",
+                str(raylib_dir),
+                "-B",
+                str(raylib_dir / "build"),
+                "-DPLATFORM=Desktop",
+                "-DGLFW_BUILD_WAYLAND=OFF",
+                "-DGLFW_BUILD_X11=ON",
+                "-DBUILD_SHARED_LIBS=OFF",
+                "-DCMAKE_BUILD_TYPE=Release",
+                "-DWITH_PIC=ON",
+                "-DBUILD_EXAMPLES=OFF",
+                "-DBUILD_GAMES=OFF",
+            ]
+        )
+        jobs = capture(["bash", "-lc", "nproc || echo 8"])
+        run(["cmake", "--build", str(raylib_dir / "build"), "-j", jobs])
+
+        shutil.copy2(raylib_dir / "build/raylib/libraylib.a", lib_dir / "libraylib.a")
+        for header in ("raylib.h", "rlgl.h", "raymath.h"):
+            shutil.copy2(raylib_dir / "src" / header, include_dir / header)
+        shutil.copy2(raylib_dir / "src/external/glfw/include/GLFW/glfw3.h", glfw_include_dir / "glfw3.h")
+        run(["curl", "-fsSLo", str(include_dir / "raygui.h"), RAYGUI_URL])
+
+        run(["git", "clone", "--depth=1", PYRAY_REPO, str(pyray_dir)])
+        patch_pyray_checkout(pyray_dir)
+        env = dict(
+            **{
+                "RAYLIB_PLATFORM": "Desktop",
+                "RAYLIB_INCLUDE_PATH": str(include_dir),
+                "RAYLIB_LIB_PATH": str(lib_dir),
+            },
+            **dict(os.environ),
+        )
+        ensure_pip(python_bin)
+        run([python_bin, "-m", "pip", "wheel", ".", "-w", "dist"], cwd=pyray_dir, env=env)
+        wheels = sorted((pyray_dir / "dist").glob("*.whl"))
+        if not wheels:
+            raise RuntimeError("No pyray wheel was built")
+        run([python_bin, "-m", "pip", "install", "--force-reinstall", *map(str, wheels)])
+        verify_installed_pyray(python_bin)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Build and install a Linux pyray wheel with GLFW null+EGL support")
+    parser.add_argument("--python-bin", default=sys.executable, help="Python interpreter whose environment should receive the wheel")
+    parser.add_argument("--work-dir", help="Optional directory for temporary build files")
+    args = parser.parse_args()
+    build_and_install(
+        python_bin=args.python_bin,
+        work_dir=Path(args.work_dir).resolve() if args.work_dir else None,
     )
-    jobs = capture(["bash", "-lc", "nproc || echo 8"])
-    run(["cmake", "--build", str(raylib_dir / "build"), "-j", jobs])
 
-    shutil.copy2(raylib_dir / "build/raylib/libraylib.a", lib_dir / "libraylib.a")
-    for header in ("raylib.h", "rlgl.h", "raymath.h"):
-        shutil.copy2(raylib_dir / "src" / header, include_dir / header)
-    shutil.copy2(raylib_dir / "src/external/glfw/include/GLFW/glfw3.h", glfw_include_dir / "glfw3.h")
-    run(["curl", "-fsSLo", str(include_dir / "raygui.h"), raygui_url])
 
-    run(["git", "clone", "--depth=1", pyray_repo, str(pyray_dir)])
-    patch_pyray_checkout(pyray_dir)
-    env = dict(os.environ)
-    env["RAYLIB_PLATFORM"] = "Desktop"
-    env["RAYLIB_INCLUDE_PATH"] = str(include_dir)
-    env["RAYLIB_LIB_PATH"] = str(lib_dir)
-    ensure_pip(python_bin)
-    run([python_bin, "-m", "pip", "wheel", ".", "-w", "dist"], cwd=pyray_dir, env=env)
-    wheels = sorted((pyray_dir / "dist").glob("*.whl"))
-    run([python_bin, "-m", "pip", "install", "--force-reinstall", *map(str, wheels)])
-    verify_installed_pyray(python_bin)
-PY
-}
-
-generate_ui_fonts() {
-  log_step "Generating UI font atlases"
-  cd "${OPENPILOT_ROOT}"
-  uv run --no-sync python selfdrive/assets/fonts/process.py
-}
-
-record_checkout_commit() {
-  log_step "Recording openpilot commit"
-  cd "${OPENPILOT_ROOT}"
-  git rev-parse HEAD > "${OPENPILOT_ROOT}/COMMIT"
-}
-
-clean_image_artifacts() {
-  log_step "Cleaning bootstrap caches"
-  rm -rf /tmp/*
-  rm -rf /root/.cache
-  rm -rf /var/lib/apt/lists/*
-}
-
-main() {
-  install_system_packages
-  configure_git_lfs
-  clone_openpilot_checkout
-  ensure_uv_on_path
-  install_openpilot_dependencies
-  fix_vendored_tool_permissions
-  build_openpilot_clip_dependencies
-  install_accelerated_linux_pyray
-  generate_ui_fonts
-  record_checkout_commit
-  clean_image_artifacts
-}
-
-main "$@"
+if __name__ == "__main__":
+    main()

@@ -4,6 +4,7 @@ import platform
 import shutil
 import subprocess
 import os
+import sys
 from pathlib import Path
 
 from core.openpilot_config import DEFAULT_OPENPILOT_REPO_URL, default_local_openpilot_root
@@ -30,6 +31,22 @@ GIT_SUBMODULE_UPDATE_FLAGS = [
     "--jobs",
     "8",
 ]
+
+
+def _uv_cmd() -> str:
+    explicit = os.environ.get("UV_BIN")
+    if explicit:
+        return explicit
+    found = shutil.which("uv")
+    if found:
+        return found
+    for candidate in (
+        Path.home() / ".local/bin/uv",
+        Path("/usr/local/bin/uv"),
+    ):
+        if candidate.exists():
+            return str(candidate)
+    raise FileNotFoundError("Could not find uv; set UV_BIN or install uv on PATH")
 
 
 def _run(cmd: list[str], cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
@@ -70,8 +87,9 @@ def _resolve_openpilot_python(openpilot_dir: Path) -> str | None:
     if not requested_version:
         return None
 
+    uv_bin = _uv_cmd()
     try:
-        return _capture(["uv", "python", "find", requested_version], cwd=openpilot_dir)
+        return _capture([uv_bin, "python", "find", requested_version], cwd=openpilot_dir)
     except subprocess.CalledProcessError:
         major_minor = ".".join(requested_version.split(".")[:2])
         if not major_minor:
@@ -81,14 +99,15 @@ def _resolve_openpilot_python(openpilot_dir: Path) -> str | None:
             f"falling back to a compatible {major_minor}.x interpreter for local bootstrap."
         )
         try:
-            _run(["uv", "python", "install", major_minor], cwd=openpilot_dir)
+            _run([uv_bin, "python", "install", major_minor], cwd=openpilot_dir)
         except subprocess.CalledProcessError:
             pass
-        return _capture(["uv", "python", "find", major_minor], cwd=openpilot_dir)
+        return _capture([uv_bin, "python", "find", major_minor], cwd=openpilot_dir)
 
 
 def _clone_checkout(openpilot_dir: Path, branch: str, repo_url: str) -> None:
     openpilot_dir.parent.mkdir(parents=True, exist_ok=True)
+    _run(["git", "lfs", "install"])
     _run(
         [
             "git",
@@ -100,6 +119,7 @@ def _clone_checkout(openpilot_dir: Path, branch: str, repo_url: str) -> None:
             str(openpilot_dir),
         ]
     )
+    _run(["git", "lfs", "pull"], cwd=openpilot_dir)
 
 
 def _is_managed_local_checkout(openpilot_dir: Path) -> bool:
@@ -117,12 +137,14 @@ def ensure_openpilot_checkout(
         return
 
     try:
+        _run(["git", "lfs", "install"], cwd=openpilot_dir)
         _run(["git", "remote", "set-url", "origin", repo_url], cwd=openpilot_dir)
         _run(["git", "fetch", *GIT_FETCH_FLAGS, "origin", branch], cwd=openpilot_dir)
         _run(["git", "checkout", branch], cwd=openpilot_dir)
         _run(["git", "pull", "--ff-only", "--recurse-submodules", "origin", branch], cwd=openpilot_dir)
         _run(["git", "submodule", "sync", "--recursive"], cwd=openpilot_dir)
         _run(["git", "submodule", "update", *GIT_SUBMODULE_UPDATE_FLAGS], cwd=openpilot_dir)
+        _run(["git", "lfs", "pull"], cwd=openpilot_dir)
     except subprocess.CalledProcessError:
         if not _is_managed_local_checkout(openpilot_dir):
             raise
@@ -147,7 +169,8 @@ def ensure_macos_env_fix(openpilot_dir: Path) -> None:
 
 def bootstrap_openpilot(openpilot_dir: Path) -> None:
     python_executable = _resolve_openpilot_python(openpilot_dir)
-    sync_cmd = ["uv", "sync", "--frozen", "--all-extras"]
+    uv_bin = _uv_cmd()
+    sync_cmd = [uv_bin, "sync", "--frozen", "--all-extras"]
     if python_executable:
         sync_cmd.extend(["--python", python_executable])
     _run(sync_cmd, cwd=openpilot_dir)
@@ -160,8 +183,21 @@ def bootstrap_openpilot(openpilot_dir: Path) -> None:
         "selfdrive/controls/lib/longitudinal_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so",
         "selfdrive/controls/lib/lateral_mpc_lib/c_generated_code/acados_ocp_solver_pyx.so",
     ]
-    scons_cmd = ["uv", "run"]
+    scons_cmd = [uv_bin, "run", "--no-sync"]
     if python_executable:
         scons_cmd.extend(["--python", python_executable])
     scons_cmd.extend(["scons", "-j8", *scons_targets])
     _run(scons_cmd, cwd=openpilot_dir)
+    install_accelerated_linux_pyray(openpilot_dir)
+
+
+def install_accelerated_linux_pyray(openpilot_dir: Path) -> None:
+    if platform.system() != "Linux":
+        return
+    venv_python = openpilot_dir / ".venv/bin/python"
+    if not venv_python.exists():
+        return
+    helper = Path(__file__).resolve().parents[1] / "common/build_linux_pyray_null_egl.py"
+    if not helper.exists():
+        raise FileNotFoundError(f"Missing Linux pyray builder at {helper}")
+    _run([sys.executable, str(helper), "--python-bin", str(venv_python)], cwd=openpilot_dir)
