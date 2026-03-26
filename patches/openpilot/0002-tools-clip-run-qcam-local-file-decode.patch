@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nelson Local <local@example.com>
+Date: Tue, 24 Feb 2026 00:00:00 +0000
+Subject: [PATCH 2/2] tools/clip/run: decode local qcamera files via filepath
+
+When rendering local clips, qcamera paths are normal files and can be passed
+directly to ffmpeg. This avoids stdin protocol issues seen with some ffmpeg
+builds.
+---
+ tools/clip/run.py | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/tools/clip/run.py b/tools/clip/run.py
+index 5711caf..51022b6 100755
+--- a/tools/clip/run.py
++++ b/tools/clip/run.py
+@@ -149,9 +149,13 @@ def iter_segment_frames(camera_paths, start_time, end_time, fps=20, use_qcam=Fal
+ 
+       if use_qcam:
+         w, h = frame_size or get_frame_dimensions(path)
+-        with FileReader(path) as f:
+-          result = subprocess.run(["ffmpeg", "-v", "quiet", "-i", "-", "-f", "rawvideo", "-pix_fmt", "nv12", "-"],
+-                                  input=f.read(), capture_output=True)
++        if os.path.exists(path):
++          result = subprocess.run(["ffmpeg", "-v", "quiet", "-i", path, "-f", "rawvideo", "-pix_fmt", "nv12", "-"],
++                                  capture_output=True)
++        else:
++          with FileReader(path) as f:
++            result = subprocess.run(["ffmpeg", "-v", "quiet", "-i", "-", "-f", "rawvideo", "-pix_fmt", "nv12", "-"],
++                                    input=f.read(), capture_output=True)
+         if result.returncode != 0:
+           raise RuntimeError(f"ffmpeg failed: {result.stderr.decode()}")
+         seg_frames = np.frombuffer(result.stdout, dtype=np.uint8).reshape(-1, w * h * 3 // 2)
+-- 
+2.39.5
+

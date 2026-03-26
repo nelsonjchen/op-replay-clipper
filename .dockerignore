@@ -8,13 +8,26 @@
 .gitignore
 
 # Exclude Python cache files
-__pycache__
+__pycache__/
 .mypy_cache
 .pytest_cache
 .ruff_cache
 
 # Exclude Python virtual environment
-/venv
+.venv/
+/venv/
+
+# Exclude local caches and generated Cog artifacts.
+# Keep `.cog/tmp` available so `cog predict` can build from its generated
+# wheel/requirements inputs.
+.cache/
+.cog/*
+!.cog/tmp/
+!.cog/tmp/**
+!.cog/openapi_schema.json
+# Keep cog.yaml in the final image so `cog push` schema validation can load
+# the predictor config from /src/cog.yaml.
+requirements-cog.txt
 
 # Exclude local shared folder
 shared/

@@ -1,10 +1,30 @@
-# Parses a route or URL string, throwing an exception if it's invalid.
-
 import dataclasses
+import os
+from typing import Any
 
 from urllib.parse import urlparse
 
-import requests
+
+LITERAL_URL_PREFIX = "literal:"
+
+
+def _coerce_route_text(route_or_url: Any) -> str:
+    if isinstance(route_or_url, str):
+        return route_or_url
+    if hasattr(route_or_url, "source"):
+        source = getattr(route_or_url, "source")
+        if isinstance(source, str) and source:
+            return source
+    if isinstance(route_or_url, os.PathLike):
+        return os.fspath(route_or_url)
+    return str(route_or_url)
+
+
+def _normalize_route_text(route_or_url: Any) -> str:
+    route_or_url = _coerce_route_text(route_or_url)
+    if route_or_url.startswith(LITERAL_URL_PREFIX):
+        return route_or_url[len(LITERAL_URL_PREFIX) :]
+    return route_or_url
 
 # Dataclass for a parsed route or URL
 
@@ -15,14 +35,23 @@ class ParsedRouteOrURL:
     start_seconds: int
     length_seconds: int
 
+
+def validate_connect_url(route_or_url: str | os.PathLike[str], *, error_message: str | None = None) -> str:
+    route_or_url = _normalize_route_text(route_or_url)
+    parsed = urlparse(route_or_url)
+    if parsed.scheme != "https" or parsed.hostname != "connect.comma.ai":
+        raise ValueError(error_message or "Expected a full https://connect.comma.ai/... clip URL.")
+    return route_or_url
+
 # These have a dash in the 2nd part and 4 parts
 # https://connect.comma.ai/a2a0ccea32023010/2023-07-27--13-01-19/7/124
 # Notably, instead of looking at routes_segments, look at the route itself
 # curl https://api.commadotai.com/v1/route/99c94dc769b5d96e\|2019-05-17--17-31-58/
 def parseRouteRelativeUrl(
-    route_or_url: str,
+    route_or_url: str | os.PathLike[str],
     jwt_token: str = None,
 ) -> ParsedRouteOrURL:
+    route_or_url = _normalize_route_text(route_or_url)
     # Parse the URL
     parsed_url = urlparse(route_or_url)
     # Check the hostname
@@ -59,11 +88,12 @@ def parseRouteRelativeUrl(
 # These have no dash in the 2nd part and 3 parts
 # https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496
 def parseAbsoluteTimeUrl(
-    route_or_url: str,
+    route_or_url: str | os.PathLike[str],
     start_seconds: int,
     length_seconds: int,
     jwt_token: str = None,
 ) -> ParsedRouteOrURL:
+    route_or_url = _normalize_route_text(route_or_url)
     # Check if the URL is like this:
     # https://connect.comma.ai/a2a0ccea32023010/1690488084000/1690488085000
     # * Hostname is connect.comma.ai
@@ -98,6 +128,8 @@ def parseAbsoluteTimeUrl(
 
     # Make the API call
     api_url = f"https://api.comma.ai/v1/devices/{dongle_id}/routes_segments?end={end_time}&start={start_time}"
+    import requests
+
     if jwt_token:
         response = requests.get(api_url, headers={"Authorization": f"JWT {jwt_token}"})
     else:
@@ -219,6 +251,7 @@ def parseRouteOrUrl(
     length_seconds: int,
     jwt_token: str = None,
 ) -> ParsedRouteOrURL:
+    route_or_url = _normalize_route_text(route_or_url)
     # if the route_or_url is a route, just return it
     # Assume that a route is a string with a pipe in it
     if "|" in route_or_url:

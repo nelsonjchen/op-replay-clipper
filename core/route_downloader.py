@@ -23,6 +23,8 @@ class FileListDict(TypedDict):
     ecameras: List[str]
     # Filename are `rlog.bz2`
     logs: List[str]
+    # Filename are `qcamera.ts`
+    qcameras: List[str]
 
 class RouteInfoDict(TypedDict):
     segment_end_times: List[int]
@@ -40,6 +42,7 @@ def downloadSegments(
         "logs",
     ],
     jwt_token: Optional[str] = None,
+    decompress_logs: bool = True,
 ):
     """
     Handle downloading segments and throwing up errors if something goes wrong.
@@ -48,7 +51,7 @@ def downloadSegments(
 
     """
     # Validate file_types are valid
-    valid_file_types = ["cameras", "ecameras", "dcameras", "logs"]
+    valid_file_types = ["cameras", "ecameras", "dcameras", "qcameras", "logs"]
     for file_type in file_types:
         if file_type not in valid_file_types:
             raise ValueError(f"Invalid file type argument: {file_type}. Valid file types are {valid_file_types}")
@@ -130,6 +133,7 @@ def downloadSegments(
         camera_exists = False
         ecamera_exists = False
         dcamera_exists = False
+        qcamera_exists = False
         log_exists = False
         for camera_url in filelist["cameras"]:
             if f"/{segment_id}/fcamera.hevc" in camera_url:
@@ -142,6 +146,10 @@ def downloadSegments(
         for dcamera_url in filelist["dcameras"]:
             if f"/{segment_id}/dcamera.hevc" in dcamera_url:
                 dcamera_exists = True
+                break
+        for qcamera_url in filelist.get("qcameras", []):
+            if f"/{segment_id}/qcamera.ts" in qcamera_url:
+                qcamera_exists = True
                 break
         for log_url in filelist["logs"]:
             if f"/{segment_id}/rlog.bz2" in log_url or f"/{segment_id}/rlog.zst" in log_url:
@@ -157,6 +165,8 @@ def downloadSegments(
             raise ValueError(
                 f"Segment {segment_id} does not have a driver camera upload. {call_to_action_upload_message}"
             )
+        if not qcamera_exists and "qcameras" in file_types:
+            raise ValueError(f"Segment {segment_id} does not have a qcamera upload. {call_to_action_upload_message}")
         if not log_exists and "logs" in file_types:
             raise ValueError(f"Segment {segment_id} does not have a log upload. {call_to_action_upload_message}")
 
@@ -202,22 +212,31 @@ def downloadSegments(
                     dcamera_url, path=segment_dir, filename="dcamera.hevc", overwrite=False
                 )
                 break
+        # Download the qcamera
+        for qcamera_url in filelist.get("qcameras", []):
+            if f"/{segment_id}/qcamera.ts" in qcamera_url and "qcameras" in file_types:
+                downloader.enqueue_file(
+                    qcamera_url, path=segment_dir, filename="qcamera.ts", overwrite=False
+                )
+                break
         # Download the log
         for log_url in filelist["logs"]:
             if f"/{segment_id}/rlog.bz2" in log_url and "logs" in file_types:
                 # Check if the file already exists
-                if (segment_dir / "rlog.bz2").exists() or (
-                    segment_dir / "rlog"
-                ).exists():
+                already_have_log = (segment_dir / "rlog.bz2").exists()
+                if decompress_logs:
+                    already_have_log = already_have_log or (segment_dir / "rlog").exists()
+                if already_have_log:
                     print(f"Skipping {log_url} because it already exists")
                     break
                 downloader.enqueue_file(log_url, path=segment_dir, filename="rlog.bz2")
                 break
             if f"/{segment_id}/rlog.zst" in log_url and "logs" in file_types:
                 # Check if the file already exists
-                if (segment_dir / "rlog.zst").exists() or (
-                    segment_dir / "rlog"
-                ).exists():
+                already_have_log = (segment_dir / "rlog.zst").exists()
+                if decompress_logs:
+                    already_have_log = already_have_log or (segment_dir / "rlog").exists()
+                if already_have_log:
                     print(f"Skipping {log_url} because it already exists")
                     break
                 downloader.enqueue_file(log_url, path=segment_dir, filename="rlog.zst")
@@ -233,6 +252,8 @@ def downloadSegments(
     # Decompress the logs
     for segment_id in segment_ids:
         if "logs" not in file_types:
+            break
+        if not decompress_logs:
             break
         segment_dir = Path(data_dir) / f"{route_date}--{segment_id}"
         # Decompress the log if rlog doesn't exist

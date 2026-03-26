@@ -1,8 +1,27 @@
+*.DS_Store
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+
+.cache/
+.env
+.env.*
+!.env.example
+
+shared/*
+!shared/.gitkeep
+*.mp4
 out.mp4
+output.mp4
+
 # Cog stuff
 .cog/
-# cog.yaml is generated as a workaround for cog having no COPY equivalent
+# Cog still can't read repo files from build.run, so these are generated from uv/setup inputs.
 cog.yaml
-__pycache__/
-output.mp4
-.venv/
+requirements-cog.txt
+
+# Patched Cog runtime build artifacts
+cog/runtime_patch/dist/
+cog/runtime_patch/.docker-output/
