@@ -65,6 +65,8 @@ class Predictor(BasePredictor):
         print(f"ROUTE_INPUT_TYPE: {type(route)!r}")
         print(f"ROUTE_INPUT_REPR: {route!r}")
         print(f"ROUTE_INPUT_SOURCE: {getattr(route, 'source', None)!r}")
+        print(f"ROUTE_INPUT_DICT: {getattr(route, '__dict__', None)!r}")
+        print(f"ROUTE_INPUT_DIR: {[name for name in dir(route) if 'source' in name or 'url' in name or 'path' in name]!r}")
         if isinstance(route, os.PathLike):
             route_path = Path(os.fspath(route))
             print(f"ROUTE_INPUT_PATH: {route_path}")
