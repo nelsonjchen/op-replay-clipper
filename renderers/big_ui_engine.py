@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Mapping
 import logging
+import math
 import os
 import queue
 import subprocess
@@ -64,6 +65,9 @@ class LayoutRects:
 @dataclass(frozen=True)
 class FooterTelemetry:
     steering_angle_deg: float = 0.0
+    steering_target_deg: float | None = None
+    steering_applied_deg: float | None = None
+    steering_pressed: bool = False
     driver_gas: float = 0.0
     driver_brake: float = 0.0
     driver_gas_pressed: bool = False
@@ -133,15 +137,26 @@ def _clip01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
+def _extract_nested_attr(obj: object, path: tuple[str, ...]) -> object | None:
+    current = obj
+    for name in path:
+        current = getattr(current, name, None)
+        if current is None:
+            return None
+    return current
+
+
 def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
     car_state_msg = state.get("carState")
     car_control_msg = state.get("carControl")
     car_output_msg = state.get("carOutput")
+    controls_state_msg = state.get("controlsState")
     longitudinal_plan_msg = state.get("longitudinalPlan")
 
     car_state = getattr(car_state_msg, "carState", None) if car_state_msg is not None else None
     car_control = getattr(car_control_msg, "carControl", None) if car_control_msg is not None else None
     car_output = getattr(car_output_msg, "carOutput", None) if car_output_msg is not None else None
+    controls_state = getattr(controls_state_msg, "controlsState", None) if controls_state_msg is not None else None
     longitudinal_plan = (
         getattr(longitudinal_plan_msg, "longitudinalPlan", None) if longitudinal_plan_msg is not None else None
     )
@@ -149,13 +164,27 @@ def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
     accel_cmd = float(getattr(getattr(car_control, "actuators", None), "accel", 0.0) or 0.0)
     accel_out_attr = getattr(getattr(car_output, "actuatorsOutput", None), "accel", None)
     accel_out = float(accel_out_attr) if accel_out_attr is not None else None
+    steering_target_attr = getattr(getattr(car_control, "actuators", None), "steeringAngleDeg", None)
+    if steering_target_attr is None:
+        steering_target_attr = _extract_nested_attr(
+            controls_state,
+            ("lateralControlState", "angleState", "steeringAngleDesiredDeg"),
+        )
+    steering_applied_attr = getattr(getattr(car_output, "actuatorsOutput", None), "steeringAngleDeg", None)
 
     a_target_attr = getattr(longitudinal_plan, "aTarget", None)
     if a_target_attr is None and longitudinal_plan is not None and len(getattr(longitudinal_plan, "accels", [])):
         a_target_attr = longitudinal_plan.accels[0]
 
+    steering_angle_deg = float(getattr(car_state, "steeringAngleDeg", 0.0) or 0.0)
+    steering_target_deg = float(steering_target_attr) if steering_target_attr is not None else None
+    steering_applied_deg = float(steering_applied_attr) if steering_applied_attr is not None else None
+
     return FooterTelemetry(
-        steering_angle_deg=float(getattr(car_state, "steeringAngleDeg", 0.0) or 0.0),
+        steering_angle_deg=steering_angle_deg,
+        steering_target_deg=steering_target_deg,
+        steering_applied_deg=steering_applied_deg,
+        steering_pressed=bool(getattr(car_state, "steeringPressed", False)),
         driver_gas=_clip01(float(getattr(car_state, "gasDEPRECATED", 0.0) or 0.0)),
         driver_brake=_clip01(float(getattr(car_state, "brake", 0.0) or 0.0)),
         driver_gas_pressed=bool(getattr(car_state, "gasPressed", False)),
@@ -520,6 +549,80 @@ class SteeringFooterRenderer:
             rl.draw_text_ex(self._label_font, label, rl.Vector2(x, rect.y), label_size, 0, label_color)
             rl.draw_text_ex(self._value_font, value, rl.Vector2(x, rect.y + 24), value_size, 0, value_color)
 
+    def _draw_steering_dots(self, *, center_x: float, center_y: float, wheel_size: int, telemetry: FooterTelemetry) -> None:
+        import pyray as rl
+
+        actual_color = rl.WHITE
+        target_color = rl.Color(125, 196, 255, 255)
+        applied_color = rl.Color(255, 176, 87, 255)
+        orbit_color = rl.Color(255, 255, 255, 36)
+        base_radius = (wheel_size / 2) + 16
+
+        rl.draw_ring(
+            rl.Vector2(center_x, center_y),
+            base_radius - 2,
+            base_radius + 2,
+            0,
+            360,
+            64,
+            orbit_color,
+        )
+
+        def draw_dot(angle_deg: float | None, color, radius: float) -> None:
+            if angle_deg is None:
+                return
+            theta = math.radians(-angle_deg - 90.0)
+            x = center_x + math.cos(theta) * radius
+            y = center_y + math.sin(theta) * radius
+            rl.draw_circle(int(x), int(y), 9, rl.Color(0, 0, 0, 210))
+            rl.draw_circle(int(x), int(y), 6, color)
+
+        draw_dot(telemetry.steering_target_deg, target_color, base_radius + 14)
+        draw_dot(telemetry.steering_applied_deg, applied_color, base_radius + 2)
+        draw_dot(telemetry.steering_angle_deg, actual_color, base_radius - 10)
+
+    def _draw_steering_summary(self, rect, *, telemetry: FooterTelemetry) -> None:
+        import pyray as rl
+
+        label_color = rl.Color(255, 255, 255, 150)
+        value_color = rl.WHITE
+        accent = rl.Color(125, 196, 255, 255)
+        applied = rl.Color(255, 176, 87, 255)
+        label_size = 18
+        value_size = 30
+        row_gap = 36
+        value_x = rect.x + 130
+
+        rows = [
+            ("ACTUAL", f"{telemetry.steering_angle_deg:+.1f} deg", value_color),
+            (
+                "TARGET",
+                f"{telemetry.steering_target_deg:+.1f} deg" if telemetry.steering_target_deg is not None else "--",
+                accent,
+            ),
+            (
+                "APPLIED",
+                f"{telemetry.steering_applied_deg:+.1f} deg" if telemetry.steering_applied_deg is not None else "--",
+                applied,
+            ),
+        ]
+        delta = None
+        if telemetry.steering_target_deg is not None:
+            delta = telemetry.steering_target_deg - telemetry.steering_angle_deg
+        rows.append(("DELTA", f"{delta:+.1f} deg" if delta is not None else "--", accent))
+        rows.append(
+            (
+                "HANDS",
+                "ON WHEEL" if telemetry.steering_pressed else "OFF WHEEL",
+                value_color if telemetry.steering_pressed else label_color,
+            )
+        )
+
+        for idx, (label, value, color) in enumerate(rows):
+            y = rect.y + idx * row_gap
+            rl.draw_text_ex(self._label_font, label, rl.Vector2(rect.x, y + 8), label_size, 0, label_color)
+            rl.draw_text_ex(self._value_font, value, rl.Vector2(value_x, y), value_size, 0, color)
+
     def render(self, rect, *, telemetry: FooterTelemetry) -> None:
         import pyray as rl
 
@@ -531,7 +634,7 @@ class SteeringFooterRenderer:
         orange = rl.Color(255, 176, 87, 255)
         outer_pad_x = 34
         outer_pad_y = 24
-        wheel_col_w = rect.width * 0.34
+        wheel_col_w = rect.width * 0.38
         right_x = rect.x + wheel_col_w + outer_pad_x
         right_w = rect.width - wheel_col_w - (2 * outer_pad_x)
         col_gap = 36
@@ -555,21 +658,20 @@ class SteeringFooterRenderer:
             divider,
         )
 
-        wheel_size = min(int(rect.height * 0.72), int(rect.width * 0.17))
+        wheel_size = min(int(rect.height * 0.68), int(rect.width * 0.14))
         wheel_size = max(124, wheel_size)
-        wheel_center_x = rect.x + wheel_col_w * 0.5
-        wheel_center_y = rect.y + rect.height / 2 + 8
+        wheel_center_x = rect.x + wheel_col_w * 0.76
+        wheel_center_y = rect.y + rect.height / 2 + 14
         src_rect = rl.Rectangle(0, 0, self._wheel_texture.width, self._wheel_texture.height)
         dest_rect = rl.Rectangle(wheel_center_x, wheel_center_y, wheel_size, wheel_size)
         origin = (wheel_size / 2, wheel_size / 2)
 
-        rl.draw_texture_pro(
-            self._wheel_texture,
-            src_rect,
-            dest_rect,
-            origin,
-            -telemetry.steering_angle_deg,
-            rl.WHITE,
+        rl.draw_texture_pro(self._wheel_texture, src_rect, dest_rect, origin, -telemetry.steering_angle_deg, rl.WHITE)
+        self._draw_steering_dots(
+            center_x=wheel_center_x,
+            center_y=wheel_center_y,
+            wheel_size=wheel_size,
+            telemetry=telemetry,
         )
 
         rl.draw_text_ex(
@@ -580,13 +682,9 @@ class SteeringFooterRenderer:
             0,
             text_dim,
         )
-        rl.draw_text_ex(
-            self._value_font,
-            f"{telemetry.steering_angle_deg:+.1f} deg",
-            rl.Vector2(rect.x + outer_pad_x, rect.y + rect.height - 70),
-            34,
-            0,
-            rl.WHITE,
+        self._draw_steering_summary(
+            rl.Rectangle(rect.x + outer_pad_x, rect.y + outer_pad_y + 28, wheel_col_w - 90, rect.height - (2 * outer_pad_y)),
+            telemetry=telemetry,
         )
         rl.draw_line(
             int(rect.x + wheel_col_w),

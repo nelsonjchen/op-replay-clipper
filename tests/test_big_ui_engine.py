@@ -106,6 +106,7 @@ def test_extract_footer_telemetry_reads_driver_and_op_inputs() -> None:
             0,
             SimpleNamespace(
                 steeringAngleDeg=12.5,
+                steeringPressed=True,
                 gasDEPRECATED=0.25,
                 brake=0.1,
                 gasPressed=True,
@@ -117,14 +118,14 @@ def test_extract_footer_telemetry_reads_driver_and_op_inputs() -> None:
             "carControl",
             0,
             SimpleNamespace(
-                actuators=SimpleNamespace(accel=1.2),
+                actuators=SimpleNamespace(accel=1.2, steeringAngleDeg=10.0),
             ),
         ),
         "carOutput": FakeMsg(
             "carOutput",
             0,
             SimpleNamespace(
-                actuatorsOutput=SimpleNamespace(accel=1.1),
+                actuatorsOutput=SimpleNamespace(accel=1.1, steeringAngleDeg=10.4),
             ),
         ),
         "longitudinalPlan": FakeMsg(
@@ -137,6 +138,9 @@ def test_extract_footer_telemetry_reads_driver_and_op_inputs() -> None:
     telemetry = big_ui_engine.extract_footer_telemetry(state)
 
     assert telemetry.steering_angle_deg == 12.5
+    assert telemetry.steering_target_deg == 10.0
+    assert telemetry.steering_applied_deg == 10.4
+    assert telemetry.steering_pressed is True
     assert telemetry.driver_gas == 0.25
     assert telemetry.driver_brake == 0.1
     assert telemetry.driver_gas_pressed is True
@@ -147,6 +151,35 @@ def test_extract_footer_telemetry_reads_driver_and_op_inputs() -> None:
     assert telemetry.accel_out == 1.1
     assert telemetry.a_ego == 0.4
     assert telemetry.a_target == 0.6
+
+
+def test_extract_footer_telemetry_uses_controls_state_as_steering_target_fallback() -> None:
+    state = {
+        "carState": FakeMsg(
+            "carState",
+            0,
+            SimpleNamespace(
+                steeringAngleDeg=-5.2,
+                steeringPressed=False,
+            ),
+        ),
+        "controlsState": FakeMsg(
+            "controlsState",
+            0,
+            SimpleNamespace(
+                lateralControlState=SimpleNamespace(
+                    angleState=SimpleNamespace(steeringAngleDesiredDeg=-5.5),
+                )
+            ),
+        ),
+    }
+
+    telemetry = big_ui_engine.extract_footer_telemetry(state)
+
+    assert telemetry.steering_angle_deg == -5.2
+    assert telemetry.steering_target_deg == -5.5
+    assert telemetry.steering_applied_deg is None
+    assert telemetry.steering_pressed is False
 
 
 def test_extract_footer_telemetry_falls_back_to_plan_accels_and_brake_command() -> None:
