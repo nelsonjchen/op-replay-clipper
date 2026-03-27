@@ -10,15 +10,19 @@ permissions:
 
 jobs:
   build:
-    name: Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        python-version:
-          - "3.12"
-          - "3.13"
+        include:
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: macos-latest
+            python-version: "3.13"
 
     steps:
       - name: Check out repository
@@ -36,6 +40,14 @@ jobs:
 
       - name: Render Cog build artifacts
         run: ./cog/render_artifacts.sh
+
+      - name: Compile Python sources
+        run: uv run python -m compileall clip.py cog_predictor.py replicate_run.py core renderers tests
+
+      - name: Smoke test CLI entrypoints
+        run: |
+          uv run python clip.py --help >/dev/null
+          uv run python replicate_run.py --help >/dev/null
 
       - name: Run test suite
         run: uv run pytest
