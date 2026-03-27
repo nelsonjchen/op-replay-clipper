@@ -18,6 +18,7 @@ from core.render_runtime import configure_ui_environment, temporary_headless_dis
 
 UI_STARTUP_WARMUP_SECONDS = 1
 UI_FRAMERATE = 20
+UI_LAYOUT_MODES = ("default", "alt")
 
 @dataclass(frozen=True)
 class UIRenderOptions:
@@ -32,6 +33,7 @@ class UIRenderOptions:
     jwt_token: str | None = None
     openpilot_dir: str = field(default_factory=default_image_openpilot_root)
     headless: bool = True
+    layout_mode: str = "default"
 
 
 @dataclass(frozen=True)
@@ -220,6 +222,8 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
     openpilot_dir = Path(opts.openpilot_dir).resolve()
     if not _has_modern_openpilot(openpilot_dir):
         raise FileNotFoundError(f"Modern clip tool not found at {openpilot_dir}/tools/clip/run.py")
+    if opts.layout_mode not in UI_LAYOUT_MODES:
+        raise ValueError(f"Unknown UI layout mode: {opts.layout_mode}")
 
     patch_report = apply_openpilot_runtime_patches(openpilot_dir)
     if patch_report.changed:
@@ -253,6 +257,8 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
         "-f",
         str(opts.target_mb),
         "--big",
+        "--layout-mode",
+        opts.layout_mode,
     ]
     if opts.data_dir:
         compat_root = build_openpilot_compatible_data_dir(opts.route, Path(opts.data_dir))

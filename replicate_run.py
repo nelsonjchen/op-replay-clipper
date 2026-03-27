@@ -21,7 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--url", default=DEFAULT_URL, help="connect.comma.ai clip URL.")
     parser.add_argument(
         "--render-type",
-        choices=["ui", "forward", "wide", "driver", "360", "forward_upon_wide", "360_forward_upon_wide"],
+        choices=["ui", "ui-alt", "forward", "wide", "driver", "360", "forward_upon_wide", "360_forward_upon_wide"],
         default="ui",
         help="Clip render type.",
     )

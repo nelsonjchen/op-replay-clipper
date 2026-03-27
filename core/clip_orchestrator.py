@@ -11,6 +11,7 @@ from renderers import ui_renderer, video_renderer
 
 RenderType = Literal[
     "ui",
+    "ui-alt",
     "forward",
     "wide",
     "driver",
@@ -25,6 +26,7 @@ LocalAccel = Literal["auto", "cpu", "videotoolbox", "nvidia"]
 
 RENDER_TYPE_FILE_TYPES: dict[RenderType, tuple[str, ...]] = {
     "ui": ("cameras", "logs"),
+    "ui-alt": ("cameras", "logs"),
     "forward": ("cameras",),
     "wide": ("ecameras",),
     "driver": ("dcameras",),
@@ -89,6 +91,10 @@ class ClipResult:
     acceleration: str | None = None
 
 
+def is_ui_render_type(render_type: RenderType) -> bool:
+    return render_type in ("ui", "ui-alt")
+
+
 def normalize_output_format(render_type: RenderType, requested_format: OutputFormatInput) -> OutputFormat:
     if requested_format in ("h264", "hevc"):
         return requested_format
@@ -104,7 +110,7 @@ def normalize_target_mb(target_mb: int, execution_context: ExecutionContext) -> 
 
 
 def select_download_file_types(render_type: RenderType, *, qcam: bool) -> tuple[str, ...]:
-    if render_type == "ui" and qcam:
+    if is_ui_render_type(render_type) and qcam:
         return ("qcameras", "logs")
     return RENDER_TYPE_FILE_TYPES[render_type]
 
@@ -142,7 +148,7 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
         output_path=Path(request.output_path).expanduser().resolve(),
         data_dir=resolve_data_dir(parsed.route, request.data_root, request.explicit_data_dir),
         download_file_types=select_download_file_types(request.render_type, qcam=request.qcam),
-        decompress_logs=request.render_type != "ui",
+        decompress_logs=not is_ui_render_type(request.render_type),
         smear_seconds=max(0, request.smear_seconds),
         local_acceleration=request.local_acceleration,
         forward_upon_wide_h=request.forward_upon_wide_h,
@@ -171,7 +177,7 @@ def run_clip(request: ClipRequest) -> ClipResult:
             decompress_logs=plan.decompress_logs,
         )
 
-    if plan.render_type == "ui":
+    if is_ui_render_type(plan.render_type):
         ui_result = ui_renderer.render_ui_clip(
             ui_renderer.UIRenderOptions(
                 route=plan.route,
@@ -185,6 +191,7 @@ def run_clip(request: ClipRequest) -> ClipResult:
                 jwt_token=plan.jwt_token,
                 openpilot_dir=plan.openpilot_dir,
                 headless=plan.headless,
+                layout_mode="alt" if plan.render_type == "ui-alt" else "default",
             )
         )
         return ClipResult(

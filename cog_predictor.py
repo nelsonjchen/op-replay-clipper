@@ -3,7 +3,7 @@ from pathlib import Path
 from cog import BasePredictor, Input, Path as CogPath
 
 from core import route_inputs
-from core.clip_orchestrator import ClipRequest, run_clip
+from core.clip_orchestrator import ClipRequest, is_ui_render_type, run_clip
 from core.openpilot_config import default_image_openpilot_root
 
 MIN_LENGTH_SECONDS = 5
@@ -20,6 +20,7 @@ class Predictor(BasePredictor):
             description="UI renders with the comma openpilot UI. Forward, Wide, and Driver process the raw, segmented, and low-compatibility HEVC video files into a portable HEVC or H264 MP4 file, are fast transcodes, and are great for quick previews. 360 requires viewing/uploading the video file in VLC or YouTube to pan around in a sphere or post-processing with software such as Insta360 Studio or similar software for reframing. Forward Upon Wide roughly overlays Forward video on Wide video for increased detail in Forward video. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video and scales up to render at 8K for reframing with Insta360 Studio or similar software.",
             choices=[
                 "ui",
+                "ui-alt",
                 "forward",
                 "wide",
                 "driver",
@@ -74,7 +75,7 @@ class Predictor(BasePredictor):
                 target_mb=fileSize,
                 file_format=fileFormat,  # type: ignore[arg-type]
                 output_path="./shared/cog-clip.mp4",
-                smear_seconds=smearAmount if renderType == "ui" else 0,
+                smear_seconds=smearAmount if is_ui_render_type(renderType) else 0,  # type: ignore[arg-type]
                 jwt_token=jwtToken or None,
                 forward_upon_wide_h=forwardUponWideH,
                 execution_context="cog",

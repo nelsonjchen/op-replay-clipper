@@ -10,6 +10,7 @@ The clipper can produce clips of:
 
 * comma.ai openpilot UI (including desired path, lane lines, modes, etc.)
   * Route metadata is branded into the clip for debugging and reporting, including the route id, platform, git remote, branch, commit, `Dirty` state, and a running route timer. Useful for posting clips in the [comma.ai Discord's #driving-feedback and/or #openpilot-experience channel](https://discord.comma.ai), [reddit](https://www.reddit.com/r/comma_ai), [Facebook](https://www.facebook.com/groups/706398630066928), or anywhere else that takes video. Very useful for [making outstanding bug reports](https://github.com/commaai/openpilot/wiki/FAQ#how-do-i-report-a-bug) as well as feedback on good behavior.
+* `ui-alt`, a UI layout variant that reserves a footer below the road view and shows a rotating steering wheel driven by the logged steering angle
 * Forward, Wide, and Driver Camera with no UI
   * Concatenate, cut, and convert the raw, low-compatibility, and separated HEVC files to one fairly compatible HEVC MP4 or super-compatible H.264 MP4 for easy sharing.
 * 360 Video
@@ -202,6 +203,7 @@ Examples:
 ```bash
 uv sync
 uv run python clip.py ui "https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
+uv run python clip.py ui-alt "https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
 uv run python clip.py forward "a2a0ccea32023010|2023-07-27--13-01-19" --demo
 ```
 

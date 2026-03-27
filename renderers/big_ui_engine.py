@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
 import logging
 import os
 import queue
@@ -17,6 +18,9 @@ CAMERA_SERVICE = "roadEncodeIdx"
 MODEL_SERVICE = "modelV2"
 TEXT_BOX_PADDING_X = 8
 TEXT_BOX_PADDING_Y = 4
+UI_ALT_FOOTER_MIN_HEIGHT = 220
+UI_ALT_FOOTER_MAX_HEIGHT = 320
+UI_ALT_FOOTER_HEIGHT_RATIO = 0.25
 logger = logging.getLogger("big_ui_engine")
 
 
@@ -51,6 +55,27 @@ class RenderStep:
     state: dict
 
 
+@dataclass(frozen=True)
+class LayoutRects:
+    road_rect: tuple[int, int, int, int]
+    footer_rect: tuple[int, int, int, int] | None = None
+
+
+@dataclass(frozen=True)
+class FooterTelemetry:
+    steering_angle_deg: float = 0.0
+    driver_gas: float = 0.0
+    driver_brake: float = 0.0
+    driver_gas_pressed: bool = False
+    driver_brake_pressed: bool = False
+    op_gas: float = 0.0
+    op_brake: float = 0.0
+    accel_cmd: float = 0.0
+    accel_out: float | None = None
+    a_ego: float | None = None
+    a_target: float | None = None
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Repo-owned BIG UI clip renderer")
     parser.add_argument("route", help="Route ID as dongle/route")
@@ -66,10 +91,82 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--windowed", action="store_true", help="Show window")
     parser.add_argument("--no-metadata", action="store_true", help="Disable metadata overlay")
     parser.add_argument("--no-time-overlay", action="store_true", help="Disable time overlay")
+    parser.add_argument(
+        "--layout-mode",
+        choices=["default", "alt"],
+        default="default",
+        help="UI layout mode. alt reserves a footer below the road view for a rotating steering wheel.",
+    )
     args = parser.parse_args()
     if args.end <= args.start:
         parser.error(f"end ({args.end}) must be greater than start ({args.start})")
     return args
+
+
+def build_layout_rects(*, width: int, height: int, layout_mode: str) -> LayoutRects:
+    if layout_mode == "default":
+        return LayoutRects(road_rect=(0, 0, width, height))
+    if layout_mode != "alt":
+        raise ValueError(f"Unknown layout mode: {layout_mode}")
+
+    footer_height = int(height * UI_ALT_FOOTER_HEIGHT_RATIO)
+    footer_height = max(UI_ALT_FOOTER_MIN_HEIGHT, min(UI_ALT_FOOTER_MAX_HEIGHT, footer_height))
+    footer_height = min(footer_height, max(1, height - 1))
+    road_height = height - footer_height
+    return LayoutRects(
+        road_rect=(0, 0, width, road_height),
+        footer_rect=(0, road_height, width, footer_height),
+    )
+
+
+def extract_steering_angle_deg(state: Mapping[str, object]) -> float:
+    car_state_msg = state.get("carState")
+    if car_state_msg is None:
+        return 0.0
+    car_state = getattr(car_state_msg, "carState", None)
+    if car_state is None:
+        return 0.0
+    return float(getattr(car_state, "steeringAngleDeg", 0.0))
+
+
+def _clip01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
+    car_state_msg = state.get("carState")
+    car_control_msg = state.get("carControl")
+    car_output_msg = state.get("carOutput")
+    longitudinal_plan_msg = state.get("longitudinalPlan")
+
+    car_state = getattr(car_state_msg, "carState", None) if car_state_msg is not None else None
+    car_control = getattr(car_control_msg, "carControl", None) if car_control_msg is not None else None
+    car_output = getattr(car_output_msg, "carOutput", None) if car_output_msg is not None else None
+    longitudinal_plan = (
+        getattr(longitudinal_plan_msg, "longitudinalPlan", None) if longitudinal_plan_msg is not None else None
+    )
+
+    accel_cmd = float(getattr(getattr(car_control, "actuators", None), "accel", 0.0) or 0.0)
+    accel_out_attr = getattr(getattr(car_output, "actuatorsOutput", None), "accel", None)
+    accel_out = float(accel_out_attr) if accel_out_attr is not None else None
+
+    a_target_attr = getattr(longitudinal_plan, "aTarget", None)
+    if a_target_attr is None and longitudinal_plan is not None and len(getattr(longitudinal_plan, "accels", [])):
+        a_target_attr = longitudinal_plan.accels[0]
+
+    return FooterTelemetry(
+        steering_angle_deg=float(getattr(car_state, "steeringAngleDeg", 0.0) or 0.0),
+        driver_gas=_clip01(float(getattr(car_state, "gasDEPRECATED", 0.0) or 0.0)),
+        driver_brake=_clip01(float(getattr(car_state, "brake", 0.0) or 0.0)),
+        driver_gas_pressed=bool(getattr(car_state, "gasPressed", False)),
+        driver_brake_pressed=bool(getattr(car_state, "brakePressed", False)),
+        op_gas=_clip01(accel_cmd / 4.0),
+        op_brake=_clip01(-accel_cmd / 4.0),
+        accel_cmd=accel_cmd,
+        accel_out=accel_out,
+        a_ego=float(getattr(car_state, "aEgo", 0.0)) if car_state is not None else None,
+        a_target=float(a_target_attr) if a_target_attr is not None else None,
+    )
 
 
 def setup_env(output_path: str, *, big: bool, target_mb: float, duration: int, headless: bool) -> None:
@@ -363,6 +460,188 @@ def render_overlays(gui_app, font, big, metadata, title, route_seconds, show_met
         draw_text_box(title, 0, 60, title_size, gui_app, font, center=True)
 
 
+class SteeringFooterRenderer:
+    def __init__(self, *, gui_app, label_font, value_font) -> None:
+        self._label_font = label_font
+        self._value_font = value_font
+        self._wheel_texture = gui_app.texture("icons_mici/wheel.png", 220, 220)
+
+    def _draw_meter(self, rect, *, label: str, value: float, color, value_text: str, active: bool) -> None:
+        import pyray as rl
+
+        label_color = rl.Color(255, 255, 255, 150)
+        value_color = rl.WHITE if active or value > 0 else rl.Color(255, 255, 255, 200)
+        track = rl.Color(255, 255, 255, 22)
+        fill_alpha = 255 if active else 220
+        fill_color = rl.Color(color.r, color.g, color.b, fill_alpha)
+        label_size = 20
+        value_size = 24
+        bar_height = 16
+        bar_y = rect.y + 34
+
+        rl.draw_text_ex(self._label_font, label, rl.Vector2(rect.x, rect.y), label_size, 0, label_color)
+        value_width = rl.measure_text_ex(self._value_font, value_text, value_size, 0).x
+        rl.draw_text_ex(
+            self._value_font,
+            value_text,
+            rl.Vector2(rect.x + rect.width - value_width, rect.y + 1),
+            value_size,
+            0,
+            value_color,
+        )
+        rl.draw_rectangle_rounded(rl.Rectangle(rect.x, bar_y, rect.width, bar_height), 0.45, 10, track)
+
+        fill_value = value
+        if active and fill_value < 0.06:
+            fill_value = 0.06
+        fill_width = max(0.0, rect.width * _clip01(fill_value))
+        if fill_width > 0:
+            rl.draw_rectangle_rounded(rl.Rectangle(rect.x, bar_y, fill_width, bar_height), 0.45, 10, fill_color)
+
+    def _draw_accel_summary(self, rect, *, telemetry: FooterTelemetry) -> None:
+        import pyray as rl
+
+        label_color = rl.Color(255, 255, 255, 150)
+        value_color = rl.WHITE
+        label_size = 18
+        value_size = 24
+        sections = []
+        if telemetry.a_ego is not None:
+            sections.append(("A EGO", f"{telemetry.a_ego:+.2f}"))
+        if telemetry.a_target is not None:
+            sections.append(("A TARGET", f"{telemetry.a_target:+.2f}"))
+        sections.append(("CMD", f"{telemetry.accel_cmd:+.2f}"))
+        if telemetry.accel_out is not None:
+            sections.append(("OUT", f"{telemetry.accel_out:+.2f}"))
+
+        section_width = rect.width / max(1, len(sections))
+        for idx, (label, value) in enumerate(sections):
+            x = rect.x + idx * section_width
+            rl.draw_text_ex(self._label_font, label, rl.Vector2(x, rect.y), label_size, 0, label_color)
+            rl.draw_text_ex(self._value_font, value, rl.Vector2(x, rect.y + 24), value_size, 0, value_color)
+
+    def render(self, rect, *, telemetry: FooterTelemetry) -> None:
+        import pyray as rl
+
+        panel_bg = rl.Color(5, 12, 18, 255)
+        panel_bg_bottom = rl.Color(11, 26, 37, 255)
+        divider = rl.Color(255, 255, 255, 28)
+        text_dim = rl.Color(255, 255, 255, 150)
+        green = rl.Color(94, 214, 135, 255)
+        orange = rl.Color(255, 176, 87, 255)
+        outer_pad_x = 34
+        outer_pad_y = 24
+        wheel_col_w = rect.width * 0.34
+        right_x = rect.x + wheel_col_w + outer_pad_x
+        right_w = rect.width - wheel_col_w - (2 * outer_pad_x)
+        col_gap = 36
+        meter_w = max(120.0, (right_w - col_gap) / 2)
+        driver_col_x = right_x
+        op_col_x = right_x + meter_w + col_gap
+
+        rl.draw_rectangle_gradient_v(
+            int(rect.x),
+            int(rect.y),
+            int(rect.width),
+            int(rect.height),
+            panel_bg,
+            panel_bg_bottom,
+        )
+        rl.draw_line(
+            int(rect.x),
+            int(rect.y),
+            int(rect.x + rect.width),
+            int(rect.y),
+            divider,
+        )
+
+        wheel_size = min(int(rect.height * 0.72), int(rect.width * 0.17))
+        wheel_size = max(124, wheel_size)
+        wheel_center_x = rect.x + wheel_col_w * 0.5
+        wheel_center_y = rect.y + rect.height / 2 + 8
+        src_rect = rl.Rectangle(0, 0, self._wheel_texture.width, self._wheel_texture.height)
+        dest_rect = rl.Rectangle(wheel_center_x, wheel_center_y, wheel_size, wheel_size)
+        origin = (wheel_size / 2, wheel_size / 2)
+
+        rl.draw_texture_pro(
+            self._wheel_texture,
+            src_rect,
+            dest_rect,
+            origin,
+            -telemetry.steering_angle_deg,
+            rl.WHITE,
+        )
+
+        rl.draw_text_ex(
+            self._label_font,
+            "STEERING",
+            rl.Vector2(rect.x + outer_pad_x, rect.y + outer_pad_y),
+            22,
+            0,
+            text_dim,
+        )
+        rl.draw_text_ex(
+            self._value_font,
+            f"{telemetry.steering_angle_deg:+.1f} deg",
+            rl.Vector2(rect.x + outer_pad_x, rect.y + rect.height - 70),
+            34,
+            0,
+            rl.WHITE,
+        )
+        rl.draw_line(
+            int(rect.x + wheel_col_w),
+            int(rect.y + outer_pad_y),
+            int(rect.x + wheel_col_w),
+            int(rect.y + rect.height - outer_pad_y),
+            divider,
+        )
+
+        section_title_y = rect.y + outer_pad_y
+        first_meter_y = section_title_y + 34
+        second_meter_y = first_meter_y + 74
+        accel_summary_y = second_meter_y + 82
+
+        rl.draw_text_ex(self._label_font, "DRIVER", rl.Vector2(driver_col_x, section_title_y), 22, 0, text_dim)
+        rl.draw_text_ex(self._label_font, "OPENPILOT", rl.Vector2(op_col_x, section_title_y), 22, 0, text_dim)
+
+        self._draw_meter(
+            rl.Rectangle(driver_col_x, first_meter_y, meter_w, 56),
+            label="GAS",
+            value=telemetry.driver_gas,
+            color=green,
+            value_text="ON" if telemetry.driver_gas_pressed else "OFF",
+            active=telemetry.driver_gas_pressed,
+        )
+        self._draw_meter(
+            rl.Rectangle(driver_col_x, second_meter_y, meter_w, 56),
+            label="BRAKE",
+            value=telemetry.driver_brake,
+            color=orange,
+            value_text="ON" if telemetry.driver_brake_pressed else "OFF",
+            active=telemetry.driver_brake_pressed,
+        )
+        self._draw_meter(
+            rl.Rectangle(op_col_x, first_meter_y, meter_w, 56),
+            label="THROTTLE",
+            value=telemetry.op_gas,
+            color=green,
+            value_text=f"{telemetry.op_gas * 100:.0f}%",
+            active=telemetry.op_gas > 0,
+        )
+        self._draw_meter(
+            rl.Rectangle(op_col_x, second_meter_y, meter_w, 56),
+            label="BRAKE",
+            value=telemetry.op_brake,
+            color=orange,
+            value_text=f"{telemetry.op_brake * 100:.0f}%",
+            active=telemetry.op_brake > 0,
+        )
+        self._draw_accel_summary(
+            rl.Rectangle(right_x, accel_summary_y, right_w, 54),
+            telemetry=telemetry,
+        )
+
+
 def clip(
     route,
     output: str,
@@ -375,6 +654,7 @@ def clip(
     show_metadata: bool,
     show_time: bool,
     use_qcam: bool,
+    layout_mode: str,
 ) -> None:
     import tqdm
     import pyray as rl
@@ -415,8 +695,16 @@ def clip(
         gui_app.init_window("repo-owned clip", fps=FRAMERATE)
 
         road_view = AugmentedRoadView()
-        road_view.set_rect(rl.Rectangle(0, 0, gui_app.width, gui_app.height))
+        layout_rects = build_layout_rects(width=gui_app.width, height=gui_app.height, layout_mode=layout_mode)
+        road_view.set_rect(rl.Rectangle(*layout_rects.road_rect))
         font = gui_app.font(FontWeight.NORMAL)
+        steering_footer = None
+        if layout_rects.footer_rect is not None:
+            steering_footer = SteeringFooterRenderer(
+                gui_app=gui_app,
+                label_font=gui_app.font(FontWeight.MEDIUM),
+                value_font=gui_app.font(FontWeight.BOLD),
+            )
         timer.lap("setup")
 
         frame_idx = 0
@@ -441,6 +729,11 @@ def clip(
                 ui_state.update()
                 if should_render:
                     road_view.render()
+                    if layout_rects.footer_rect is not None and steering_footer is not None:
+                        steering_footer.render(
+                            rl.Rectangle(*layout_rects.footer_rect),
+                            telemetry=extract_footer_telemetry(step.state),
+                        )
                     render_overlays(
                         gui_app,
                         font,
@@ -505,6 +798,7 @@ def main() -> int:
         show_metadata=not args.no_metadata,
         show_time=not args.no_time_overlay,
         use_qcam=args.qcam,
+        layout_mode=args.layout_mode,
     )
     return 0
 

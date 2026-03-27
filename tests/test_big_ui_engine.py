@@ -73,6 +73,105 @@ def test_build_render_steps_uses_frame_ids_instead_of_log_mono_time() -> None:
     assert steps[0].route_seconds == 60.1
 
 
+def test_build_layout_rects_default_uses_full_canvas() -> None:
+    rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="default")
+
+    assert rects.road_rect == (0, 0, 1920, 1080)
+    assert rects.footer_rect is None
+
+
+def test_build_layout_rects_alt_reserves_footer() -> None:
+    rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="alt")
+
+    assert rects.road_rect == (0, 0, 1920, 810)
+    assert rects.footer_rect == (0, 810, 1920, 270)
+
+
+def test_extract_steering_angle_deg_uses_car_state_when_present() -> None:
+    state = {
+        "carState": FakeMsg("carState", 0, SimpleNamespace(steeringAngleDeg=12.5)),
+    }
+
+    assert big_ui_engine.extract_steering_angle_deg(state) == 12.5
+
+
+def test_extract_steering_angle_deg_defaults_to_zero_when_missing() -> None:
+    assert big_ui_engine.extract_steering_angle_deg({}) == 0.0
+
+
+def test_extract_footer_telemetry_reads_driver_and_op_inputs() -> None:
+    state = {
+        "carState": FakeMsg(
+            "carState",
+            0,
+            SimpleNamespace(
+                steeringAngleDeg=12.5,
+                gasDEPRECATED=0.25,
+                brake=0.1,
+                gasPressed=True,
+                brakePressed=False,
+                aEgo=0.4,
+            ),
+        ),
+        "carControl": FakeMsg(
+            "carControl",
+            0,
+            SimpleNamespace(
+                actuators=SimpleNamespace(accel=1.2),
+            ),
+        ),
+        "carOutput": FakeMsg(
+            "carOutput",
+            0,
+            SimpleNamespace(
+                actuatorsOutput=SimpleNamespace(accel=1.1),
+            ),
+        ),
+        "longitudinalPlan": FakeMsg(
+            "longitudinalPlan",
+            0,
+            SimpleNamespace(aTarget=0.6, accels=[0.7]),
+        ),
+    }
+
+    telemetry = big_ui_engine.extract_footer_telemetry(state)
+
+    assert telemetry.steering_angle_deg == 12.5
+    assert telemetry.driver_gas == 0.25
+    assert telemetry.driver_brake == 0.1
+    assert telemetry.driver_gas_pressed is True
+    assert telemetry.driver_brake_pressed is False
+    assert telemetry.op_gas == 0.3
+    assert telemetry.op_brake == 0.0
+    assert telemetry.accel_cmd == 1.2
+    assert telemetry.accel_out == 1.1
+    assert telemetry.a_ego == 0.4
+    assert telemetry.a_target == 0.6
+
+
+def test_extract_footer_telemetry_falls_back_to_plan_accels_and_brake_command() -> None:
+    state = {
+        "carControl": FakeMsg(
+            "carControl",
+            0,
+            SimpleNamespace(
+                actuators=SimpleNamespace(accel=-2.0),
+            ),
+        ),
+        "longitudinalPlan": FakeMsg(
+            "longitudinalPlan",
+            0,
+            SimpleNamespace(accels=[-1.5]),
+        ),
+    }
+
+    telemetry = big_ui_engine.extract_footer_telemetry(state)
+
+    assert telemetry.op_gas == 0.0
+    assert telemetry.op_brake == 0.5
+    assert telemetry.a_target == -1.5
+
+
 def test_ui_environment_forces_scale_one() -> None:
     env = render_runtime.configure_ui_environment({})
     assert env["SCALE"] == "1"
