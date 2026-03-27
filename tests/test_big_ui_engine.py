@@ -149,6 +149,11 @@ def test_build_layout_rects_alt_with_wide_can_keep_footer_as_addon() -> None:
     assert rects.footer_rect == (0, 2160, 2160, 270)
 
 
+def test_compute_ui_alt_panel_label_position_uses_safe_inset() -> None:
+    assert big_ui_engine.compute_ui_alt_panel_label_position((0, 0, 2160, 1080)) == (32, 28)
+    assert big_ui_engine.compute_ui_alt_panel_label_position((0, 1080, 2160, 1080)) == (32, 1108)
+
+
 def test_extract_steering_angle_deg_uses_car_state_when_present() -> None:
     state = {
         "carState": FakeMsg("carState", 0, SimpleNamespace(steeringAngleDeg=12.5)),
@@ -845,8 +850,8 @@ def test_render_overlays_insets_timer_inside_video_frame(monkeypatch) -> None:
     assert calls == [
         (
             "01:30",
-            gui_app.width - (len("01:30") * 8) - big_ui_engine.TEXT_BOX_PADDING_X - 10,
-            big_ui_engine.TEXT_BOX_PADDING_Y + 10,
+            gui_app.width - (len("01:30") * 8) - big_ui_engine.TEXT_BOX_PADDING_X - big_ui_engine.TIME_OVERLAY_EDGE_MARGIN_BIG,
+            big_ui_engine.TEXT_BOX_PADDING_Y + big_ui_engine.TIME_OVERLAY_EDGE_MARGIN_BIG,
             24,
         )
     ]

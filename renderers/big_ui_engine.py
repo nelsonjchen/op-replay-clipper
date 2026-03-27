@@ -20,9 +20,13 @@ WIDE_CAMERA_SERVICE = "wideRoadEncodeIdx"
 MODEL_SERVICE = "modelV2"
 TEXT_BOX_PADDING_X = 8
 TEXT_BOX_PADDING_Y = 4
+TIME_OVERLAY_EDGE_MARGIN_BIG = 24
+TIME_OVERLAY_EDGE_MARGIN_SMALL = 14
 UI_ALT_FOOTER_MIN_HEIGHT = 220
 UI_ALT_FOOTER_MAX_HEIGHT = 320
 UI_ALT_FOOTER_HEIGHT_RATIO = 0.25
+UI_ALT_PANEL_LABEL_INSET_X = 32
+UI_ALT_PANEL_LABEL_INSET_Y = 28
 UI_ALT_FOOTER_OUTER_PAD_X = 34.0
 UI_ALT_FOOTER_OUTER_PAD_Y = 24.0
 UI_ALT_FOOTER_COLUMN_GAP = 36.0
@@ -257,6 +261,21 @@ def build_footer_panel_layout(rect) -> FooterPanelLayout:
         meter_w=meter_w,
         confidence_rect=confidence_rect,
         accel_rect=(right_x, accel_summary_y, main_panel_w, 54),
+    )
+
+
+def compute_ui_alt_panel_label_position(rect: tuple[int, int, int, int]) -> tuple[int, int]:
+    return (
+        int(rect[0] + UI_ALT_PANEL_LABEL_INSET_X),
+        int(rect[1] + UI_ALT_PANEL_LABEL_INSET_Y),
+    )
+
+
+def compute_time_overlay_position(*, gui_width: int, time_width: int, big: bool) -> tuple[int, int]:
+    edge_margin = TIME_OVERLAY_EDGE_MARGIN_BIG if big else TIME_OVERLAY_EDGE_MARGIN_SMALL
+    return (
+        gui_width - time_width - TEXT_BOX_PADDING_X - edge_margin,
+        TEXT_BOX_PADDING_Y + edge_margin,
     )
 
 
@@ -918,16 +937,17 @@ def render_overlays(gui_app, font, big, metadata, title, route_seconds, show_met
     metadata_size = 16 if big else 12
     title_size = 32 if big else 24
     time_size = 24 if big else 16
-    time_edge_margin = 10 if big else 6
+    time_edge_margin = TIME_OVERLAY_EDGE_MARGIN_BIG if big else TIME_OVERLAY_EDGE_MARGIN_SMALL
 
     time_width = 0
     if show_time:
         time_text = f"{int(route_seconds) // 60:02d}:{int(route_seconds) % 60:02d}"
         time_width = int(measure_text_cached(font, time_text, time_size).x)
+        time_x, time_y = compute_time_overlay_position(gui_width=gui_app.width, time_width=time_width, big=big)
         draw_text_box(
             time_text,
-            gui_app.width - time_width - TEXT_BOX_PADDING_X - time_edge_margin,
-            TEXT_BOX_PADDING_Y + time_edge_margin,
+            time_x,
+            time_y,
             time_size,
             gui_app,
             font,
@@ -1471,9 +1491,11 @@ def clip(
                     if wide_view is not None:
                         wide_view.render()
                         redraw_ui_alt_dual_view_overlays(road_view, wide_view, step.state)
-                        draw_text_box("ROAD", layout_rects.road_rect[0] + 18, layout_rects.road_rect[1] + 18, 22, gui_app, font)
+                        road_label_x, road_label_y = compute_ui_alt_panel_label_position(layout_rects.road_rect)
+                        draw_text_box("ROAD", road_label_x, road_label_y, 22, gui_app, font)
                         assert layout_rects.wide_rect is not None
-                        draw_text_box("WIDE", layout_rects.wide_rect[0] + 18, layout_rects.wide_rect[1] + 18, 22, gui_app, font)
+                        wide_label_x, wide_label_y = compute_ui_alt_panel_label_position(layout_rects.wide_rect)
+                        draw_text_box("WIDE", wide_label_x, wide_label_y, 22, gui_app, font)
                         rl.draw_line(
                             int(layout_rects.wide_rect[0]),
                             int(layout_rects.wide_rect[1]),
