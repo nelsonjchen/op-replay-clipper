@@ -208,6 +208,7 @@ def test_redraw_ui_alt_dual_view_overlays_redraws_both_huds(monkeypatch) -> None
         lambda road, wide, current_state: calls.append(("model", (road, wide, current_state))),
     )
     monkeypatch.setattr(big_ui_engine, "redraw_hud_overlay", lambda view: calls.append(("hud", view)))
+    monkeypatch.setattr(big_ui_engine, "draw_current_speed_overlay", lambda view: calls.append(("speed", view)))
 
     big_ui_engine.redraw_ui_alt_dual_view_overlays(road_view, wide_view, state)
 
@@ -215,6 +216,7 @@ def test_redraw_ui_alt_dual_view_overlays_redraws_both_huds(monkeypatch) -> None
         ("model", (road_view, wide_view, state)),
         ("hud", road_view),
         ("hud", wide_view),
+        ("speed", wide_view),
     ]
 
 
