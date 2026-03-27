@@ -40,12 +40,6 @@ class Predictor(BasePredictor):
             le=40,
             default=5,
         ),
-        forwardUponWideH: float = Input(
-            description="(Forward Upon Wide only) Vertical position of the forward overlay on the wide video. Different devices and calibrations may need different values.",
-            ge=1.0,
-            le=3.0,
-            default=2.2,
-        ),
         fileSize: int = Input(description="Target output size in MB. Actual size may vary.", ge=5, le=200, default=9),
         fileFormat: str = Input(
             description="Output codec. Auto is recommended: it uses HEVC for 360 renders and H.264 for the others. HEVC usually gives better quality for the size, but some browsers and devices do not play it well.",
@@ -77,7 +71,7 @@ class Predictor(BasePredictor):
                 output_path="./shared/cog-clip.mp4",
                 smear_seconds=smearAmount if is_ui_render_type(renderType) else 0,  # type: ignore[arg-type]
                 jwt_token=jwtToken or None,
-                forward_upon_wide_h=forwardUponWideH,
+                forward_upon_wide_h="auto",
                 execution_context="cog",
                 minimum_length_seconds=MIN_LENGTH_SECONDS,
                 maximum_length_seconds=MAX_LENGTH_SECONDS,

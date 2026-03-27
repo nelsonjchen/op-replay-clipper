@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Sequence
 
 from core.clip_orchestrator import ClipRequest, RenderType, is_ui_render_type, run_clip
+from core.forward_upon_wide import parse_forward_upon_wide_h
 from core.openpilot_bootstrap import bootstrap_openpilot, ensure_openpilot_checkout
 from core.openpilot_config import default_local_openpilot_root, default_openpilot_branch, default_openpilot_repo_url
 
@@ -43,7 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--openpilot-repo-url", default=default_openpilot_repo_url())
     parser.add_argument("-m", "--file-size-mb", type=int, default=9)
     parser.add_argument("--file-format", choices=["auto", "h264", "hevc"], default="auto")
-    parser.add_argument("--forward-upon-wide-h", type=float, default=2.2)
+    parser.add_argument("--forward-upon-wide-h", type=parse_forward_upon_wide_h, default="auto", help=argparse.SUPPRESS)
     parser.add_argument("--qcam", action="store_true")
     parser.add_argument("--windowed", action="store_true")
     parser.add_argument("--skip-openpilot-update", action="store_true")

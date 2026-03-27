@@ -11,6 +11,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from core.forward_upon_wide import (
+    DEFAULT_FORWARD_UPON_WIDE_H,
+    DEFAULT_FORWARD_UPON_WIDE_SCALE,
+    ForwardUponWideHInput,
+    ForwardUponWideLayout,
+    ForwardUponWideWarp,
+    is_auto_forward_upon_wide,
+    parse_forward_upon_wide_h,
+    resolve_auto_forward_upon_wide_layout,
+    resolve_auto_forward_upon_wide_warp,
+)
+
 RenderType = Literal[
     "forward",
     "wide",
@@ -33,7 +45,8 @@ class VideoRenderOptions:
     target_mb: int
     file_format: OutputFormat
     acceleration: AccelerationPolicy = "auto"
-    forward_upon_wide_h: float = 2.2
+    forward_upon_wide_h: ForwardUponWideHInput = DEFAULT_FORWARD_UPON_WIDE_H
+    openpilot_dir: str = ""
     output_path: str = "./shared/cog-clip.mp4"
 
 
@@ -98,6 +111,97 @@ def _probe_video_dimensions(path: Path) -> tuple[int, int] | None:
         return int(stream["width"]), int(stream["height"])
     except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
         return None
+
+
+def _manual_forward_upon_wide_layout(
+    *,
+    forward_dimensions: tuple[int, int],
+    wide_dimensions: tuple[int, int],
+    output_scale: int,
+    forward_upon_wide_h: float,
+) -> ForwardUponWideLayout:
+    wide_width = wide_dimensions[0] * output_scale
+    wide_height = wide_dimensions[1] * output_scale
+    overlay_width = max(1, int(round(forward_dimensions[0] * DEFAULT_FORWARD_UPON_WIDE_SCALE * output_scale)))
+    overlay_height = max(1, int(round(forward_dimensions[1] * DEFAULT_FORWARD_UPON_WIDE_SCALE * output_scale)))
+    x = max(0, min(wide_width - overlay_width, int(round((wide_width - overlay_width) / 2))))
+    y = max(0, min(wide_height - overlay_height, int(round((wide_height - overlay_height) / forward_upon_wide_h))))
+    return ForwardUponWideLayout(
+        overlay_width=overlay_width,
+        overlay_height=overlay_height,
+        x=x,
+        y=y,
+        source=f"manual/{forward_upon_wide_h}",
+    )
+
+
+def _resolve_forward_upon_wide_layout(
+    opts: VideoRenderOptions,
+    *,
+    route: str,
+    forward_dimensions: tuple[int, int],
+    wide_dimensions: tuple[int, int],
+    output_scale: int,
+) -> ForwardUponWideLayout:
+    if is_auto_forward_upon_wide(opts.forward_upon_wide_h):
+        layout = resolve_auto_forward_upon_wide_layout(
+            route,
+            data_dir=opts.data_dir,
+            openpilot_dir=opts.openpilot_dir,
+            forward_dimensions=forward_dimensions,
+            wide_dimensions=wide_dimensions,
+            output_scale=output_scale,
+        )
+        if layout is not None:
+            return layout
+        return _manual_forward_upon_wide_layout(
+            forward_dimensions=forward_dimensions,
+            wide_dimensions=wide_dimensions,
+            output_scale=output_scale,
+            forward_upon_wide_h=DEFAULT_FORWARD_UPON_WIDE_H,
+        )
+
+    return _manual_forward_upon_wide_layout(
+        forward_dimensions=forward_dimensions,
+        wide_dimensions=wide_dimensions,
+        output_scale=output_scale,
+        forward_upon_wide_h=float(opts.forward_upon_wide_h),
+    )
+
+
+def _forward_upon_wide_filter(layout: ForwardUponWideLayout) -> str:
+    return (
+        f"[1:v]scale={layout.overlay_width}:{layout.overlay_height},format=yuva420p,"
+        f"colorchannelmixer=aa=1[front];[0:v][front]overlay={layout.x}:{layout.y}[vout]"
+    )
+
+
+def _format_filter_float(value: float) -> str:
+    text = f"{value:.6f}"
+    text = text.rstrip("0").rstrip(".")
+    return text if text else "0"
+
+
+def _forward_upon_wide_warp_options(warp: ForwardUponWideWarp) -> str:
+    return (
+        f"x0={_format_filter_float(warp.x0)}:y0={_format_filter_float(warp.y0)}:"
+        f"x1={_format_filter_float(warp.x1)}:y1={_format_filter_float(warp.y1)}:"
+        f"x2={_format_filter_float(warp.x2)}:y2={_format_filter_float(warp.y2)}:"
+        f"x3={_format_filter_float(warp.x3)}:y3={_format_filter_float(warp.y3)}:"
+        "sense=destination:interpolation=cubic"
+    )
+
+
+def _forward_upon_wide_warp_chain(warp: ForwardUponWideWarp, *, source_stream_label: str, output_label: str) -> str:
+    perspective = _forward_upon_wide_warp_options(warp)
+    return (
+        f"color=white:size={warp.canvas_width}x{warp.canvas_height}[masksrc];"
+        f"{source_stream_label}scale={warp.canvas_width}:{warp.canvas_height},format=rgba,"
+        f"perspective={perspective}[front_rgb];"
+        f"[masksrc]format=gray,drawbox=x=0:y=0:w=iw:h=ih:color=black:t=2,"
+        f"perspective={perspective}[front_a];"
+        f"[front_rgb][front_a]alphamerge[{output_label}]"
+    )
 
 
 def _target_bitrate(target_mb: int, length_seconds: int) -> int:
@@ -235,7 +339,12 @@ def render_video_clip(opts: VideoRenderOptions) -> VideoRenderResult:
     wide_input = _concat_string(opts.data_dir, route, segments, "ecamera.hevc")
     driver_input = _concat_string(opts.data_dir, route, segments, "dcamera.hevc")
     first_segment = segments[0]
+    forward_dimensions = _probe_video_dimensions(_segment_file_path(opts.data_dir, route, first_segment, "fcamera.hevc"))
     wide_dimensions = _probe_video_dimensions(_segment_file_path(opts.data_dir, route, first_segment, "ecamera.hevc"))
+    if wide_dimensions is None:
+        wide_dimensions = (1928, 1208)
+    if forward_dimensions is None:
+        forward_dimensions = wide_dimensions
     wide_height = wide_dimensions[1] if wide_dimensions is not None else 1208
 
     if opts.render_type == "forward":
@@ -245,11 +354,32 @@ def render_video_clip(opts: VideoRenderOptions) -> VideoRenderResult:
     elif opts.render_type == "driver":
         command = _simple_render_command(opts, accel, driver_input)
     elif opts.render_type == "forward_upon_wide":
+        warp = None
+        if is_auto_forward_upon_wide(opts.forward_upon_wide_h):
+            warp = resolve_auto_forward_upon_wide_warp(
+                route,
+                data_dir=opts.data_dir,
+                openpilot_dir=opts.openpilot_dir,
+                forward_dimensions=forward_dimensions,
+                wide_dimensions=wide_dimensions,
+                output_scale=1,
+            )
+        if warp is not None:
+            filter_complex = f"{_forward_upon_wide_warp_chain(warp, source_stream_label='[1:v]', output_label='front')};[0:v][front]overlay=0:0[vout]"
+        else:
+            layout = _resolve_forward_upon_wide_layout(
+                opts,
+                route=route,
+                forward_dimensions=forward_dimensions,
+                wide_dimensions=wide_dimensions,
+                output_scale=1,
+            )
+            filter_complex = _forward_upon_wide_filter(layout)
         command = _complex_render_command(
             opts,
             accel,
             [wide_input, forward_input],
-            f"[1:v]scale=iw/4.5:ih/4.5,format=yuva420p,colorchannelmixer=aa=1[front];[0:v][front]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/{opts.forward_upon_wide_h}[vout]",
+            filter_complex,
         )
     elif opts.render_type == "360":
         command = _complex_render_command(
@@ -259,11 +389,46 @@ def render_video_clip(opts: VideoRenderOptions) -> VideoRenderResult:
             f"[0:v]pad=iw:ih+290:0:290:color=#160000,crop=iw:{wide_height}[driver];[driver][1:v]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
         )
     elif opts.render_type == "360_forward_upon_wide":
+        warp = None
+        if is_auto_forward_upon_wide(opts.forward_upon_wide_h):
+            warp = resolve_auto_forward_upon_wide_warp(
+                route,
+                data_dir=opts.data_dir,
+                openpilot_dir=opts.openpilot_dir,
+                forward_dimensions=forward_dimensions,
+                wide_dimensions=wide_dimensions,
+                output_scale=2,
+            )
+        if warp is not None:
+            filter_complex = (
+                f"[1:v]scale=iw*2:ih*2[wide];"
+                f"{_forward_upon_wide_warp_chain(warp, source_stream_label='[2:v]', output_label='front')};"
+                f"[wide][front]overlay=0:0[fuw];"
+                f"[0:v]scale=iw*2:ih*2,pad=iw:ih+290:0:290:color=#160000,crop=iw:{wide_height * 2}[driver];"
+                f"[driver][fuw]hstack=inputs=2[v];"
+                "[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]"
+            )
+        else:
+            layout = _resolve_forward_upon_wide_layout(
+                opts,
+                route=route,
+                forward_dimensions=forward_dimensions,
+                wide_dimensions=wide_dimensions,
+                output_scale=2,
+            )
+            filter_complex = (
+                f"[2:v]scale={layout.overlay_width}:{layout.overlay_height},format=yuva420p,colorchannelmixer=aa=1[front];"
+                f"[1:v]scale=iw*2:ih*2[wide];"
+                f"[wide][front]overlay={layout.x}:{layout.y}[fuw];"
+                f"[0:v]scale=iw*2:ih*2,pad=iw:ih+290:0:290:color=#160000,crop=iw:{wide_height * 2}[driver];"
+                f"[driver][fuw]hstack=inputs=2[v];"
+                "[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]"
+            )
         command = _complex_render_command(
             opts,
             accel,
             [driver_input, wide_input, forward_input],
-            f"[2:v]scale=iw/2.25:ih/2.25,format=yuva420p,colorchannelmixer=aa=1[front];[1:v]scale=iw*2:ih*2[wide];[wide][front]overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/{opts.forward_upon_wide_h}[fuw];[0:v]scale=iw*2:ih*2,pad=iw:ih+290:0:290:color=#160000,crop=iw:{wide_height * 2}[driver];[driver][fuw]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
+            filter_complex,
         )
     else:
         raise ValueError(f"Invalid render_type: {opts.render_type}")
@@ -287,11 +452,12 @@ if __name__ == "__main__":
         "360_forward_upon_wide",
     ], default="forward")
     parser.add_argument("--data-dir", default="shared/data_dir")
+    parser.add_argument("--openpilot-dir", default="")
     parser.add_argument("route_or_segment")
     parser.add_argument("start_seconds", type=int)
     parser.add_argument("length_seconds", type=int)
     parser.add_argument("--file-size-mb", type=int, default=25)
-    parser.add_argument("--forward-upon-wide-h", type=float, default=2.2)
+    parser.add_argument("--forward-upon-wide-h", type=parse_forward_upon_wide_h, default=DEFAULT_FORWARD_UPON_WIDE_H)
     parser.add_argument("--accel", choices=["auto", "cpu", "videotoolbox", "nvidia"], default="auto")
     parser.add_argument("--format", choices=["h264", "hevc"], default="h264")
     parser.add_argument("--output", default="./shared/cog-clip.mp4")
@@ -308,6 +474,7 @@ if __name__ == "__main__":
             file_format=args.format,
             acceleration=args.accel,
             forward_upon_wide_h=args.forward_upon_wide_h,
+            openpilot_dir=args.openpilot_dir,
             output_path=args.output,
         )
     )

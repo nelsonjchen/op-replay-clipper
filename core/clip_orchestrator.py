@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 from core import route_downloader, route_inputs
+from core.forward_upon_wide import ForwardUponWideHInput, is_auto_forward_upon_wide
 from core.openpilot_config import default_image_openpilot_root
 from renderers import ui_renderer, video_renderer
 
@@ -47,7 +48,7 @@ class ClipRequest:
     output_path: str = "./shared/cog-clip.mp4"
     smear_seconds: int = 0
     jwt_token: str | None = None
-    forward_upon_wide_h: float = 2.2
+    forward_upon_wide_h: ForwardUponWideHInput = 2.2
     explicit_data_dir: str | None = None
     data_root: str = "./shared/data_dir"
     execution_context: ExecutionContext = "local"
@@ -74,7 +75,7 @@ class ClipPlan:
     decompress_logs: bool
     smear_seconds: int
     local_acceleration: LocalAccel
-    forward_upon_wide_h: float
+    forward_upon_wide_h: ForwardUponWideHInput
     jwt_token: str | None
     openpilot_dir: str
     headless: bool
@@ -109,10 +110,18 @@ def normalize_target_mb(target_mb: int, execution_context: ExecutionContext) -> 
     return max(1, target_mb)
 
 
-def select_download_file_types(render_type: RenderType, *, qcam: bool) -> tuple[str, ...]:
+def select_download_file_types(
+    render_type: RenderType,
+    *,
+    qcam: bool,
+    forward_upon_wide_h: ForwardUponWideHInput = 2.2,
+) -> tuple[str, ...]:
     if is_ui_render_type(render_type) and qcam:
         return ("qcameras", "logs")
-    return RENDER_TYPE_FILE_TYPES[render_type]
+    file_types = RENDER_TYPE_FILE_TYPES[render_type]
+    if render_type in ("forward_upon_wide", "360_forward_upon_wide") and is_auto_forward_upon_wide(forward_upon_wide_h):
+        return (*file_types, "qlogs", "logs")
+    return file_types
 
 
 def resolve_data_dir(route: str, data_root: str, explicit_data_dir: str | None) -> Path:
@@ -147,7 +156,11 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
         file_format=normalize_output_format(request.render_type, request.file_format),
         output_path=Path(request.output_path).expanduser().resolve(),
         data_dir=resolve_data_dir(parsed.route, request.data_root, request.explicit_data_dir),
-        download_file_types=select_download_file_types(request.render_type, qcam=request.qcam),
+        download_file_types=select_download_file_types(
+            request.render_type,
+            qcam=request.qcam,
+            forward_upon_wide_h=request.forward_upon_wide_h,
+        ),
         decompress_logs=not is_ui_render_type(request.render_type),
         smear_seconds=max(0, request.smear_seconds),
         local_acceleration=request.local_acceleration,
@@ -213,6 +226,7 @@ def run_clip(request: ClipRequest) -> ClipResult:
             file_format=plan.file_format,
             acceleration=request.local_acceleration,
             forward_upon_wide_h=plan.forward_upon_wide_h,
+            openpilot_dir=plan.openpilot_dir,
             output_path=str(plan.output_path),
         )
     )

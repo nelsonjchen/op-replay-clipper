@@ -16,7 +16,7 @@ The clipper can produce clips of:
 * 360 Video
   * Rendered from Wide and Driver Camera. Uploadable to YouTube, viewable in VLC, loadable in 360 video editing software such as Insta360 Studio or even the Insta360 mobile app, and accepted by any video players or web services that take 360 videos.
 * Forward Upon Wide and 360 Forward Upon Wide
-  * Forward video is overlayed atop the wide video. Not perfect, but usable.
+  * Forward video is automatically projected onto the wide video using logged camera calibration. Not perfect, but much better aligned than the old manual overlay.
   * 360 Forward Upon Wide scales and renders the final result at a higher resolution to assist in reframing the 360 video to a normal video if that's what you want.
 
 All clip options have a configurable target file size option as platforms like Discord limit file upload sizes.
@@ -335,7 +335,7 @@ There may be alternative software that'll do it and I will take pull requests to
 
 The 360 Forward Upon Wide rendering option scales input videos and renders the final result in a much higher 8K resolution to assist reframing with a high resolution forward video. The normal 360 option just glues the videos together. 
 
-If wanting to use 360 Forward Upon Wide, test with the non-360 Forward Upon Wide option and start with a value for `forwardUponWideH` around "1.9" to dial in that value in first for that overlay before using the 360 Forward Upon Wide option to save money and time.
+If wanting to use 360 Forward Upon Wide, test with the non-360 Forward Upon Wide option first so you can quickly sanity-check the route's automatic camera alignment before paying for the larger 360 output.
 
 ## Credits
 
