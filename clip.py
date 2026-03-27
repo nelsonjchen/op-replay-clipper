@@ -6,17 +6,24 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
-from core.clip_orchestrator import ClipRequest, RenderType, is_ui_render_type, run_clip
+from core.clip_orchestrator import (
+    ClipRequest,
+    RenderType,
+    is_openpilot_render_type,
+    is_smear_render_type,
+    run_clip,
+)
 from core.openpilot_bootstrap import bootstrap_openpilot, ensure_openpilot_checkout
 from core.openpilot_config import default_local_openpilot_root, default_openpilot_branch, default_openpilot_repo_url
 
 
-DEMO_ROUTE = "a2a0ccea32023010|2023-07-27--13-01-19"
+DEMO_ROUTE = "5beb9b58bd12b691|0000010a--a51155e496"
 DEMO_START_SECONDS = 90
 DEMO_LENGTH_SECONDS = 15
 RENDER_TYPES: tuple[RenderType, ...] = (
     "ui",
     "ui-alt",
+    "driver-debug",
     "forward",
     "wide",
     "driver",
@@ -70,7 +77,7 @@ def _resolve_route_and_timing(args: argparse.Namespace) -> tuple[str, int, int]:
 def _prepare_openpilot_if_needed(args: argparse.Namespace) -> str:
     openpilot_path = Path(args.openpilot_dir).expanduser().resolve()
     openpilot_dir = str(openpilot_path)
-    if not is_ui_render_type(args.render_type):
+    if not is_openpilot_render_type(args.render_type):
         return openpilot_dir
     if args.skip_openpilot_update and not openpilot_path.exists():
         raise SystemExit(
@@ -108,7 +115,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 target_mb=args.file_size_mb,
                 file_format=args.file_format,
                 output_path=args.output,
-                smear_seconds=args.smear_seconds if is_ui_render_type(args.render_type) else 0,
+                smear_seconds=args.smear_seconds if is_smear_render_type(args.render_type) else 0,
                 jwt_token=args.jwt_token or None,
                 forward_upon_wide_h=args.forward_upon_wide_h,
                 explicit_data_dir=args.data_dir or None,

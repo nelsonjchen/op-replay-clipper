@@ -11,7 +11,7 @@ import replicate
 from core import route_inputs
 
 DEFAULT_MODEL = "nelsonjchen/op-replay-clipper-beta:e2ea1155bcceb27dfb5609f866e65cb2f2f0728d114a84733cf790ff3ca679d6"
-DEFAULT_URL = "https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496"
+DEFAULT_URL = "https://connect.comma.ai/5beb9b58bd12b691/0000010a--a51155e496/90/105"
 DEFAULT_OUTPUT = Path("./shared/replicate-run-output.mp4")
 
 
@@ -21,7 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--url", default=DEFAULT_URL, help="connect.comma.ai clip URL.")
     parser.add_argument(
         "--render-type",
-        choices=["ui", "ui-alt", "forward", "wide", "driver", "360", "forward_upon_wide", "360_forward_upon_wide"],
+        choices=["ui", "ui-alt", "driver-debug", "forward", "wide", "driver", "360", "forward_upon_wide", "360_forward_upon_wide"],
         default="ui",
         help="Clip render type.",
     )

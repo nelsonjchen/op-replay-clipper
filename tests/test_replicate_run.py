@@ -61,6 +61,22 @@ def test_build_input_allows_ui_alt_render_type() -> None:
     assert payload["renderType"] == "ui-alt"
 
 
+def test_build_input_allows_driver_debug_render_type() -> None:
+    args = SimpleNamespace(
+        notes="",
+        url="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496",
+        file_size=9,
+        jwt_token="",
+        file_format="auto",
+        render_type="driver-debug",
+        smear_amount=5,
+        forward_upon_wide_h=2.2,
+    )
+
+    payload = replicate_run.build_input(args)
+    assert payload["renderType"] == "driver-debug"
+
+
 def test_encode_replicate_route_input_preserves_existing_literal_prefix() -> None:
     url = "literal:https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496"
     assert replicate_run.encode_replicate_route_input(url) == url
