@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from types import SimpleNamespace
 
 from renderers import driver_debug_engine
@@ -137,9 +138,39 @@ def test_driver_camera_dialog_module_uses_mici_variant_for_mici_routes() -> None
     assert driver_debug_engine._driver_camera_dialog_module(device_type="tici") == "openpilot.selfdrive.ui.onroad.driver_camera_dialog"
 
 
+def test_normalize_cli_paths_resolves_relative_paths_against_original_cwd(tmp_path) -> None:
+    args = argparse.Namespace(
+        openpilot_dir="openpilot",
+        output="shared/out.mp4",
+        data_dir="shared/data_dir",
+    )
+
+    normalized = driver_debug_engine._normalize_cli_paths(args, cwd=tmp_path)
+
+    assert normalized.openpilot_dir == str((tmp_path / "openpilot").resolve())
+    assert normalized.output == str((tmp_path / "shared/out.mp4").resolve())
+    assert normalized.data_dir == str((tmp_path / "shared/data_dir").resolve())
+
+
 def test_humanize_platform_replaces_underscores_and_titles_words() -> None:
     assert driver_debug_engine._humanize_platform("FORD_BRONCO_SPORT_MK1") == "Ford Bronco Sport Mk1"
     assert driver_debug_engine._humanize_platform("") == "Unknown platform"
+
+
+def test_humanize_git_remote_and_git_metadata_text_compact_openpilot_repo_info() -> None:
+    assert driver_debug_engine._humanize_git_remote("https://github.com/commaai/openpilot.git") == "commaai/openpilot"
+    assert driver_debug_engine._humanize_git_remote("git@github.com:commaai/openpilot.git") == "commaai/openpilot"
+    assert (
+        driver_debug_engine._git_metadata_text(
+            {
+                "remote": "https://github.com/commaai/openpilot.git",
+                "branch": "release3-staging",
+                "commit": "deadbeef",
+                "dirty": "false",
+            }
+        )
+        == "commaai/openpilot  •  release3-staging  •  deadbeef  •  dirty false"
+    )
 
 
 def test_compute_driver_face_box_rect_stays_close_to_anchor_while_expanding_for_yaw() -> None:

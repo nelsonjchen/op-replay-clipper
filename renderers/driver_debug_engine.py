@@ -20,6 +20,7 @@ from renderers.big_ui_engine import (
     RenderStep,
     _configure_gui_app_canvas,
     _add_openpilot_to_sys_path,
+    _reapply_hidden_window_flag,
     build_camera_frame_refs,
     draw_text_box,
     emit_runtime_log,
@@ -98,6 +99,16 @@ def parse_args() -> argparse.Namespace:
     if args.end <= args.start:
         parser.error(f"end ({args.end}) must be greater than start ({args.start})")
     return args
+
+
+def _normalize_cli_paths(args: argparse.Namespace, *, cwd: Path) -> argparse.Namespace:
+    normalized = argparse.Namespace(**vars(args))
+    normalized.openpilot_dir = str((cwd / normalized.openpilot_dir).resolve()) if not Path(normalized.openpilot_dir).is_absolute() else str(Path(normalized.openpilot_dir).resolve())
+    normalized.output = str((cwd / normalized.output).resolve()) if not Path(normalized.output).is_absolute() else str(Path(normalized.output).resolve())
+    if normalized.data_dir:
+        data_dir_path = Path(normalized.data_dir)
+        normalized.data_dir = str((cwd / data_dir_path).resolve()) if not data_dir_path.is_absolute() else str(data_dir_path.resolve())
+    return normalized
 
 
 def _match_driver_camera_ref(
@@ -265,6 +276,31 @@ def _humanize_platform(value: str | None) -> str:
     if not text:
         return "Unknown platform"
     return text.replace("_", " ").title()
+
+
+def _humanize_git_remote(value: str | None) -> str:
+    if not value:
+        return "unknown"
+    text = str(value).strip()
+    if not text:
+        return "unknown"
+    if text.endswith(".git"):
+        text = text[:-4]
+    if text.startswith("git@") and ":" in text:
+        text = text.split(":", 1)[1]
+    elif "github.com/" in text:
+        text = text.split("github.com/", 1)[1]
+    return text.rsplit("/", 2)[-2] + "/" + text.rsplit("/", 1)[-1] if "/" in text else text
+
+
+def _git_metadata_text(metadata: dict[str, str] | None) -> str:
+    if not metadata:
+        return ""
+    remote = _humanize_git_remote(metadata.get("remote", ""))
+    branch = str(metadata.get("branch", "") or "unknown")
+    commit = str(metadata.get("commit", "") or "unknown")
+    dirty = str(metadata.get("dirty", "") or "unknown")
+    return f"{remote}  •  {branch}  •  {commit}  •  dirty {dirty}"
 
 
 def _driver_face_anchor(rect, *, face_x: float, face_y: float, device_type: str) -> tuple[float, float]:
@@ -472,10 +508,12 @@ class DriverDebugOverlayRenderer:
         platform_text = ""
         route_label = ""
         device_label = ""
+        git_text = ""
         if metadata:
             platform_text = _humanize_platform(metadata.get("platform", ""))
             route_label = metadata.get("route", "")
             device_label = str(metadata.get("device_type", "") or "").upper()
+            git_text = _git_metadata_text(metadata)
         meta_text = "  •  ".join(part for part in [device_label, platform_text] if part)
         if meta_text:
             meta_font_size = 18
@@ -487,6 +525,11 @@ class DriverDebugOverlayRenderer:
             route_size = rl.measure_text_ex(self._label_font, route_label, route_font_size, 0)
             route_x = rect.x + rect.width - route_size.x - outer_pad_x
             rl.draw_text_ex(self._label_font, route_label, rl.Vector2(route_x, title_y + 34), route_font_size, 0, dim)
+        if git_text:
+            git_font_size = 14
+            git_size = rl.measure_text_ex(self._label_font, git_text, git_font_size, 0)
+            git_x = rect.x + rect.width - git_size.x - outer_pad_x
+            rl.draw_text_ex(self._label_font, git_text, rl.Vector2(git_x, title_y + 56), git_font_size, 0, dim)
 
         subtitle_parts = [
             f"side {telemetry.selected_side}",
@@ -496,7 +539,7 @@ class DriverDebugOverlayRenderer:
         rl.draw_text_ex(
             self._label_font,
             " | ".join(subtitle_parts),
-            rl.Vector2(title_x, title_y + 76),
+            rl.Vector2(title_x, title_y + 92),
             16,
             0,
             dim,
@@ -509,9 +552,9 @@ class DriverDebugOverlayRenderer:
         ]
         if telemetry.alert_name:
             badges.append((telemetry.alert_name, orange if telemetry.is_distracted else blue))
-        badge_bottom = self._draw_badges_flow(title_x, title_y + 116, rect.x + rect.width - outer_pad_x, badges)
+        badge_bottom = self._draw_badges_flow(title_x, title_y + 132, rect.x + rect.width - outer_pad_x, badges)
 
-        section_top = max(title_y + 166, badge_bottom + 28)
+        section_top = max(title_y + 182, badge_bottom + 28)
         section_height = rect.height - (section_top - rect.y) - outer_pad_y
         col_gap = 36
         col_width = (rect.width - (2 * outer_pad_x) - (2 * col_gap)) / 3
@@ -755,6 +798,7 @@ def clip(
         patch_submaster(render_steps, ui_state)
         _configure_gui_app_canvas(gui_app, width=DRIVER_DEBUG_WIDTH, height=DRIVER_DEBUG_HEIGHT)
         gui_app.init_window("driver debug clip", fps=FRAMERATE)
+        _reapply_hidden_window_flag(headless=headless)
 
         DriverCameraDialog = _select_driver_camera_dialog(device_type=route_metadata.get("device_type", "unknown"))
         driver_view = DriverCameraDialog()
@@ -835,19 +879,22 @@ def clip(
 
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s\t%(message)s", force=True)
-    args = parse_args()
+    original_cwd = Path.cwd()
+    args = _normalize_cli_paths(parse_args(), cwd=original_cwd)
     openpilot_dir = Path(args.openpilot_dir).resolve()
+    output_path = Path(args.output).resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     os.chdir(openpilot_dir)
     _add_openpilot_to_sys_path(openpilot_dir)
 
     headless = not args.windowed
-    setup_env(args.output, big=False, target_mb=args.file_size, duration=args.end - args.start, headless=headless)
+    setup_env(str(output_path), big=False, target_mb=args.file_size, duration=args.end - args.start, headless=headless)
 
     from openpilot.tools.lib.route import Route
 
     clip(
         Route(args.route, data_dir=args.data_dir),
-        args.output,
+        str(output_path),
         start=args.start,
         end=args.end,
         headless=headless,

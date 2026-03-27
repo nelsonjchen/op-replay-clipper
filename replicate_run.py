@@ -65,9 +65,7 @@ def require_api_token() -> str:
 
 
 def encode_replicate_route_input(url: str) -> str:
-    if url.startswith(route_inputs.LITERAL_URL_PREFIX):
-        return url
-    return f"{route_inputs.LITERAL_URL_PREFIX}{url}"
+    return route_inputs.validate_connect_url(url)
 
 
 def unwrap_file_output(output: Any) -> Any:

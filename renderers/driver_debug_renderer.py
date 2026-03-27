@@ -19,7 +19,6 @@ from renderers.ui_renderer import (
     _has_modern_openpilot,
     _openpilot_python_cmd,
     _run,
-    _trim_mp4_in_place,
 )
 
 
@@ -43,6 +42,10 @@ class DriverDebugRenderResult:
     output_path: Path
 
 
+def _driver_debug_recording_skip_seconds(*, start_seconds: int, render_start: int) -> int:
+    return max(0, start_seconds - render_start)
+
+
 def render_driver_debug_clip(opts: DriverDebugRenderOptions) -> DriverDebugRenderResult:
     openpilot_dir = Path(opts.openpilot_dir).resolve()
     if not _has_modern_openpilot(openpilot_dir):
@@ -58,13 +61,17 @@ def render_driver_debug_clip(opts: DriverDebugRenderOptions) -> DriverDebugRende
     print(f"Driver debug recording encoder: {env['RECORD_CODEC']} ({recording_acceleration})")
 
     smear_seconds = max(0, opts.smear_seconds)
-    render_start, render_end, warmup_seconds, trim_front = _compute_ui_render_window(
+    render_start, render_end, _warmup_seconds, _trim_front = _compute_ui_render_window(
         start_seconds=opts.start_seconds,
         length_seconds=opts.length_seconds,
         smear_seconds=smear_seconds,
     )
-    if warmup_seconds > 0:
-        env["RECORD_SKIP_FRAMES"] = str(warmup_seconds * UI_FRAMERATE)
+    recording_skip_seconds = _driver_debug_recording_skip_seconds(
+        start_seconds=opts.start_seconds,
+        render_start=render_start,
+    )
+    if recording_skip_seconds > 0:
+        env["RECORD_SKIP_FRAMES"] = str(recording_skip_seconds * UI_FRAMERATE)
 
     clip_cmd = [
         *_openpilot_python_cmd(openpilot_dir),
@@ -94,5 +101,4 @@ def render_driver_debug_clip(opts: DriverDebugRenderOptions) -> DriverDebugRende
             _run(clip_cmd, cwd=openpilot_dir, env=render_env)
 
     output_path = Path(opts.output_path).resolve()
-    _trim_mp4_in_place(output_path, trim_front)
     return DriverDebugRenderResult(output_path=output_path)
