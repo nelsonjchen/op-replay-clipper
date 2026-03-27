@@ -1034,10 +1034,6 @@ def clip(
             wide_view = AugmentedRoadView(stream_type=VisionStreamType.VISION_STREAM_WIDE_ROAD)
             wide_view._switch_stream_if_needed = lambda sm: None
             wide_view._pm.send = lambda *args, **kwargs: None
-            # Keep the wide HUD readable, but suppress the duplicate alert body and driver-state bubble.
-            wide_view.alert_renderer.will_render = lambda: (None, True)
-            wide_view.alert_renderer.render = lambda rect: None
-            wide_view.driver_state_renderer.render = lambda rect: None
         road_view.set_rect(rl.Rectangle(*layout_rects.road_rect))
         if wide_view is not None and layout_rects.wide_rect is not None:
             wide_view.set_rect(rl.Rectangle(*layout_rects.wide_rect))
