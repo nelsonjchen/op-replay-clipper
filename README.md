@@ -291,6 +291,10 @@ For local `cog predict`, stock Cog `0.17` still has the URL-coercion regression.
 Use the patched runtime from `cog/runtime_patch`, or pass `literal:https://...`
 as the route input when you are testing with an unpatched local Cog install.
 
+For the full current deploy flow, including staging pushes, production pushes,
+and post-promotion verification, see
+[docs/deploying-to-replicate.md](docs/deploying-to-replicate.md).
+
 ### JWT Token Input
 
 There is a JWT Token input field.
