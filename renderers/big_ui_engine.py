@@ -34,6 +34,7 @@ MODEL_INPUT_OVERLAY_SHADOW = (0, 0, 0, 180)
 MODEL_INPUT_OVERLAY_LINE_WIDTH = 2.0
 MODEL_INPUT_OVERLAY_SHADOW_WIDTH = 6.0
 INF_POINT = (1000.0, 0.0, 0.0)
+FUTURE_BACKFILL_SERVICES = ("carParams",)
 logger = logging.getLogger("big_ui_engine")
 
 
@@ -522,6 +523,13 @@ def draw_ui_alt_model_input_overlays(road_view, wide_view, state: Mapping[str, o
         draw_model_input_overlay(wide_quad, clip_rect=getattr(wide_view, "_content_rect", None))
 
 
+def redraw_ui_alt_dual_view_overlays(road_view, wide_view, state: Mapping[str, object]) -> None:
+    draw_ui_alt_model_input_overlays(road_view, wide_view, state)
+    redraw_hud_overlay(road_view)
+    if wide_view is not None:
+        redraw_hud_overlay(wide_view)
+
+
 def load_segment_messages(route, *, seg_start: int, seg_end: int) -> list[list]:
     from openpilot.selfdrive.test.process_replay.migration import migrate_all
     from openpilot.tools.lib.logreader import LogReader
@@ -575,6 +583,18 @@ def _match_camera_ref(model, refs_by_frame_id: Mapping[int, CameraFrameRef], ref
     return camera_ref
 
 
+def seed_future_backfill_state(ordered_messages: list[object]) -> dict[str, object]:
+    seeded_state: dict[str, object] = {}
+    for msg in ordered_messages:
+        which = msg.which()
+        if which not in FUTURE_BACKFILL_SERVICES or which in seeded_state:
+            continue
+        seeded_state[which] = msg
+        if len(seeded_state) == len(FUTURE_BACKFILL_SERVICES):
+            break
+    return seeded_state
+
+
 def build_render_steps(messages_by_segment: list[list], *, seg_start: int, start: int, end: int) -> list[RenderStep]:
     refs_by_frame_id, refs_by_timestamp = build_camera_frame_refs(messages_by_segment, encode_service=CAMERA_SERVICE)
     wide_refs_by_frame_id, wide_refs_by_timestamp = build_camera_frame_refs(
@@ -584,7 +604,7 @@ def build_render_steps(messages_by_segment: list[list], *, seg_start: int, start
     )
     ordered_messages = [msg for segment in messages_by_segment for msg in segment]
 
-    current_state: dict = {}
+    current_state: dict[str, object] = seed_future_backfill_state(ordered_messages)
     render_steps: list[RenderStep] = []
     for msg in ordered_messages:
         which = msg.which()
@@ -1450,9 +1470,7 @@ def clip(
                     road_view.render()
                     if wide_view is not None:
                         wide_view.render()
-                        draw_ui_alt_model_input_overlays(road_view, wide_view, step.state)
-                        redraw_hud_overlay(road_view)
-                        draw_current_speed_overlay(wide_view)
+                        redraw_ui_alt_dual_view_overlays(road_view, wide_view, step.state)
                         draw_text_box("ROAD", layout_rects.road_rect[0] + 18, layout_rects.road_rect[1] + 18, 22, gui_app, font)
                         assert layout_rects.wide_rect is not None
                         draw_text_box("WIDE", layout_rects.wide_rect[0] + 18, layout_rects.wide_rect[1] + 18, 22, gui_app, font)

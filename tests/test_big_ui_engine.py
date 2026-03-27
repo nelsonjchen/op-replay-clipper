@@ -76,6 +76,24 @@ def test_build_render_steps_uses_frame_ids_instead_of_log_mono_time() -> None:
     assert steps[0].route_seconds == 60.1
 
 
+def test_build_render_steps_future_backfills_car_params_for_early_frames() -> None:
+    car_params = FakeMsg("carParams", 40_000_000, SimpleNamespace(openpilotLongitudinalControl=True))
+    segments = [
+        [
+            FakeMsg("roadEncodeIdx", 0, SimpleNamespace(frameId=10, timestampSof=1_000, timestampEof=2_000)),
+            FakeMsg("roadCameraState", 10_000_000, SimpleNamespace(frameId=10, timestampEof=2_000)),
+            FakeMsg("modelV2", 30_000_000, SimpleNamespace(frameId=10, timestampEof=2_000)),
+            car_params,
+        ]
+    ]
+
+    steps = big_ui_engine.build_render_steps(segments, seg_start=0, start=0, end=1)
+
+    assert len(steps) == 1
+    assert steps[0].state["carParams"] is car_params
+    assert steps[0].state["carParams"].carParams.openpilotLongitudinalControl is True
+
+
 def test_build_layout_rects_default_uses_full_canvas() -> None:
     rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="default")
 
@@ -150,6 +168,28 @@ def test_draw_current_speed_overlay_is_noop_without_required_hud_fields() -> Non
     )
 
     big_ui_engine.draw_current_speed_overlay(view)
+
+
+def test_redraw_ui_alt_dual_view_overlays_redraws_both_huds(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+    road_view = object()
+    wide_view = object()
+    state = {"modelV2": object()}
+
+    monkeypatch.setattr(
+        big_ui_engine,
+        "draw_ui_alt_model_input_overlays",
+        lambda road, wide, current_state: calls.append(("model", (road, wide, current_state))),
+    )
+    monkeypatch.setattr(big_ui_engine, "redraw_hud_overlay", lambda view: calls.append(("hud", view)))
+
+    big_ui_engine.redraw_ui_alt_dual_view_overlays(road_view, wide_view, state)
+
+    assert calls == [
+        ("model", (road_view, wide_view, state)),
+        ("hud", road_view),
+        ("hud", wide_view),
+    ]
 
 
 def test_project_model_input_quad_projects_corners_to_screen() -> None:
@@ -647,6 +687,21 @@ def test_patch_augmented_road_view_fill_applies_upstream_zoom_fix(tmp_path) -> N
     assert "super()._render(self._content_rect)" in updated
 
 
+def test_patch_model_renderer_lead_position_uses_absolute_rect_bounds(tmp_path) -> None:
+    model_renderer = tmp_path / "model_renderer.py"
+    model_renderer.write_text(
+        "    x = np.clip(point[0], 0.0, rect.width - sz / 2)\n"
+        "    y = min(point[1], rect.height - sz * 0.6)\n"
+    )
+
+    changed = openpilot_integration._patch_model_renderer_lead_position(model_renderer)
+    updated = model_renderer.read_text()
+
+    assert changed is True
+    assert "x = np.clip(point[0], rect.x, rect.x + rect.width - sz / 2)" in updated
+    assert "y = np.clip(point[1], rect.y, rect.y + rect.height - sz * 0.6)" in updated
+
+
 def test_apply_openpilot_runtime_patches_reports_changed_files(tmp_path) -> None:
     openpilot_dir = tmp_path / "openpilot"
     (openpilot_dir / "tools/lib").mkdir(parents=True)
@@ -707,6 +762,10 @@ def test_apply_openpilot_runtime_patches_reports_changed_files(tmp_path) -> None
         "    max_y_offset = cy * zoom - h / 2 - margin\n"
         "    super()._render(rect)\n"
     )
+    (openpilot_dir / "selfdrive/ui/onroad/model_renderer.py").write_text(
+        "    x = np.clip(point[0], 0.0, rect.width - sz / 2)\n"
+        "    y = min(point[1], rect.height - sz * 0.6)\n"
+    )
 
     report = openpilot_integration.apply_openpilot_runtime_patches(openpilot_dir)
 
@@ -715,6 +774,7 @@ def test_apply_openpilot_runtime_patches_reports_changed_files(tmp_path) -> None
     assert report.ui_recording is True
     assert report.ui_null_egl is True
     assert report.augmented_road_fill is True
+    assert report.model_renderer_lead_position is True
 
 
 def test_render_overlays_includes_device_type_in_metadata(monkeypatch) -> None:

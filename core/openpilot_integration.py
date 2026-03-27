@@ -24,6 +24,7 @@ class OpenpilotPatchReport:
     ui_recording: bool = False
     ui_null_egl: bool = False
     augmented_road_fill: bool = False
+    model_renderer_lead_position: bool = False
 
     @property
     def changed(self) -> bool:
@@ -33,6 +34,7 @@ class OpenpilotPatchReport:
                 self.ui_recording,
                 self.ui_null_egl,
                 self.augmented_road_fill,
+                self.model_renderer_lead_position,
             )
         )
 
@@ -299,6 +301,27 @@ def _patch_augmented_road_view_fill(path: Path) -> bool:
     return False
 
 
+def _patch_model_renderer_lead_position(path: Path) -> bool:
+    source = path.read_text()
+    updated = source
+
+    updated = updated.replace(
+        "    x = np.clip(point[0], 0.0, rect.width - sz / 2)\n",
+        "    x = np.clip(point[0], rect.x, rect.x + rect.width - sz / 2)\n",
+        1,
+    )
+    updated = updated.replace(
+        "    y = min(point[1], rect.height - sz * 0.6)\n",
+        "    y = np.clip(point[1], rect.y, rect.y + rect.height - sz * 0.6)\n",
+        1,
+    )
+
+    if updated != source:
+        path.write_text(updated)
+        return True
+    return False
+
+
 def _first_existing(*paths: Path) -> Path | None:
     for path in paths:
         if path.exists():
@@ -342,13 +365,30 @@ def patch_openpilot_augmented_road_view_fill(openpilot_dir: Path) -> bool:
     return False
 
 
+def patch_openpilot_model_renderer_lead_position(openpilot_dir: Path) -> bool:
+    candidates = (
+        openpilot_dir / "selfdrive/ui/onroad/model_renderer.py",
+        openpilot_dir / "openpilot/selfdrive/ui/onroad/model_renderer.py",
+        openpilot_dir / "selfdrive/ui/mici/onroad/model_renderer.py",
+        openpilot_dir / "openpilot/selfdrive/ui/mici/onroad/model_renderer.py",
+    )
+    patched = False
+    for path in candidates:
+        if not path.exists():
+            continue
+        patched = _patch_model_renderer_lead_position(path) or patched
+    return patched
+
+
 def apply_openpilot_runtime_patches(openpilot_dir: Path) -> OpenpilotPatchReport:
     framereader_compat = patch_openpilot_framereader_compat(openpilot_dir)
     ui_recording, ui_null_egl = patch_openpilot_ui_record_skip(openpilot_dir)
     augmented_road_fill = patch_openpilot_augmented_road_view_fill(openpilot_dir)
+    model_renderer_lead_position = patch_openpilot_model_renderer_lead_position(openpilot_dir)
     return OpenpilotPatchReport(
         framereader_compat=framereader_compat,
         ui_recording=ui_recording,
         ui_null_egl=ui_null_egl,
         augmented_road_fill=augmented_road_fill,
+        model_renderer_lead_position=model_renderer_lead_position,
     )
