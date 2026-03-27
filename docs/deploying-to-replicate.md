@@ -7,25 +7,22 @@ It covers:
 - staging pushes to `nelsonjchen/op-replay-clipper-beta`
 - production pushes to `nelsonjchen/op-replay-clipper`
 - local testing before a push
-- why deploys use a patched Cog runtime
+- the current raw-URL expectations for Cog `0.17.1+`
 - how to verify a pushed version before and after promotion
 
 ## Overview
 
-This repo does not deploy with a plain stock `cog push`.
+This repo now deploys with a normal stock `cog push`.
 
 The deploy path depends on:
 
 1. generated Cog build artifacts from [`cog/render_artifacts.sh`](../cog/render_artifacts.sh)
-2. a patched Cog 0.17 runtime built under [`cog/runtime_patch/`](../cog/runtime_patch)
-3. a normal `cog push` that injects those patched runtime wheels into the image build
+2. a current Cog CLI and runtime, ideally `0.17.1` or newer
 
-That patched runtime matters because stock Cog 0.17 regressed plain
-`https://connect.comma.ai/...` string handling for this project's
-`route: str` input.
-
-Without the patched runtime, hosted Replicate can coerce route URLs into file
-inputs too early and break the model's public URL-only API.
+Cog `0.17.1` fixed the upstream URL-coercion regression for this project's
+plain `route: str` input, so raw `https://connect.comma.ai/...` URLs should now
+work on both the local Cog path and the hosted Replicate surface without any
+runtime patching.
 
 ## Models
 
@@ -47,7 +44,7 @@ Before deploying:
 
 - have a valid `REPLICATE_API_TOKEN`
 - have Docker working locally
-- have a working `cog` CLI installed
+- have a working `cog` CLI installed, preferably `0.17.1` or newer
 - be on the repo state you actually want to push
 
 Common setup:
@@ -94,15 +91,12 @@ If you want to exercise the local Cog/container path:
 
 ```bash
 ./cog/render_artifacts.sh
-cog predict -i renderType=ui -i route='literal:https://connect.comma.ai/<dongle>/<route>/<start>/<end>'
+cog predict -i renderType=ui -i route='https://connect.comma.ai/<dongle>/<route>/<start>/<end>'
 ```
 
 Notes:
 
-- stock local Cog 0.17 may still need the `literal:` prefix if you are not
-  using the patched runtime wheels locally
-- the hosted Replicate model should not need `literal:` once it has been pushed
-  with the patched runtime
+- use Cog `0.17.1` or newer so the raw URL reaches the predictor unchanged
 - local `cog predict` is useful for image/runtime validation, but the hosted
   Replicate smokes are still the source of truth before promotion
 
@@ -143,7 +137,7 @@ Local Cog/container smoke on the VM:
 
 ```bash
 ./cog/render_artifacts.sh
-cog predict --gpus all -i renderType=ui -i route='literal:https://connect.comma.ai/<dongle>/<route>/<start>/<end>'
+cog predict --gpus all -i renderType=ui -i route='https://connect.comma.ai/<dongle>/<route>/<start>/<end>'
 ```
 
 GCE is especially useful for checking:
@@ -153,30 +147,9 @@ GCE is especially useful for checking:
 - whether a new runtime or bootstrap change behaves correctly before pushing to
   Replicate
 
-## Step 1: Build the patched Cog runtime wheels
+## Step 1: Regenerate Cog build artifacts
 
-Build the patched runtime artifacts with:
-
-```bash
-./cog/runtime_patch/build_wheels.sh
-```
-
-That produces wheels in:
-
-```text
-cog/runtime_patch/dist/
-```
-
-The important outputs are:
-
-- a patched `cog` SDK wheel
-- a patched Linux `coglet` wheel
-
-These are what make hosted Replicate keep accepting normal raw route URLs.
-
-## Step 2: Regenerate Cog build artifacts
-
-The push helper does this for you, but the underlying command is:
+Run:
 
 ```bash
 ./cog/render_artifacts.sh
@@ -190,29 +163,22 @@ That regenerates:
 The rendered `cog.yaml` embeds the shared bootstrap script so the build stays
 reproducible inside Replicate/Cog.
 
-## Step 3: Push staging
+## Step 2: Push staging
 
 The standard staging deploy is:
 
 ```bash
-./cog/runtime_patch/push_beta.sh
+./cog/render_artifacts.sh
+cog push r8.im/nelsonjchen/op-replay-clipper-beta
 ```
 
-By default, that script targets:
+That targets:
 
 ```text
 r8.im/nelsonjchen/op-replay-clipper-beta
 ```
 
-It automatically:
-
-1. finds the patched wheels in `cog/runtime_patch/dist/`
-2. regenerates the Cog artifacts
-3. runs `cog push` with:
-   - `COG_SDK_WHEEL=...`
-   - `COGLET_WHEEL=...`
-
-## Step 4: Identify the new staging version
+## Step 3: Identify the new staging version
 
 After the push, get the latest version id:
 
@@ -231,7 +197,7 @@ PY
 Use that exact version id for smoke testing rather than relying on the model
 alias alone.
 
-## Step 5: Run the staging smoke matrix
+## Step 4: Run the staging smoke matrix
 
 The current promotion gate is documented in:
 
@@ -255,20 +221,16 @@ https://connect.comma.ai/5beb9b58bd12b691/0000010a--a51155e496/90/105
 That route is useful because it exercises the newer mici camera dimensions that
 previously broke the 360 path.
 
-## Step 6: Push production
+## Step 5: Push production
 
-Once staging is good, push the same repo state to production by overriding the
-target model:
+Once staging is good, push the same repo state to production:
 
 ```bash
-MODEL='r8.im/nelsonjchen/op-replay-clipper' \
-./cog/runtime_patch/push_beta.sh
+./cog/render_artifacts.sh
+cog push r8.im/nelsonjchen/op-replay-clipper
 ```
 
-Despite the script name, this is the same patched-runtime push flow, just with
-the production model target overridden.
-
-## Step 7: Identify the new production version
+## Step 6: Identify the new production version
 
 Get the newest production version id:
 
@@ -284,7 +246,7 @@ print(versions[0].id)
 PY
 ```
 
-## Step 8: Run the post-promotion smoke set
+## Step 7: Run the post-promotion smoke set
 
 After a production push, rerun at least:
 
@@ -333,16 +295,12 @@ A good deploy currently means:
 - UI renders work in both H.264 and HEVC
 - 360 outputs still include spherical metadata
 - newer mici routes render successfully in 360 and 360 forward-upon-wide
-- the pushed version was built with the patched Cog runtime, not stock Cog 0.17
+- the deployed model was built and checked with stock Cog `0.17.1` or newer
 
 ## Notes and gotchas
 
-- Local `cog predict` may still need `literal:https://...` when you are testing
-  against an unpatched local Cog install.
-- Hosted Replicate should not need the `literal:` workaround when the patched
-  runtime is baked into the pushed model version.
-- The script name `push_beta.sh` is historical. It can push either model by
-  changing `MODEL=...`.
+- Local and hosted raw URL checks should both work without a `literal:` prefix
+  when you are using stock Cog `0.17.1` or newer.
 - If a deploy behaves strangely, check the current upstream/Cog patch context
   in:
   - [`upstream-modifications.md`](./upstream-modifications.md)

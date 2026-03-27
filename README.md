@@ -283,28 +283,14 @@ Notes:
 * the hosted helper now takes a full `connect.comma.ai` clip URL and does not expose separate `start-seconds` or `length-seconds` flags
 * `.env` is ignored by git; `.env.example` is the committed placeholder
 
-### Patched Cog runtime pushes
+### Cog URL handling
 
-Stock `cog 0.17` regressed plain `https://...` string handling for this
-project's `route: str` input by coercing raw URLs into downloaded file/path
-objects too early.
+Cog `0.17.1` fixed the upstream URL-coercion regression that had been breaking
+this project's plain `route: str` input.
 
-This repo keeps a reproducible builder for the patched Replicate runtime in:
-
-* [cog/runtime_patch](cog/runtime_patch)
-
-That folder builds:
-
-* a patched `cog` SDK wheel
-* a patched Linux `coglet` wheel
-
-Those wheels are then injected into a normal `cog push`, so fresh Replicate
-model versions keep accepting a normal raw
-`https://connect.comma.ai/...` input on the hosted surface.
-
-For local `cog predict`, stock Cog `0.17` still has the URL-coercion regression.
-Use the patched runtime from `cog/runtime_patch`, or pass `literal:https://...`
-as the route input when you are testing with an unpatched local Cog install.
+That means current local `cog predict` and hosted Replicate pushes should both
+accept a normal raw `https://connect.comma.ai/...` route URL again, with no
+patched runtime and no `literal:` wrapper.
 
 For the full current deploy flow, including staging pushes, production pushes,
 and post-promotion verification, see
