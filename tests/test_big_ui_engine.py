@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from core import openpilot_integration, render_runtime
 from renderers import big_ui_engine, ui_renderer
 
@@ -182,6 +184,23 @@ def test_extract_footer_telemetry_reads_driver_and_op_inputs() -> None:
             0,
             SimpleNamespace(aTarget=0.6, accels=[0.7]),
         ),
+        "modelV2": FakeMsg(
+            "modelV2",
+            0,
+            SimpleNamespace(
+                meta=SimpleNamespace(
+                    disengagePredictions=SimpleNamespace(
+                        brakeDisengageProbs=[0.1, 0.2],
+                        steerOverrideProbs=[0.3],
+                    )
+                )
+            ),
+        ),
+        "selfdriveState": FakeMsg(
+            "selfdriveState",
+            0,
+            SimpleNamespace(enabled=True, state="enabled"),
+        ),
     }
 
     telemetry = big_ui_engine.extract_footer_telemetry(state)
@@ -202,6 +221,8 @@ def test_extract_footer_telemetry_reads_driver_and_op_inputs() -> None:
     assert telemetry.accel_out == 1.1
     assert telemetry.a_ego == 0.4
     assert telemetry.a_target == 0.6
+    assert telemetry.confidence == pytest.approx(0.56)
+    assert telemetry.ui_status == "engaged"
 
 
 def test_extract_footer_telemetry_uses_controls_state_as_steering_target_fallback() -> None:
@@ -254,6 +275,74 @@ def test_extract_footer_telemetry_falls_back_to_plan_accels_and_brake_command() 
     assert telemetry.op_gas == 0.0
     assert telemetry.op_brake == 0.5
     assert telemetry.a_target == -1.5
+    assert telemetry.confidence == 0.0
+    assert telemetry.ui_status == "disengaged"
+
+
+def test_extract_footer_telemetry_maps_preenabled_to_override() -> None:
+    state = {
+        "modelV2": FakeMsg(
+            "modelV2",
+            0,
+            SimpleNamespace(
+                meta=SimpleNamespace(
+                    disengagePredictions=SimpleNamespace(
+                        brakeDisengageProbs=[0.1],
+                        steerOverrideProbs=[0.2],
+                    )
+                )
+            ),
+        ),
+        "selfdriveState": FakeMsg(
+            "selfdriveState",
+            0,
+            SimpleNamespace(
+                enabled=False,
+                state="preEnabled",
+            ),
+        ),
+    }
+
+    telemetry = big_ui_engine.extract_footer_telemetry(state)
+
+    assert telemetry.confidence == pytest.approx(0.72)
+    assert telemetry.ui_status == "override"
+
+
+def test_build_footer_panel_layout_reserves_confidence_rail() -> None:
+    layout = big_ui_engine.build_footer_panel_layout(SimpleNamespace(x=0.0, y=810.0, width=1920.0, height=270.0))
+
+    assert layout.meter_w > 120.0
+    assert layout.confidence_rect == pytest.approx((1802.0, 834.0, 84.0, 222.0))
+    assert layout.accel_rect == pytest.approx((763.6, 1024.0, 1014.4, 54.0))
+
+
+def test_footer_confidence_target_value_uses_hidden_disengaged_target() -> None:
+    assert big_ui_engine.footer_confidence_target_value(status="disengaged", confidence=0.9) == -0.5
+    assert big_ui_engine.footer_confidence_target_value(status="engaged", confidence=0.9) == 0.9
+
+
+def test_footer_confidence_colors_match_mici_thresholds() -> None:
+    assert big_ui_engine.footer_confidence_colors(status="engaged", confidence_value=0.7) == (
+        (0, 255, 204, 255),
+        (0, 255, 38, 255),
+    )
+    assert big_ui_engine.footer_confidence_colors(status="engaged", confidence_value=0.3) == (
+        (255, 200, 0, 255),
+        (255, 115, 0, 255),
+    )
+    assert big_ui_engine.footer_confidence_colors(status="engaged", confidence_value=0.1) == (
+        (255, 0, 21, 255),
+        (255, 0, 89, 255),
+    )
+    assert big_ui_engine.footer_confidence_colors(status="override", confidence_value=0.9) == (
+        (255, 255, 255, 255),
+        (82, 82, 82, 255),
+    )
+    assert big_ui_engine.footer_confidence_colors(status="disengaged", confidence_value=-0.5) == (
+        (50, 50, 50, 255),
+        (13, 13, 13, 255),
+    )
 
 
 def test_build_render_steps_tracks_matching_wide_camera_frames() -> None:

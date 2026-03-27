@@ -23,6 +23,12 @@ TEXT_BOX_PADDING_Y = 4
 UI_ALT_FOOTER_MIN_HEIGHT = 220
 UI_ALT_FOOTER_MAX_HEIGHT = 320
 UI_ALT_FOOTER_HEIGHT_RATIO = 0.25
+UI_ALT_FOOTER_OUTER_PAD_X = 34.0
+UI_ALT_FOOTER_OUTER_PAD_Y = 24.0
+UI_ALT_FOOTER_COLUMN_GAP = 36.0
+UI_ALT_CONFIDENCE_RAIL_WIDTH = 84.0
+UI_ALT_CONFIDENCE_RAIL_GAP = 24.0
+UI_ALT_CONFIDENCE_LABEL_NUDGE_X = -4.0
 logger = logging.getLogger("big_ui_engine")
 
 
@@ -102,6 +108,20 @@ class FooterTelemetry:
     accel_out: float | None = None
     a_ego: float | None = None
     a_target: float | None = None
+    confidence: float = 0.0
+    ui_status: str = "disengaged"
+
+
+@dataclass(frozen=True)
+class FooterPanelLayout:
+    wheel_col_w: float
+    right_x: float
+    right_w: float
+    driver_col_x: float
+    op_col_x: float
+    meter_w: float
+    confidence_rect: tuple[float, float, float, float]
+    accel_rect: tuple[float, float, float, float]
 
 
 def parse_args() -> argparse.Namespace:
@@ -174,6 +194,66 @@ def _clip01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
+def _footer_ui_status(*, enabled: bool, state: object) -> str:
+    if state is None:
+        return "disengaged"
+
+    state_name = getattr(state, "name", None)
+    if state_name is None:
+        state_name = str(state).split(".")[-1]
+    if state_name in ("preEnabled", "overriding"):
+        return "override"
+    return "engaged" if enabled else "disengaged"
+
+
+def footer_confidence_target_value(*, status: str, confidence: float) -> float:
+    if status == "disengaged":
+        return -0.5
+    return _clip01(confidence)
+
+
+def footer_confidence_colors(*, status: str, confidence_value: float) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]]:
+    if status == "engaged":
+        if confidence_value > 0.5:
+            return (0, 255, 204, 255), (0, 255, 38, 255)
+        if confidence_value > 0.2:
+            return (255, 200, 0, 255), (255, 115, 0, 255)
+        return (255, 0, 21, 255), (255, 0, 89, 255)
+    if status == "override":
+        return (255, 255, 255, 255), (82, 82, 82, 255)
+    return (50, 50, 50, 255), (13, 13, 13, 255)
+
+
+def compute_confidence_dot_center_y(*, rail_y: float, rail_height: float, dot_radius: float, confidence_value: float) -> float:
+    return rail_y + ((1 - confidence_value) * max(0.0, rail_height - (2 * dot_radius))) + dot_radius
+
+
+def build_footer_panel_layout(rect) -> FooterPanelLayout:
+    wheel_col_w = rect.width * 0.38
+    right_x = rect.x + wheel_col_w + UI_ALT_FOOTER_OUTER_PAD_X
+    right_w = rect.width - wheel_col_w - (2 * UI_ALT_FOOTER_OUTER_PAD_X)
+    confidence_rect = (
+        rect.x + rect.width - UI_ALT_FOOTER_OUTER_PAD_X - UI_ALT_CONFIDENCE_RAIL_WIDTH,
+        rect.y + UI_ALT_FOOTER_OUTER_PAD_Y,
+        UI_ALT_CONFIDENCE_RAIL_WIDTH,
+        rect.height - (2 * UI_ALT_FOOTER_OUTER_PAD_Y),
+    )
+    meters_right = confidence_rect[0] - UI_ALT_CONFIDENCE_RAIL_GAP
+    main_panel_w = max(0.0, meters_right - right_x)
+    meter_w = max(120.0, (main_panel_w - UI_ALT_FOOTER_COLUMN_GAP) / 2)
+    accel_summary_y = rect.y + UI_ALT_FOOTER_OUTER_PAD_Y + 34 + 74 + 82
+    return FooterPanelLayout(
+        wheel_col_w=wheel_col_w,
+        right_x=right_x,
+        right_w=right_w,
+        driver_col_x=right_x,
+        op_col_x=right_x + meter_w + UI_ALT_FOOTER_COLUMN_GAP,
+        meter_w=meter_w,
+        confidence_rect=confidence_rect,
+        accel_rect=(right_x, accel_summary_y, main_panel_w, 54),
+    )
+
+
 def _extract_nested_attr(obj: object, path: tuple[str, ...]) -> object | None:
     current = obj
     for name in path:
@@ -189,11 +269,15 @@ def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
     car_output_msg = state.get("carOutput")
     controls_state_msg = state.get("controlsState")
     longitudinal_plan_msg = state.get("longitudinalPlan")
+    model_msg = state.get("modelV2")
+    selfdrive_state_msg = state.get("selfdriveState")
 
     car_state = getattr(car_state_msg, "carState", None) if car_state_msg is not None else None
     car_control = getattr(car_control_msg, "carControl", None) if car_control_msg is not None else None
     car_output = getattr(car_output_msg, "carOutput", None) if car_output_msg is not None else None
     controls_state = getattr(controls_state_msg, "controlsState", None) if controls_state_msg is not None else None
+    model = getattr(model_msg, "modelV2", None) if model_msg is not None else None
+    selfdrive_state = getattr(selfdrive_state_msg, "selfdriveState", None) if selfdrive_state_msg is not None else None
     longitudinal_plan = (
         getattr(longitudinal_plan_msg, "longitudinalPlan", None) if longitudinal_plan_msg is not None else None
     )
@@ -216,6 +300,14 @@ def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
     steering_angle_deg = float(getattr(car_state, "steeringAngleDeg", 0.0) or 0.0)
     steering_target_deg = float(steering_target_attr) if steering_target_attr is not None else None
     steering_applied_deg = float(steering_applied_attr) if steering_applied_attr is not None else None
+    disengage_predictions = getattr(getattr(model, "meta", None), "disengagePredictions", None)
+    brake_probs = list(getattr(disengage_predictions, "brakeDisengageProbs", []) or [1])
+    steer_probs = list(getattr(disengage_predictions, "steerOverrideProbs", []) or [1])
+    confidence = _clip01((1 - max(brake_probs)) * (1 - max(steer_probs)))
+    ui_status = _footer_ui_status(
+        enabled=bool(getattr(selfdrive_state, "enabled", False)),
+        state=getattr(selfdrive_state, "state", None),
+    )
 
     return FooterTelemetry(
         steering_angle_deg=steering_angle_deg,
@@ -234,6 +326,8 @@ def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
         accel_out=accel_out,
         a_ego=float(getattr(car_state, "aEgo", 0.0)) if car_state is not None else None,
         a_target=float(a_target_attr) if a_target_attr is not None else None,
+        confidence=confidence,
+        ui_status=ui_status,
     )
 
 
@@ -646,9 +740,12 @@ def render_overlays(gui_app, font, big, metadata, title, route_seconds, show_met
 
 class SteeringFooterRenderer:
     def __init__(self, *, gui_app, label_font, value_font) -> None:
+        from openpilot.common.filter_simple import FirstOrderFilter
+
         self._label_font = label_font
         self._value_font = value_font
         self._wheel_texture = gui_app.texture("icons_mici/wheel.png", 220, 220)
+        self._confidence_filter = FirstOrderFilter(-0.5, 0.5, 1 / gui_app.target_fps)
 
     def _draw_meter(self, rect, *, label: str, value: float, color, value_text: str, active: bool) -> None:
         import pyray as rl
@@ -818,6 +915,74 @@ class SteeringFooterRenderer:
             rl.draw_text_ex(self._label_font, label, rl.Vector2(rect.x, y + 8), label_size, 0, label_color)
             rl.draw_text_ex(self._value_font, value, rl.Vector2(value_x, y), value_size, 0, color)
 
+    def _draw_confidence_rail(self, rect, *, telemetry: FooterTelemetry) -> None:
+        import pyray as rl
+
+        label_color = rl.Color(255, 255, 255, 150)
+        track_color = rl.Color(255, 255, 255, 22)
+        divider = rl.Color(255, 255, 255, 28)
+        dot_radius = 24
+        label_size = 14
+        label_y = rect.y + 4
+        label_text = "CONFIDENCE"
+        label_width = rl.measure_text_ex(self._label_font, label_text, label_size, 0).x
+        rail_center_x = rect.x + (rect.width / 2)
+        track_y = rect.y + 28
+        track_height = max(0.0, rect.height - 36)
+
+        confidence_target = footer_confidence_target_value(status=telemetry.ui_status, confidence=telemetry.confidence)
+        confidence_value = self._confidence_filter.update(confidence_target)
+        top_rgba, bottom_rgba = footer_confidence_colors(status=telemetry.ui_status, confidence_value=confidence_value)
+
+        rl.draw_text_ex(
+            self._label_font,
+            label_text,
+            rl.Vector2((rail_center_x - (label_width / 2)) + UI_ALT_CONFIDENCE_LABEL_NUDGE_X, label_y),
+            label_size,
+            0,
+            label_color,
+        )
+        rl.draw_line(
+            int(rect.x - (UI_ALT_CONFIDENCE_RAIL_GAP / 2)),
+            int(rect.y),
+            int(rect.x - (UI_ALT_CONFIDENCE_RAIL_GAP / 2)),
+            int(rect.y + rect.height),
+            divider,
+        )
+        rl.draw_rectangle_rounded(
+            rl.Rectangle(rail_center_x - 4, track_y, 8, track_height),
+            0.95,
+            12,
+            track_color,
+        )
+
+        dot_y = compute_confidence_dot_center_y(
+            rail_y=track_y,
+            rail_height=track_height,
+            dot_radius=dot_radius,
+            confidence_value=confidence_value,
+        )
+        top_color = rl.Color(*top_rgba)
+        bottom_color = rl.Color(*bottom_rgba)
+        rl.draw_rectangle_gradient_v(
+            int(rail_center_x - dot_radius),
+            int(dot_y - dot_radius),
+            dot_radius * 2,
+            dot_radius * 2,
+            top_color,
+            bottom_color,
+        )
+        outer_radius = math.ceil(dot_radius * math.sqrt(2)) + 1
+        rl.draw_ring(
+            rl.Vector2(int(rail_center_x), int(dot_y)),
+            dot_radius,
+            outer_radius,
+            0.0,
+            360.0,
+            20,
+            rl.BLACK,
+        )
+
     def render(self, rect, *, telemetry: FooterTelemetry) -> None:
         import pyray as rl
 
@@ -827,15 +992,7 @@ class SteeringFooterRenderer:
         text_dim = rl.Color(255, 255, 255, 150)
         green = rl.Color(94, 214, 135, 255)
         orange = rl.Color(255, 176, 87, 255)
-        outer_pad_x = 34
-        outer_pad_y = 24
-        wheel_col_w = rect.width * 0.38
-        right_x = rect.x + wheel_col_w + outer_pad_x
-        right_w = rect.width - wheel_col_w - (2 * outer_pad_x)
-        col_gap = 36
-        meter_w = max(120.0, (right_w - col_gap) / 2)
-        driver_col_x = right_x
-        op_col_x = right_x + meter_w + col_gap
+        layout = build_footer_panel_layout(rect)
 
         rl.draw_rectangle_gradient_v(
             int(rect.x),
@@ -855,7 +1012,7 @@ class SteeringFooterRenderer:
 
         wheel_size = min(int(rect.height * 0.68), int(rect.width * 0.14))
         wheel_size = max(124, wheel_size)
-        wheel_center_x = rect.x + wheel_col_w * 0.76
+        wheel_center_x = rect.x + layout.wheel_col_w * 0.76
         wheel_center_y = rect.y + rect.height / 2 + 14
         src_rect = rl.Rectangle(0, 0, self._wheel_texture.width, self._wheel_texture.height)
         dest_rect = rl.Rectangle(wheel_center_x, wheel_center_y, wheel_size, wheel_size)
@@ -877,33 +1034,37 @@ class SteeringFooterRenderer:
         rl.draw_text_ex(
             self._label_font,
             "STEERING",
-            rl.Vector2(rect.x + outer_pad_x, rect.y + outer_pad_y),
+            rl.Vector2(rect.x + UI_ALT_FOOTER_OUTER_PAD_X, rect.y + UI_ALT_FOOTER_OUTER_PAD_Y),
             22,
             0,
             text_dim,
         )
         self._draw_steering_summary(
-            rl.Rectangle(rect.x + outer_pad_x, rect.y + outer_pad_y + 28, wheel_col_w - 90, rect.height - (2 * outer_pad_y)),
+            rl.Rectangle(
+                rect.x + UI_ALT_FOOTER_OUTER_PAD_X,
+                rect.y + UI_ALT_FOOTER_OUTER_PAD_Y + 28,
+                layout.wheel_col_w - 90,
+                rect.height - (2 * UI_ALT_FOOTER_OUTER_PAD_Y),
+            ),
             telemetry=telemetry,
         )
         rl.draw_line(
-            int(rect.x + wheel_col_w),
-            int(rect.y + outer_pad_y),
-            int(rect.x + wheel_col_w),
-            int(rect.y + rect.height - outer_pad_y),
+            int(rect.x + layout.wheel_col_w),
+            int(rect.y + UI_ALT_FOOTER_OUTER_PAD_Y),
+            int(rect.x + layout.wheel_col_w),
+            int(rect.y + rect.height - UI_ALT_FOOTER_OUTER_PAD_Y),
             divider,
         )
 
-        section_title_y = rect.y + outer_pad_y
+        section_title_y = rect.y + UI_ALT_FOOTER_OUTER_PAD_Y
         first_meter_y = section_title_y + 34
         second_meter_y = first_meter_y + 74
-        accel_summary_y = second_meter_y + 82
 
-        rl.draw_text_ex(self._label_font, "DRIVER", rl.Vector2(driver_col_x, section_title_y), 22, 0, text_dim)
-        rl.draw_text_ex(self._label_font, "OPENPILOT", rl.Vector2(op_col_x, section_title_y), 22, 0, text_dim)
+        rl.draw_text_ex(self._label_font, "DRIVER", rl.Vector2(layout.driver_col_x, section_title_y), 22, 0, text_dim)
+        rl.draw_text_ex(self._label_font, "OPENPILOT", rl.Vector2(layout.op_col_x, section_title_y), 22, 0, text_dim)
 
         self._draw_meter(
-            rl.Rectangle(driver_col_x, first_meter_y, meter_w, 56),
+            rl.Rectangle(layout.driver_col_x, first_meter_y, layout.meter_w, 56),
             label="GAS",
             value=telemetry.driver_gas,
             color=green,
@@ -911,7 +1072,7 @@ class SteeringFooterRenderer:
             active=telemetry.driver_gas_pressed,
         )
         self._draw_meter(
-            rl.Rectangle(driver_col_x, second_meter_y, meter_w, 56),
+            rl.Rectangle(layout.driver_col_x, second_meter_y, layout.meter_w, 56),
             label="BRAKE",
             value=telemetry.driver_brake,
             color=orange,
@@ -919,7 +1080,7 @@ class SteeringFooterRenderer:
             active=telemetry.driver_brake_pressed,
         )
         self._draw_meter(
-            rl.Rectangle(op_col_x, first_meter_y, meter_w, 56),
+            rl.Rectangle(layout.op_col_x, first_meter_y, layout.meter_w, 56),
             label="THROTTLE",
             value=telemetry.op_gas,
             color=green,
@@ -927,7 +1088,7 @@ class SteeringFooterRenderer:
             active=telemetry.op_gas > 0,
         )
         self._draw_meter(
-            rl.Rectangle(op_col_x, second_meter_y, meter_w, 56),
+            rl.Rectangle(layout.op_col_x, second_meter_y, layout.meter_w, 56),
             label="BRAKE",
             value=telemetry.op_brake,
             color=orange,
@@ -935,7 +1096,11 @@ class SteeringFooterRenderer:
             active=telemetry.op_brake > 0,
         )
         self._draw_accel_summary(
-            rl.Rectangle(right_x, accel_summary_y, right_w, 54),
+            rl.Rectangle(*layout.accel_rect),
+            telemetry=telemetry,
+        )
+        self._draw_confidence_rail(
+            rl.Rectangle(*layout.confidence_rect),
             telemetry=telemetry,
         )
 
