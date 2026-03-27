@@ -84,6 +84,15 @@ def test_build_layout_rects_alt_reserves_footer() -> None:
     rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="alt")
 
     assert rects.road_rect == (0, 0, 1920, 810)
+    assert rects.wide_rect is None
+    assert rects.footer_rect == (0, 810, 1920, 270)
+
+
+def test_build_layout_rects_alt_with_wide_splits_camera_area() -> None:
+    rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="alt", show_wide_panel=True)
+
+    assert rects.road_rect == (0, 0, 1920, 405)
+    assert rects.wide_rect == (0, 405, 1920, 405)
     assert rects.footer_rect == (0, 810, 1920, 270)
 
 
@@ -209,6 +218,25 @@ def test_extract_footer_telemetry_falls_back_to_plan_accels_and_brake_command() 
     assert telemetry.a_target == -1.5
 
 
+def test_build_render_steps_tracks_matching_wide_camera_frames() -> None:
+    segments = [
+        [
+            FakeMsg("roadEncodeIdx", 0, SimpleNamespace(frameId=10, timestampSof=1_000, timestampEof=2_000)),
+            FakeMsg("wideRoadEncodeIdx", 1, SimpleNamespace(frameId=10, timestampSof=1_010, timestampEof=2_010)),
+            FakeMsg("roadCameraState", 10_000_000, SimpleNamespace(frameId=10, timestampEof=2_000)),
+            FakeMsg("wideRoadCameraState", 10_500_000, SimpleNamespace(frameId=10, timestampEof=2_010)),
+            FakeMsg("modelV2", 30_000_000, SimpleNamespace(frameId=10, timestampEof=2_000)),
+        ]
+    ]
+
+    steps = big_ui_engine.build_render_steps(segments, seg_start=0, start=0, end=1)
+
+    assert len(steps) == 1
+    assert steps[0].camera_ref.route_frame_id == 10
+    assert steps[0].wide_camera_ref is not None
+    assert steps[0].wide_camera_ref.route_frame_id == 10
+
+
 def test_ui_environment_forces_scale_one() -> None:
     env = render_runtime.configure_ui_environment({})
     assert env["SCALE"] == "1"
@@ -266,6 +294,12 @@ def test_detect_logged_metric_reads_metric_from_openpilot_helper(monkeypatch, tm
         data_dir=str(data_dir),
         openpilot_dir=openpilot_dir,
     ) is True
+
+
+def test_compute_ui_render_window_clamps_trim_near_route_start() -> None:
+    assert ui_renderer._compute_ui_render_window(start_seconds=0, length_seconds=5, smear_seconds=5) == (0, 5, 0, 0)
+    assert ui_renderer._compute_ui_render_window(start_seconds=3, length_seconds=5, smear_seconds=5) == (0, 8, 0, 3)
+    assert ui_renderer._compute_ui_render_window(start_seconds=62, length_seconds=5, smear_seconds=5) == (56, 67, 1, 5)
 
 
 def test_patch_ui_application_record_skip_inserts_skip_logic(tmp_path) -> None:

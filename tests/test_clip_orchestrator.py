@@ -24,6 +24,8 @@ def test_download_file_type_mapping() -> None:
     assert clip_orchestrator.select_download_file_types("forward", qcam=False) == ("cameras",)
     assert clip_orchestrator.select_download_file_types("ui", qcam=True) == ("qcameras", "logs")
     assert clip_orchestrator.select_download_file_types("ui-alt", qcam=True) == ("qcameras", "logs")
+    assert clip_orchestrator.select_download_file_types("ui", qcam=False) == ("cameras", "ecameras", "logs")
+    assert clip_orchestrator.select_download_file_types("ui-alt", qcam=False) == ("cameras", "ecameras", "logs")
 
 
 def test_build_plan_parses_route_for_ui_requests() -> None:
@@ -53,7 +55,7 @@ def test_build_plan_treats_ui_alt_as_ui_render() -> None:
         )
     )
 
-    assert plan.download_file_types == ("cameras", "logs")
+    assert plan.download_file_types == ("cameras", "ecameras", "logs")
     assert plan.decompress_logs is False
 
 

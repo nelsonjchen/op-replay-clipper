@@ -16,17 +16,28 @@ from pathlib import Path
 
 FRAMERATE = 20
 CAMERA_SERVICE = "roadEncodeIdx"
+WIDE_CAMERA_SERVICE = "wideRoadEncodeIdx"
 MODEL_SERVICE = "modelV2"
 TEXT_BOX_PADDING_X = 8
 TEXT_BOX_PADDING_Y = 4
 UI_ALT_FOOTER_MIN_HEIGHT = 220
 UI_ALT_FOOTER_MAX_HEIGHT = 320
 UI_ALT_FOOTER_HEIGHT_RATIO = 0.25
+UI_ALT_DUAL_CANVAS_HEIGHT = 2160
 logger = logging.getLogger("big_ui_engine")
 
 
 def emit_runtime_log(message: str) -> None:
     print(message, flush=True)
+
+
+def _configure_gui_app_canvas(gui_app, *, width: int, height: int) -> None:
+    gui_app._width = width
+    gui_app._height = height
+    gui_app._scaled_width = int(width * gui_app._scale)
+    gui_app._scaled_height = int(height * gui_app._scale)
+    gui_app._scaled_width += gui_app._scaled_width % 2
+    gui_app._scaled_height += gui_app._scaled_height % 2
 
 
 def _add_openpilot_to_sys_path(openpilot_dir: Path) -> None:
@@ -53,12 +64,14 @@ class RenderStep:
     route_seconds: float
     route_frame_id: int
     camera_ref: CameraFrameRef
+    wide_camera_ref: CameraFrameRef | None
     state: dict
 
 
 @dataclass(frozen=True)
 class LayoutRects:
     road_rect: tuple[int, int, int, int]
+    wide_rect: tuple[int, int, int, int] | None = None
     footer_rect: tuple[int, int, int, int] | None = None
 
 
@@ -109,7 +122,7 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def build_layout_rects(*, width: int, height: int, layout_mode: str) -> LayoutRects:
+def build_layout_rects(*, width: int, height: int, layout_mode: str, show_wide_panel: bool = False) -> LayoutRects:
     if layout_mode == "default":
         return LayoutRects(road_rect=(0, 0, width, height))
     if layout_mode != "alt":
@@ -119,6 +132,14 @@ def build_layout_rects(*, width: int, height: int, layout_mode: str) -> LayoutRe
     footer_height = max(UI_ALT_FOOTER_MIN_HEIGHT, min(UI_ALT_FOOTER_MAX_HEIGHT, footer_height))
     footer_height = min(footer_height, max(1, height - 1))
     road_height = height - footer_height
+    if show_wide_panel:
+        top_height = road_height - (road_height // 2)
+        bottom_height = road_height - top_height
+        return LayoutRects(
+            road_rect=(0, 0, width, top_height),
+            wide_rect=(0, top_height, width, bottom_height),
+            footer_rect=(0, road_height, width, footer_height),
+        )
     return LayoutRects(
         road_rect=(0, 0, width, road_height),
         footer_rect=(0, road_height, width, footer_height),
@@ -227,16 +248,18 @@ def load_segment_messages(route, *, seg_start: int, seg_end: int) -> list[list]:
     return segments
 
 
-def build_camera_frame_refs(messages_by_segment: list[list]) -> tuple[dict[int, CameraFrameRef], dict[int, CameraFrameRef]]:
+def build_camera_frame_refs(
+    messages_by_segment: list[list], *, encode_service: str = CAMERA_SERVICE, required: bool = True
+) -> tuple[dict[int, CameraFrameRef], dict[int, CameraFrameRef]]:
     refs_by_frame_id: dict[int, CameraFrameRef] = {}
     refs_by_timestamp: dict[int, CameraFrameRef] = {}
 
     for segment_index, messages in enumerate(messages_by_segment):
         local_index = 0
         for msg in messages:
-            if msg.which() != CAMERA_SERVICE:
+            if msg.which() != encode_service:
                 continue
-            encode_idx = msg.roadEncodeIdx
+            encode_idx = getattr(msg, encode_service)
             ref = CameraFrameRef(
                 route_frame_id=int(encode_idx.frameId),
                 timestamp_sof=int(encode_idx.timestampSof),
@@ -248,8 +271,8 @@ def build_camera_frame_refs(messages_by_segment: list[list]) -> tuple[dict[int, 
             refs_by_timestamp[ref.timestamp_eof] = ref
             local_index += 1
 
-    if not refs_by_frame_id:
-        raise RuntimeError("No roadEncodeIdx messages were found for the requested route window")
+    if not refs_by_frame_id and required:
+        raise RuntimeError(f"No {encode_service} messages were found for the requested route window")
     return refs_by_frame_id, refs_by_timestamp
 
 
@@ -257,8 +280,20 @@ def _route_seconds_for_frame(frame_id: int) -> float:
     return frame_id / FRAMERATE
 
 
+def _match_camera_ref(model, refs_by_frame_id: Mapping[int, CameraFrameRef], refs_by_timestamp: Mapping[int, CameraFrameRef]) -> CameraFrameRef | None:
+    camera_ref = refs_by_frame_id.get(int(model.frameId))
+    if camera_ref is None and hasattr(model, "timestampEof"):
+        camera_ref = refs_by_timestamp.get(int(model.timestampEof))
+    return camera_ref
+
+
 def build_render_steps(messages_by_segment: list[list], *, seg_start: int, start: int, end: int) -> list[RenderStep]:
-    refs_by_frame_id, refs_by_timestamp = build_camera_frame_refs(messages_by_segment)
+    refs_by_frame_id, refs_by_timestamp = build_camera_frame_refs(messages_by_segment, encode_service=CAMERA_SERVICE)
+    wide_refs_by_frame_id, wide_refs_by_timestamp = build_camera_frame_refs(
+        messages_by_segment,
+        encode_service=WIDE_CAMERA_SERVICE,
+        required=False,
+    )
     ordered_messages = [msg for segment in messages_by_segment for msg in segment]
 
     current_state: dict = {}
@@ -271,12 +306,11 @@ def build_render_steps(messages_by_segment: list[list], *, seg_start: int, start
             continue
 
         model = msg.modelV2
-        camera_ref = refs_by_frame_id.get(int(model.frameId))
-        if camera_ref is None and hasattr(model, "timestampEof"):
-            camera_ref = refs_by_timestamp.get(int(model.timestampEof))
+        camera_ref = _match_camera_ref(model, refs_by_frame_id, refs_by_timestamp)
         if camera_ref is None:
             logger.warning("Skipping model frame %s because no matching camera frame was found", model.frameId)
             continue
+        wide_camera_ref = _match_camera_ref(model, wide_refs_by_frame_id, wide_refs_by_timestamp)
         route_seconds = _route_seconds_for_frame(camera_ref.route_frame_id)
         if route_seconds < start or route_seconds >= end:
             continue
@@ -286,6 +320,7 @@ def build_render_steps(messages_by_segment: list[list], *, seg_start: int, start
                 route_seconds=route_seconds,
                 route_frame_id=int(model.frameId),
                 camera_ref=camera_ref,
+                wide_camera_ref=wide_camera_ref,
                 state=dict(current_state),
             )
         )
@@ -832,18 +867,54 @@ def clip(
     with OpenpilotPrefix(shared_download_cache=True):
         metadata = load_route_metadata(route) if show_metadata else None
         camera_paths = route.qcamera_paths() if use_qcam else route.camera_paths()
-        frame_queue = IndexedFrameQueue(camera_paths[seg_start:seg_end], [step.camera_ref for step in render_steps], use_qcam=use_qcam)
+        wide_camera_paths = [] if use_qcam else route.ecamera_paths()
+        wide_paths = wide_camera_paths[seg_start:seg_end] if wide_camera_paths else []
+        road_frame_queue = IndexedFrameQueue(
+            camera_paths[seg_start:seg_end],
+            [step.camera_ref for step in render_steps],
+            use_qcam=use_qcam,
+        )
+        has_wide_stream = bool(wide_paths) and any(step.wide_camera_ref is not None for step in render_steps)
+        wide_frame_queue = None
+        if has_wide_stream:
+            wide_frame_queue = IndexedFrameQueue(
+                wide_paths,
+                [step.wide_camera_ref for step in render_steps if step.wide_camera_ref is not None],
+                use_qcam=False,
+            )
 
         vipc = VisionIpcServer("camerad")
-        vipc.create_buffers(VisionStreamType.VISION_STREAM_ROAD, 4, frame_queue.frame_w, frame_queue.frame_h)
+        vipc.create_buffers(VisionStreamType.VISION_STREAM_ROAD, 4, road_frame_queue.frame_w, road_frame_queue.frame_h)
+        if wide_frame_queue is not None:
+            vipc.create_buffers(VisionStreamType.VISION_STREAM_WIDE_ROAD, 4, wide_frame_queue.frame_w, wide_frame_queue.frame_h)
         vipc.start_listener()
 
         patch_submaster(render_steps, ui_state)
+        if layout_mode == "alt" and has_wide_stream:
+            _configure_gui_app_canvas(gui_app, width=gui_app.width, height=UI_ALT_DUAL_CANVAS_HEIGHT)
         gui_app.init_window("repo-owned clip", fps=FRAMERATE)
 
+        layout_rects = build_layout_rects(
+            width=gui_app.width,
+            height=gui_app.height,
+            layout_mode=layout_mode,
+            show_wide_panel=layout_mode == "alt" and has_wide_stream,
+        )
         road_view = AugmentedRoadView()
-        layout_rects = build_layout_rects(width=gui_app.width, height=gui_app.height, layout_mode=layout_mode)
+        wide_view = None
+        if layout_rects.wide_rect is not None:
+            road_view = AugmentedRoadView(stream_type=VisionStreamType.VISION_STREAM_ROAD)
+            road_view._switch_stream_if_needed = lambda sm: None
+            road_view._pm.send = lambda *args, **kwargs: None
+            wide_view = AugmentedRoadView(stream_type=VisionStreamType.VISION_STREAM_WIDE_ROAD)
+            wide_view._switch_stream_if_needed = lambda sm: None
+            wide_view._pm.send = lambda *args, **kwargs: None
+            wide_view._hud_renderer.render = lambda rect: None
+            wide_view.alert_renderer.render = lambda rect: None
+            wide_view.driver_state_renderer.render = lambda rect: None
         road_view.set_rect(rl.Rectangle(*layout_rects.road_rect))
+        if wide_view is not None and layout_rects.wide_rect is not None:
+            wide_view.set_rect(rl.Rectangle(*layout_rects.wide_rect))
         font = gui_app.font(FontWeight.NORMAL)
         steering_footer = None
         if layout_rects.footer_rect is not None:
@@ -863,7 +934,7 @@ def clip(
                 if frame_idx >= len(render_steps):
                     break
                 step = render_steps[frame_idx]
-                camera_ref, frame_bytes = frame_queue.get()
+                camera_ref, frame_bytes = road_frame_queue.get()
                 if camera_ref != step.camera_ref:
                     raise RuntimeError(f"Camera frame order mismatch: expected {step.camera_ref}, got {camera_ref}")
                 vipc.send(
@@ -873,9 +944,34 @@ def clip(
                     camera_ref.timestamp_sof,
                     camera_ref.timestamp_eof,
                 )
+                if wide_frame_queue is not None and step.wide_camera_ref is not None:
+                    wide_camera_ref, wide_frame_bytes = wide_frame_queue.get()
+                    if wide_camera_ref != step.wide_camera_ref:
+                        raise RuntimeError(
+                            f"Wide camera frame order mismatch: expected {step.wide_camera_ref}, got {wide_camera_ref}"
+                        )
+                    vipc.send(
+                        VisionStreamType.VISION_STREAM_WIDE_ROAD,
+                        wide_frame_bytes,
+                        wide_camera_ref.route_frame_id,
+                        wide_camera_ref.timestamp_sof,
+                        wide_camera_ref.timestamp_eof,
+                    )
                 ui_state.update()
                 if should_render:
                     road_view.render()
+                    if wide_view is not None:
+                        wide_view.render()
+                        draw_text_box("ROAD", layout_rects.road_rect[0] + 18, layout_rects.road_rect[1] + 18, 22, gui_app, font)
+                        assert layout_rects.wide_rect is not None
+                        draw_text_box("WIDE", layout_rects.wide_rect[0] + 18, layout_rects.wide_rect[1] + 18, 22, gui_app, font)
+                        rl.draw_line(
+                            int(layout_rects.wide_rect[0]),
+                            int(layout_rects.wide_rect[1]),
+                            int(layout_rects.wide_rect[0] + layout_rects.wide_rect[2]),
+                            int(layout_rects.wide_rect[1]),
+                            rl.Color(255, 255, 255, 24),
+                        )
                     if layout_rects.footer_rect is not None and steering_footer is not None:
                         steering_footer.render(
                             rl.Rectangle(*layout_rects.footer_rect),
@@ -908,7 +1004,9 @@ def clip(
                     last_log_frame_idx = frame_idx
         timer.lap("render")
 
-        frame_queue.stop()
+        road_frame_queue.stop()
+        if wide_frame_queue is not None:
+            wide_frame_queue.stop()
         gui_app.close()
         timer.lap("ffmpeg")
 

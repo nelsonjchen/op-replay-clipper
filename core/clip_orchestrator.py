@@ -25,8 +25,8 @@ ExecutionContext = Literal["cog", "local"]
 LocalAccel = Literal["auto", "cpu", "videotoolbox", "nvidia"]
 
 RENDER_TYPE_FILE_TYPES: dict[RenderType, tuple[str, ...]] = {
-    "ui": ("cameras", "logs"),
-    "ui-alt": ("cameras", "logs"),
+    "ui": ("cameras", "ecameras", "logs"),
+    "ui-alt": ("cameras", "ecameras", "logs"),
     "forward": ("cameras",),
     "wide": ("ecameras",),
     "driver": ("dcameras",),

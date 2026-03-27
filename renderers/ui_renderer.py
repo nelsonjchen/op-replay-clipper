@@ -20,6 +20,15 @@ UI_STARTUP_WARMUP_SECONDS = 1
 UI_FRAMERATE = 20
 UI_LAYOUT_MODES = ("default", "alt")
 
+
+def _compute_ui_render_window(*, start_seconds: int, length_seconds: int, smear_seconds: int) -> tuple[int, int, int, int]:
+    smear_seconds = max(0, smear_seconds)
+    warmup_seconds = min(UI_STARTUP_WARMUP_SECONDS, max(0, start_seconds - smear_seconds))
+    render_start = max(0, start_seconds - smear_seconds - warmup_seconds)
+    render_end = start_seconds + length_seconds
+    trim_front = max(0, start_seconds - render_start - warmup_seconds)
+    return render_start, render_end, warmup_seconds, trim_front
+
 @dataclass(frozen=True)
 class UIRenderOptions:
     route: str
@@ -235,10 +244,11 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
     print(f"UI recording encoder: {env['RECORD_CODEC']} ({recording_acceleration})")
     is_metric = detect_logged_metric(opts.route, data_dir=opts.data_dir, openpilot_dir=openpilot_dir)
     smear_seconds = max(0, opts.smear_seconds)
-    warmup_seconds = min(UI_STARTUP_WARMUP_SECONDS, max(0, opts.start_seconds - smear_seconds))
-    render_start = max(0, opts.start_seconds - smear_seconds - warmup_seconds)
-    render_end = opts.start_seconds + opts.length_seconds
-    trim_front = smear_seconds
+    render_start, render_end, warmup_seconds, trim_front = _compute_ui_render_window(
+        start_seconds=opts.start_seconds,
+        length_seconds=opts.length_seconds,
+        smear_seconds=smear_seconds,
+    )
     if warmup_seconds > 0:
         env["RECORD_SKIP_FRAMES"] = str(warmup_seconds * UI_FRAMERATE)
 
