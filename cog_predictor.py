@@ -37,9 +37,9 @@ class Predictor(BasePredictor):
         ),
         smearAmount: int = Input(
             description="(UI only) Seconds of hidden preroll before the visible clip start. Increase this if important UI state is missing at the beginning of the clip.",
-            ge=5,
+            ge=3,
             le=40,
-            default=5,
+            default=3,
         ),
         fileSize: int = Input(description="Target output size in MB. Actual size may vary.", ge=5, le=200, default=9),
         fileFormat: str = Input(
