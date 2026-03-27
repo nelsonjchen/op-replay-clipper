@@ -3,7 +3,7 @@ from pathlib import Path
 from cog import BasePredictor, Input, Path as CogPath
 
 from core import route_inputs
-from core.clip_orchestrator import ClipRequest, is_ui_render_type, run_clip
+from core.clip_orchestrator import ClipRequest, is_smear_render_type, run_clip
 from core.openpilot_config import default_image_openpilot_root
 
 MIN_LENGTH_SECONDS = 5
@@ -21,6 +21,7 @@ class Predictor(BasePredictor):
             choices=[
                 "ui",
                 "ui-alt",
+                "driver-debug",
                 "forward",
                 "wide",
                 "driver",
@@ -69,7 +70,7 @@ class Predictor(BasePredictor):
                 target_mb=fileSize,
                 file_format=fileFormat,  # type: ignore[arg-type]
                 output_path="./shared/cog-clip.mp4",
-                smear_seconds=smearAmount if is_ui_render_type(renderType) else 0,  # type: ignore[arg-type]
+                smear_seconds=smearAmount if is_smear_render_type(renderType) else 0,  # type: ignore[arg-type]
                 jwt_token=jwtToken or None,
                 forward_upon_wide_h="auto",
                 execution_context="cog",

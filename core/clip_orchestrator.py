@@ -7,12 +7,13 @@ from typing import Literal
 from core import route_downloader, route_inputs
 from core.forward_upon_wide import ForwardUponWideHInput, is_auto_forward_upon_wide
 from core.openpilot_config import default_image_openpilot_root
-from renderers import ui_renderer, video_renderer
+from renderers import driver_debug_renderer, ui_renderer, video_renderer
 
 
 RenderType = Literal[
     "ui",
     "ui-alt",
+    "driver-debug",
     "forward",
     "wide",
     "driver",
@@ -28,6 +29,7 @@ LocalAccel = Literal["auto", "cpu", "videotoolbox", "nvidia"]
 RENDER_TYPE_FILE_TYPES: dict[RenderType, tuple[str, ...]] = {
     "ui": ("cameras", "ecameras", "logs"),
     "ui-alt": ("cameras", "ecameras", "logs"),
+    "driver-debug": ("dcameras", "logs"),
     "forward": ("cameras",),
     "wide": ("ecameras",),
     "driver": ("dcameras",),
@@ -96,6 +98,14 @@ def is_ui_render_type(render_type: RenderType) -> bool:
     return render_type in ("ui", "ui-alt")
 
 
+def is_openpilot_render_type(render_type: RenderType) -> bool:
+    return render_type in ("ui", "ui-alt", "driver-debug")
+
+
+def is_smear_render_type(render_type: RenderType) -> bool:
+    return render_type in ("ui", "ui-alt", "driver-debug")
+
+
 def normalize_output_format(render_type: RenderType, requested_format: OutputFormatInput) -> OutputFormat:
     if requested_format in ("h264", "hevc"):
         return requested_format
@@ -161,7 +171,7 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
             qcam=request.qcam,
             forward_upon_wide_h=request.forward_upon_wide_h,
         ),
-        decompress_logs=not is_ui_render_type(request.render_type),
+        decompress_logs=not is_openpilot_render_type(request.render_type),
         smear_seconds=max(0, request.smear_seconds),
         local_acceleration=request.local_acceleration,
         forward_upon_wide_h=request.forward_upon_wide_h,
@@ -209,6 +219,30 @@ def run_clip(request: ClipRequest) -> ClipResult:
         )
         return ClipResult(
             output_path=ui_result.output_path,
+            route=plan.route,
+            render_type=plan.render_type,
+            data_dir=plan.data_dir,
+            file_format=plan.file_format,
+        )
+
+    if plan.render_type == "driver-debug":
+        driver_debug_result = driver_debug_renderer.render_driver_debug_clip(
+            driver_debug_renderer.DriverDebugRenderOptions(
+                route=plan.route,
+                start_seconds=plan.start_seconds,
+                length_seconds=plan.length_seconds,
+                smear_seconds=plan.smear_seconds,
+                target_mb=plan.target_mb,
+                file_format=plan.file_format,
+                output_path=str(plan.output_path),
+                data_dir=str(plan.data_dir),
+                jwt_token=plan.jwt_token,
+                openpilot_dir=plan.openpilot_dir,
+                headless=plan.headless,
+            )
+        )
+        return ClipResult(
+            output_path=driver_debug_result.output_path,
             route=plan.route,
             render_type=plan.render_type,
             data_dir=plan.data_dir,

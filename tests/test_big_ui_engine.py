@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -80,6 +81,19 @@ def test_build_layout_rects_default_uses_full_canvas() -> None:
 
     assert rects.road_rect == (0, 0, 1920, 1080)
     assert rects.footer_rect is None
+
+
+def test_reapply_hidden_window_flag_sets_hidden_state(monkeypatch) -> None:
+    called: list[int] = []
+    fake_pyray = SimpleNamespace(
+        rl=SimpleNamespace(SetWindowState=lambda value: called.append(value)),
+        ConfigFlags=SimpleNamespace(FLAG_WINDOW_HIDDEN=0x80),
+    )
+    monkeypatch.setitem(sys.modules, "pyray", fake_pyray)
+
+    big_ui_engine._reapply_hidden_window_flag(headless=True)
+
+    assert called == [0x80]
 
 
 def test_build_layout_rects_alt_reserves_footer() -> None:

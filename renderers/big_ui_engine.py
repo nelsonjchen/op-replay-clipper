@@ -569,6 +569,18 @@ def load_route_metadata(route) -> dict[str, str]:
     }
 
 
+def _reapply_hidden_window_flag(*, headless: bool) -> None:
+    if not headless:
+        return
+
+    import pyray as rl
+
+    set_window_state = getattr(getattr(rl, "rl", None), "SetWindowState", None)
+    if set_window_state is None:
+        return
+    set_window_state(int(rl.ConfigFlags.FLAG_WINDOW_HIDDEN))
+
+
 def draw_text_box(text, x, y, size, gui_app, font, color=None, center=False) -> None:
     import pyray as rl
     from openpilot.system.ui.lib.text_measure import measure_text_cached
@@ -1182,6 +1194,7 @@ def clip(
                 height=compute_ui_alt_dual_canvas_height(gui_app.height),
             )
         gui_app.init_window("repo-owned clip", fps=FRAMERATE)
+        _reapply_hidden_window_flag(headless=headless)
 
         layout_rects = build_layout_rects(
             width=gui_app.width,

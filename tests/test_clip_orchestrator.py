@@ -24,6 +24,7 @@ def test_download_file_type_mapping() -> None:
     assert clip_orchestrator.select_download_file_types("forward", qcam=False) == ("cameras",)
     assert clip_orchestrator.select_download_file_types("ui", qcam=True) == ("qcameras", "logs")
     assert clip_orchestrator.select_download_file_types("ui-alt", qcam=True) == ("qcameras", "logs")
+    assert clip_orchestrator.select_download_file_types("driver-debug", qcam=False) == ("dcameras", "logs")
     assert clip_orchestrator.select_download_file_types("ui", qcam=False) == ("cameras", "ecameras", "logs")
     assert clip_orchestrator.select_download_file_types("ui-alt", qcam=False) == ("cameras", "ecameras", "logs")
 
@@ -56,6 +57,22 @@ def test_build_plan_treats_ui_alt_as_ui_render() -> None:
     )
 
     assert plan.download_file_types == ("cameras", "ecameras", "logs")
+    assert plan.decompress_logs is False
+
+
+def test_build_plan_treats_driver_debug_as_openpilot_render() -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type="driver-debug",
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
+            execution_context="local",
+        )
+    )
+
+    assert plan.download_file_types == ("dcameras", "logs")
     assert plan.decompress_logs is False
 
 
@@ -115,6 +132,19 @@ def test_ui_alt_command_prepares_openpilot(ensure_checkout: mock.Mock, bootstrap
     bootstrap.assert_called_once()
     request = run_clip.call_args.args[0]
     assert request.render_type == "ui-alt"
+
+
+@mock.patch("clip.run_clip")
+@mock.patch("clip.bootstrap_openpilot")
+@mock.patch("clip.ensure_openpilot_checkout")
+def test_driver_debug_command_prepares_openpilot(ensure_checkout: mock.Mock, bootstrap: mock.Mock, run_clip: mock.Mock) -> None:
+    run_clip.return_value = mock.Mock(output_path="shared/out.mp4", acceleration=None)
+    exit_code = clip.main(["driver-debug", "--demo"])
+    assert exit_code == 0
+    ensure_checkout.assert_called_once()
+    bootstrap.assert_called_once()
+    request = run_clip.call_args.args[0]
+    assert request.render_type == "driver-debug"
 
 
 @mock.patch("clip.run_clip")
