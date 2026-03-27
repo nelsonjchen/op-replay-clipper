@@ -43,6 +43,7 @@ class UIRenderOptions:
     openpilot_dir: str = field(default_factory=default_image_openpilot_root)
     headless: bool = True
     layout_mode: str = "default"
+    qcam: bool = False
 
 
 @dataclass(frozen=True)
@@ -273,6 +274,8 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
     if opts.data_dir:
         compat_root = build_openpilot_compatible_data_dir(opts.route, Path(opts.data_dir))
         clip_cmd += ["-d", str(compat_root)]
+    if opts.qcam:
+        clip_cmd.append("--qcam")
     if not opts.headless:
         clip_cmd.append("--windowed")
 
