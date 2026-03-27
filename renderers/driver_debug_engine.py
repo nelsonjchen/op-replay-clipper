@@ -36,7 +36,7 @@ DRIVER_CAMERA_SERVICE = "driverEncodeIdx"
 DRIVER_CAMERA_STATE_SERVICE = "driverCameraState"
 DRIVER_DEBUG_WIDTH = 1920
 DRIVER_DEBUG_VIDEO_HEIGHT = 1080
-DRIVER_DEBUG_FOOTER_HEIGHT = 420
+DRIVER_DEBUG_FOOTER_HEIGHT = 560
 DRIVER_DEBUG_HEIGHT = DRIVER_DEBUG_VIDEO_HEIGHT + DRIVER_DEBUG_FOOTER_HEIGHT
 
 
@@ -346,11 +346,20 @@ class DriverDebugOverlayRenderer:
         self._label_font = label_font
         self._value_font = value_font
 
-    def _draw_kv_row(self, x: float, y: float, label: str, value: str, *, width: float, value_color) -> None:
+    def _draw_kv_row(
+        self,
+        x: float,
+        y: float,
+        label: str,
+        value: str,
+        *,
+        width: float,
+        value_color,
+        value_size: int = 24,
+    ) -> None:
         import pyray as rl
 
-        label_size = 18
-        value_size = 24
+        label_size = 17
         dim = rl.Color(255, 255, 255, 145)
         rl.draw_text_ex(self._label_font, label, rl.Vector2(x, y), label_size, 0, dim)
         value_width = rl.measure_text_ex(self._value_font, value, value_size, 0).x
@@ -408,12 +417,27 @@ class DriverDebugOverlayRenderer:
 
         rl.draw_text_ex(self._label_font, title, rl.Vector2(x, y), 22, 0, rl.Color(255, 255, 255, 145))
 
+    def _draw_card(self, rect, *, accent) -> None:
+        import pyray as rl
+
+        fill = rl.Color(8, 16, 24, 180)
+        border = rl.Color(255, 255, 255, 28)
+        glow = rl.Color(accent.r, accent.g, accent.b, 26)
+        rl.draw_rectangle_rounded(rect, 0.05, 12, fill)
+        rl.draw_rectangle_rounded(rl.Rectangle(rect.x, rect.y, rect.width, 6), 0.4, 8, glow)
+        rl.draw_rectangle_rounded_lines_ex(rect, 0.05, 12, 2, border)
+
+    def _draw_micro_stat(self, x: float, y: float, label: str, value: str, *, color) -> None:
+        import pyray as rl
+
+        rl.draw_text_ex(self._label_font, label.upper(), rl.Vector2(x, y), 14, 0, rl.Color(255, 255, 255, 120))
+        rl.draw_text_ex(self._value_font, value, rl.Vector2(x, y + 18), 28, 0, color)
+
     def render(self, rect, *, telemetry: DriverDebugTelemetry, route_seconds: float, metadata: dict[str, str] | None) -> None:
         import pyray as rl
 
         panel_bg = rl.Color(5, 12, 18, 255)
         panel_bg_bottom = rl.Color(11, 26, 37, 255)
-        divider = rl.Color(255, 255, 255, 24)
         white = rl.Color(255, 255, 255, 245)
         dim = rl.Color(255, 255, 255, 160)
         green = rl.Color(94, 214, 135, 255)
@@ -421,18 +445,18 @@ class DriverDebugOverlayRenderer:
         red = rl.Color(255, 103, 103, 255)
         blue = rl.Color(125, 196, 255, 255)
         outer_pad_x = 34
-        outer_pad_y = 24
+        outer_pad_y = 28
 
         rl.draw_rectangle(int(rect.x), int(rect.y), int(rect.width), int(rect.height), rl.Color(0, 0, 0, 255))
         rl.draw_rectangle_gradient_v(int(rect.x), int(rect.y), int(rect.width), int(rect.height), panel_bg, panel_bg_bottom)
-        rl.draw_line(int(rect.x), int(rect.y), int(rect.x + rect.width), int(rect.y), divider)
+        rl.draw_line(int(rect.x), int(rect.y), int(rect.x + rect.width), int(rect.y), rl.Color(255, 255, 255, 24))
 
         title_x = rect.x + outer_pad_x
         title_y = rect.y + outer_pad_y
         rl.draw_text_ex(self._label_font, "DRIVER DEBUG", rl.Vector2(title_x, title_y), 22, 0, blue)
 
         time_text = f"T+{int(route_seconds) // 60:02d}:{int(route_seconds) % 60:02d}"
-        rl.draw_text_ex(self._value_font, time_text, rl.Vector2(title_x, title_y + 28), 42, 0, white)
+        rl.draw_text_ex(self._value_font, time_text, rl.Vector2(title_x, title_y + 26), 38, 0, white)
 
         if metadata:
             route_label = metadata.get("route", "")
@@ -448,47 +472,81 @@ class DriverDebugOverlayRenderer:
                     dim,
                 )
 
+        subtitle_parts = [
+            f"side {telemetry.selected_side}",
+            f"low std {'yes' if telemetry.is_low_std else 'no'}",
+            f"engaged {'yes' if telemetry.engaged else 'no'}",
+        ]
+        rl.draw_text_ex(
+            self._label_font,
+            " | ".join(subtitle_parts),
+            rl.Vector2(title_x, title_y + 70),
+            16,
+            0,
+            dim,
+        )
+
         badges = [
             (f"MODE {'ACTIVE' if telemetry.is_active_mode else 'PASSIVE'}", green if telemetry.is_active_mode else orange),
-            (f"FACE {'YES' if telemetry.face_detected else 'NO'}", green if telemetry.face_detected else red),
             (f"DISTRACTED {'YES' if telemetry.is_distracted else 'NO'}", red if telemetry.is_distracted else green),
-            (f"SIDE {telemetry.selected_side.upper()}", blue),
-            (f"LOW STD {'YES' if telemetry.is_low_std else 'NO'}", green if telemetry.is_low_std else orange),
+            (f"FACE {'YES' if telemetry.face_detected else 'NO'}", green if telemetry.face_detected else red),
         ]
         if telemetry.alert_name:
             badges.append((telemetry.alert_name, orange if telemetry.is_distracted else blue))
-        badge_bottom = self._draw_badges_flow(title_x + 210, title_y + 18, rect.x + rect.width - outer_pad_x, badges)
+        badge_bottom = self._draw_badges_flow(title_x + 220, title_y + 22, rect.x + rect.width - outer_pad_x, badges)
 
-        section_top = max(title_y + 86, badge_bottom + 20)
+        section_top = max(title_y + 112, badge_bottom + 28)
         section_height = rect.height - (section_top - rect.y) - outer_pad_y
         col_gap = 36
         col_width = (rect.width - (2 * outer_pad_x) - (2 * col_gap)) / 3
         col1_x = rect.x + outer_pad_x
         col2_x = col1_x + col_width + col_gap
         col3_x = col2_x + col_width + col_gap
+        card_rects = [
+            rl.Rectangle(col1_x, section_top, col_width, section_height),
+            rl.Rectangle(col2_x, section_top, col_width, section_height),
+            rl.Rectangle(col3_x, section_top, col_width, section_height),
+        ]
 
-        self._draw_section_title(col1_x, section_top, "DM STATE")
+        self._draw_card(card_rects[0], accent=blue)
+        self._draw_card(card_rects[1], accent=green)
+        self._draw_card(card_rects[2], accent=orange)
+
+        card_pad_x = 24
+        card_pad_y = 22
+
+        left_x = card_rects[0].x + card_pad_x
+        left_y = card_rects[0].y + card_pad_y
+        self._draw_section_title(left_x, left_y, "DM STATE")
         awareness_text = _fmt_percent(telemetry.awareness_status)
-        rl.draw_text_ex(self._value_font, awareness_text, rl.Vector2(col1_x, section_top + 28), 62, 0, white)
+        rl.draw_text_ex(self._value_font, awareness_text, rl.Vector2(left_x, left_y + 28), 64, 0, white)
         rl.draw_text_ex(
             self._label_font,
             f"ACTIVE {_fmt_percent(telemetry.awareness_active)}   PASSIVE {_fmt_percent(telemetry.awareness_passive)}",
-            rl.Vector2(col1_x, section_top + 86),
+            rl.Vector2(left_x, left_y + 90),
             17,
             0,
             dim,
         )
-        left_rows = [
-            ("uncertain count", str(telemetry.uncertain_count), orange if telemetry.uncertain_count else white),
-            ("step / hi std", f"{_fmt_float(telemetry.step_change, 3)} / {telemetry.hi_std_count}", white),
-            ("engaged / hands", f"{'ENGAGED' if telemetry.engaged else 'OFF'} / {'ON' if telemetry.steering_pressed else 'OFF'}", green if telemetry.engaged else dim),
-            ("gas / speed", f"{'ON' if telemetry.gas_pressed else 'OFF'} / {_fmt_float(telemetry.v_ego, 1, ' m/s')}", white),
-        ]
-        for idx, (label, value, color) in enumerate(left_rows):
-            self._draw_kv_row(col1_x, section_top + 128 + (idx * 38), label, value, width=col_width, value_color=color)
+        micro_y = left_y + 134
+        self._draw_micro_stat(left_x, micro_y, "uncertain", str(telemetry.uncertain_count), color=orange if telemetry.uncertain_count else white)
+        self._draw_micro_stat(left_x + 180, micro_y, "hi std", str(telemetry.hi_std_count), color=white)
+        self._draw_micro_stat(left_x, micro_y + 68, "step", _fmt_float(telemetry.step_change, 3), color=white)
+        self._draw_micro_stat(left_x + 180, micro_y + 68, "speed", _fmt_float(telemetry.v_ego, 1, " m/s"), color=white)
+        left_bottom_y = card_rects[0].y + card_rects[0].height - 64
+        self._draw_kv_row(
+            left_x,
+            left_bottom_y,
+            "status",
+            f"{'ENGAGED' if telemetry.engaged else 'OFF'} / {'HANDS ON' if telemetry.steering_pressed else 'HANDS OFF'}",
+            width=card_rects[0].width - (2 * card_pad_x),
+            value_color=green if telemetry.engaged else dim,
+            value_size=20,
+        )
 
-        rl.draw_line(int(col2_x - 18), int(section_top), int(col2_x - 18), int(section_top + section_height), divider)
-        self._draw_section_title(col2_x, section_top, "MODEL")
+        mid_x = card_rects[1].x + card_pad_x
+        mid_y = card_rects[1].y + card_pad_y
+        self._draw_section_title(mid_x, mid_y, "MODEL")
         middle_rows = [
             ("face / wheel side", f"{_fmt_percent(telemetry.face_prob)} / {_fmt_percent(telemetry.wheel_on_right_prob)}", white),
             ("eyes L / R", f"{_fmt_percent(telemetry.left_eye_prob)} / {_fmt_percent(telemetry.right_eye_prob)}", white),
@@ -498,19 +556,35 @@ class DriverDebugOverlayRenderer:
             ("distracted type", str(telemetry.distracted_type), red if telemetry.distracted_type else green),
         ]
         for idx, (label, value, color) in enumerate(middle_rows):
-            self._draw_kv_row(col2_x, section_top + 38 + (idx * 38), label, value, width=col_width, value_color=color)
+            self._draw_kv_row(
+                mid_x,
+                mid_y + 42 + (idx * 40),
+                label,
+                value,
+                width=card_rects[1].width - (2 * card_pad_x),
+                value_color=color,
+            )
 
-        rl.draw_line(int(col3_x - 18), int(section_top), int(col3_x - 18), int(section_top + section_height), divider)
-        self._draw_section_title(col3_x, section_top, "POSE + VEHICLE")
+        right_x = card_rects[2].x + card_pad_x
+        right_y = card_rects[2].y + card_pad_y
+        self._draw_section_title(right_x, right_y, "POSE")
         right_rows = [
             ("orientation", _fmt_vec(telemetry.face_orientation), white),
             ("position", _fmt_vec(telemetry.face_position), white),
-            ("orient / pos std", f"{_fmt_vec(telemetry.face_orientation_std)} / {_fmt_vec(telemetry.face_position_std)}", white),
+            ("orient std", _fmt_vec(telemetry.face_orientation_std), white),
+            ("pos std", _fmt_vec(telemetry.face_position_std), white),
             ("pitch off / count", f"{_fmt_float(telemetry.pitch_offset, 3)} / {telemetry.pitch_valid_count}", white),
             ("yaw off / count", f"{_fmt_float(telemetry.yaw_offset, 3)} / {telemetry.yaw_valid_count}", white),
         ]
         for idx, (label, value, color) in enumerate(right_rows):
-            self._draw_kv_row(col3_x, section_top + 38 + (idx * 38), label, value, width=col_width, value_color=color)
+            self._draw_kv_row(
+                right_x,
+                right_y + 42 + (idx * 40),
+                label,
+                value,
+                width=card_rects[2].width - (2 * card_pad_x),
+                value_color=color,
+            )
 
 
 def _driver_camera_dialog_module(*, device_type: str) -> str:
