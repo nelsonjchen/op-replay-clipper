@@ -26,7 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Clip render type.",
     )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Where to write the returned MP4.")
-    parser.add_argument("--smear-amount", type=int, default=5, help="UI smear amount.")
+    parser.add_argument("--smear-amount", type=int, default=3, help="UI smear amount.")
     parser.add_argument("--file-size", type=int, default=9, help="Target output size in MB.")
     parser.add_argument("--file-format", choices=["auto", "h264", "hevc"], default="auto")
     parser.add_argument("--jwt-token", default="", help="Optional comma JWT token for private routes.")

@@ -35,7 +35,7 @@ def test_build_input_uses_cog_field_names() -> None:
         jwt_token="",
         file_format="auto",
         render_type="ui",
-        smear_amount=5,
+        smear_amount=3,
     )
     payload = replicate_run.build_input(args)
     assert payload["renderType"] == "ui"
@@ -52,7 +52,7 @@ def test_build_input_allows_ui_alt_render_type() -> None:
         jwt_token="",
         file_format="auto",
         render_type="ui-alt",
-        smear_amount=5,
+        smear_amount=3,
     )
 
     payload = replicate_run.build_input(args)
@@ -67,7 +67,7 @@ def test_build_input_allows_driver_debug_render_type() -> None:
         jwt_token="",
         file_format="auto",
         render_type="driver-debug",
-        smear_amount=5,
+        smear_amount=3,
         forward_upon_wide_h=2.2,
     )
 
