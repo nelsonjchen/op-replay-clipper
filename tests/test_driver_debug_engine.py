@@ -161,3 +161,14 @@ def test_compute_driver_face_box_rect_expands_and_biases_estimate_for_yaw() -> N
     anchor_x, _ = driver_debug_engine._driver_face_anchor(Rect(), face_x=0.197, face_y=0.158, device_type="mici")
     box_center_x = box_x + (box_w / 2)
     assert box_center_x < anchor_x
+
+
+def test_install_unmirrored_driver_camera_patches_nested_camera_view() -> None:
+    original_render = lambda rect: None
+    camera_view = SimpleNamespace(_render=original_render)
+    driver_view = SimpleNamespace(_camera_view=camera_view)
+
+    driver_debug_engine._install_unmirrored_driver_camera(driver_view)
+
+    assert camera_view._render is not original_render
+    assert getattr(camera_view._render, "__self__", None) is camera_view

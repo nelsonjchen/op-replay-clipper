@@ -268,11 +268,15 @@ def _driver_face_anchor(rect, *, face_x: float, face_y: float, device_type: str)
         offset_y = (base_y - 540.0) * 1.25
         scale_x = rect.width / 2160.0
         scale_y = rect.height / 1080.0
-        return rect.x + (rect.width / 2) + (offset_x * scale_x), rect.y + (rect.height / 2) + (offset_y * scale_y)
+        anchor_x = rect.x + (rect.width / 2) + (offset_x * scale_x)
+        anchor_y = rect.y + (rect.height / 2) + (offset_y * scale_y)
+        return rect.x + rect.width - (anchor_x - rect.x), anchor_y
 
     scale_x = rect.width / 2160.0
     scale_y = rect.height / 1080.0
-    return rect.x + (base_x * scale_x), rect.y + (base_y * scale_y)
+    anchor_x = rect.x + (base_x * scale_x)
+    anchor_y = rect.y + (base_y * scale_y)
+    return rect.x + rect.width - (anchor_x - rect.x), anchor_y
 
 
 def compute_driver_face_box_rect(
@@ -641,6 +645,51 @@ def _install_driver_debug_face_box(driver_view, *, device_type: str) -> None:
         driver_view.driver_state_renderer.render = _render_driver_state_override
 
 
+def _install_unmirrored_driver_camera(driver_view) -> None:
+    camera_view = getattr(driver_view, "_camera_view", driver_view)
+
+    def _render_unmirrored(self, rect):
+        import pyray as rl
+
+        if self._switching:
+            self._handle_switch()
+
+        if not self._ensure_connection():
+            self._draw_placeholder(rect)
+            return
+
+        buffer = self.client.recv(timeout_ms=0)
+        if buffer:
+            self._texture_needs_update = True
+            self.frame = buffer
+        elif not self.client.is_connected():
+            self.frame = None
+
+        if not self.frame:
+            self._draw_placeholder(rect)
+            return
+
+        transform = self._calc_frame_matrix(rect)
+        src_rect = rl.Rectangle(0, 0, float(self.frame.width), float(self.frame.height))
+
+        scale_x = rect.width * transform[0, 0]
+        scale_y = rect.height * transform[1, 1]
+
+        x_offset = rect.x + (rect.width - scale_x) / 2
+        y_offset = rect.y + (rect.height - scale_y) / 2
+        x_offset += transform[0, 2] * rect.width / 2
+        y_offset += transform[1, 2] * rect.height / 2
+
+        dst_rect = rl.Rectangle(x_offset, y_offset, scale_x, scale_y)
+
+        if self.egl_texture is not None:
+            self._render_egl(src_rect, dst_rect)
+        else:
+            self._render_textures(src_rect, dst_rect)
+
+    camera_view._render = types.MethodType(_render_unmirrored, camera_view)
+
+
 def clip(
     route,
     output: str,
@@ -698,6 +747,7 @@ def clip(
 
         DriverCameraDialog = _select_driver_camera_dialog(device_type=route_metadata.get("device_type", "unknown"))
         driver_view = DriverCameraDialog()
+        _install_unmirrored_driver_camera(driver_view)
         _install_driver_debug_face_box(driver_view, device_type=route_metadata.get("device_type", "unknown"))
         driver_view.set_rect(rl.Rectangle(0, 0, gui_app.width, DRIVER_DEBUG_VIDEO_HEIGHT))
         font = gui_app.font(FontWeight.NORMAL)
