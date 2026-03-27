@@ -11,6 +11,8 @@ The clipper can produce clips of:
 * comma.ai openpilot UI (including desired path, lane lines, modes, etc.)
   * Route metadata is branded into the clip for debugging and reporting, including the route id, platform, git remote, branch, commit, `Dirty` state, and a running route timer. Useful for posting clips in the [comma.ai Discord's #driving-feedback and/or #openpilot-experience channel](https://discord.comma.ai), [reddit](https://www.reddit.com/r/comma_ai), [Facebook](https://www.facebook.com/groups/706398630066928), or anywhere else that takes video. Very useful for [making outstanding bug reports](https://github.com/commaai/openpilot/wiki/FAQ#how-do-i-report-a-bug) as well as feedback on good behavior.
 * `ui-alt`, a UI layout variant that reserves a footer below the road view and shows a rotating steering wheel driven by the logged steering angle plus a mici-style confidence rail
+* `driver-debug`, a driver camera replay/debug layout
+  * Replays the driver camera without the normal mirror effect, draws a coarse driver-face box estimate, and adds a large telemetry footer with driver monitoring state, awareness, distraction, pose/model values, and route/git metadata. Useful for debugging DM behavior and building better DM bug reports.
 * Forward, Wide, and Driver Camera with no UI
   * Concatenate, cut, and convert the raw, low-compatibility, and separated HEVC files to one fairly compatible HEVC MP4 or super-compatible H.264 MP4 for easy sharing.
 * 360 Video
@@ -204,6 +206,7 @@ Examples:
 uv sync
 uv run python clip.py ui "https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
 uv run python clip.py ui-alt "https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
+uv run python clip.py driver-debug "https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
 uv run python clip.py forward "a2a0ccea32023010|2023-07-27--13-01-19" --demo
 ```
 
@@ -219,16 +222,26 @@ Exact-sync BIG UI smoke test:
 make ui-exact-smoke
 ```
 
+Driver debug smoke test:
+
+```bash
+uv run python clip.py driver-debug --demo --length-seconds 2 --output ./shared/demo-driver-debug-clip.mp4
+```
+
+`driver-debug` is the DM-focused openpilot render. It replays the driver camera through openpilot's driver camera dialog, keeps the camera unmirrored, draws the repo-owned face box estimate, and renders a footer with awareness, distraction, model timing, pose, and route/build metadata.
+
 Notes:
 
 * `clip.py` is the primary local CLI for UI and non-UI renders
+* `driver-debug` is an openpilot-backed render type like `ui` and `ui-alt`, but it only needs `dcameras` and `logs`
+* `driver-debug` uses the same hidden preroll/cut behavior as the UI renderers so the visible clip starts after the DM state has initialized
 * BIG UI renders now use a repo-owned exact-frame runner instead of the old coarse 20 Hz chunk mapping, so lane lines and path overlays stay aligned to the logged road camera frames
 * The BIG UI renderer also does a hidden 1-second warmup before recording so the visible clip starts with initialized video/UI state instead of a blank opening
 * BIG UI units are auto-detected from the route's logged `IsMetric` param when present, and otherwise default to imperial
 * `pyproject.toml` declares compatible dependency ranges and `uv.lock` pins the exact resolved environment
 * `uv sync` bootstraps the local Python environment used by the local CLI
 * On macOS it prefers a local acceleration policy for ffmpeg-based renders where available
-* It clones/updates `openpilot` into `./.cache/openpilot-local` for UI renders
+* It clones/updates `openpilot` into `./.cache/openpilot-local` for openpilot-backed renders such as `ui`, `ui-alt`, and `driver-debug`
 * `--openpilot-repo-url` lets you point local bootstrap at an SSH remote if you want to reuse Git agent forwarding or a closer mirror
 * It runs `uv sync --frozen --all-extras` and builds the native modules needed by the repo-owned BIG UI exact-frame runner
 * On macOS it applies the same `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` workaround used by upstream `tools/install_python_dependencies.sh`
@@ -257,8 +270,8 @@ uv sync
 ```bash
 uv run python replicate_run.py \
   --url 'https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496' \
-  --render-type forward \
-  --output ./shared/replicate-run-forward.mp4
+  --render-type driver-debug \
+  --output ./shared/replicate-run-driver-debug.mp4
 ```
 
 Notes:
