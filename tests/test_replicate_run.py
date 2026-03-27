@@ -1,6 +1,6 @@
 from __future__ import annotations
-
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from core import route_inputs
 import replicate_run
@@ -87,6 +87,18 @@ def test_encode_replicate_route_input_wraps_plain_connect_url() -> None:
     assert replicate_run.encode_replicate_route_input(url) == url
 
 
+def test_resolve_model_defaults_to_latest_beta_alias() -> None:
+    model, explicit = replicate_run.resolve_model("")
+    assert model == replicate_run.DEFAULT_MODEL
+    assert explicit is False
+
+
+def test_resolve_model_preserves_explicit_model() -> None:
+    model, explicit = replicate_run.resolve_model("nelsonjchen/op-replay-clipper-beta:abc123")
+    assert model == "nelsonjchen/op-replay-clipper-beta:abc123"
+    assert explicit is True
+
+
 def test_validate_connect_url_rejects_non_connect_hosts() -> None:
     try:
         replicate_run.validate_connect_url("https://example.com/not-connect")
@@ -123,3 +135,20 @@ def test_save_file_output_accepts_single_item_iterable(tmp_path) -> None:
     written = replicate_run.save_file_output([FakeFileOutput(b"video-bytes")], output_path)
     assert written == output_path.resolve()
     assert output_path.read_bytes() == b"video-bytes"
+
+
+def test_main_warns_when_model_is_not_explicit(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.setattr(replicate_run, "require_api_token", lambda: "token")
+    monkeypatch.setattr(replicate_run, "validate_connect_url", lambda url: url)
+    replicate_run_call = Mock(return_value=FakeFileOutput(b"video-bytes"))
+    monkeypatch.setattr(replicate_run.replicate, "run", replicate_run_call)
+
+    output_path = tmp_path / "clip.mp4"
+    exit_code = replicate_run.main(["--url", "https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496", "--output", str(output_path)])
+
+    assert exit_code == 0
+    assert output_path.read_bytes() == b"video-bytes"
+    replicate_run_call.assert_called_once()
+    captured = capsys.readouterr()
+    assert "Warning: --model was not set; using latest beta alias" in captured.out
+    assert replicate_run.DEFAULT_MODEL in captured.out

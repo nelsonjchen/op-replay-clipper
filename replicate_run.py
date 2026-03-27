@@ -10,14 +10,14 @@ from dotenv import load_dotenv
 import replicate
 from core import route_inputs
 
-DEFAULT_MODEL = "nelsonjchen/op-replay-clipper-beta:e2ea1155bcceb27dfb5609f866e65cb2f2f0728d114a84733cf790ff3ca679d6"
+DEFAULT_MODEL = "nelsonjchen/op-replay-clipper-beta"
 DEFAULT_URL = "https://connect.comma.ai/5beb9b58bd12b691/0000010a--a51155e496/90/105"
 DEFAULT_OUTPUT = Path("./shared/replicate-run-output.mp4")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the hosted Replicate clipper and save the returned video locally.")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="Replicate model version ref.")
+    parser.add_argument("--model", default="", help="Replicate model ref. Defaults to the latest beta alias when omitted.")
     parser.add_argument("--url", default=DEFAULT_URL, help="connect.comma.ai clip URL.")
     parser.add_argument(
         "--render-type",
@@ -68,6 +68,13 @@ def encode_replicate_route_input(url: str) -> str:
     return route_inputs.validate_connect_url(url)
 
 
+def resolve_model(model: str) -> tuple[str, bool]:
+    cleaned = model.strip()
+    if cleaned:
+        return cleaned, True
+    return DEFAULT_MODEL, False
+
+
 def unwrap_file_output(output: Any) -> Any:
     if hasattr(output, "read"):
         return output
@@ -92,8 +99,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     require_api_token()
     args.url = validate_connect_url(args.url)
+    args.model, model_was_explicit = resolve_model(args.model)
     payload = build_input(args)
 
+    if not model_was_explicit:
+        print(f"Warning: --model was not set; using latest beta alias {args.model}", flush=True)
     print(f"Running {args.model}", flush=True)
     print(f"Saving output to {args.output}", flush=True)
     output = replicate.run(args.model, input=payload)
