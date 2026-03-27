@@ -72,6 +72,9 @@ jobs:
       - name: Sync locked environment
         run: uv sync --frozen --all-extras
 
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Render mici forward smoke clip
         run: bash ./common/render_mici_smoke.sh
 
