@@ -137,7 +137,12 @@ def test_driver_camera_dialog_module_uses_mici_variant_for_mici_routes() -> None
     assert driver_debug_engine._driver_camera_dialog_module(device_type="tici") == "openpilot.selfdrive.ui.onroad.driver_camera_dialog"
 
 
-def test_compute_driver_face_box_rect_expands_and_biases_estimate_for_yaw() -> None:
+def test_humanize_platform_replaces_underscores_and_titles_words() -> None:
+    assert driver_debug_engine._humanize_platform("FORD_BRONCO_SPORT_MK1") == "Ford Bronco Sport Mk1"
+    assert driver_debug_engine._humanize_platform("") == "Unknown platform"
+
+
+def test_compute_driver_face_box_rect_stays_close_to_anchor_while_expanding_for_yaw() -> None:
     class Rect:
         x = 0.0
         y = 0.0
@@ -160,7 +165,7 @@ def test_compute_driver_face_box_rect_expands_and_biases_estimate_for_yaw() -> N
 
     anchor_x, _ = driver_debug_engine._driver_face_anchor(Rect(), face_x=0.197, face_y=0.158, device_type="mici")
     box_center_x = box_x + (box_w / 2)
-    assert box_center_x < anchor_x
+    assert abs(box_center_x - anchor_x) < 20
 
 
 def test_install_unmirrored_driver_camera_patches_nested_camera_view() -> None:

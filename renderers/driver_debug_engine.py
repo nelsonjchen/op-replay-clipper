@@ -36,7 +36,7 @@ DRIVER_CAMERA_SERVICE = "driverEncodeIdx"
 DRIVER_CAMERA_STATE_SERVICE = "driverCameraState"
 DRIVER_DEBUG_WIDTH = 1920
 DRIVER_DEBUG_VIDEO_HEIGHT = 1080
-DRIVER_DEBUG_FOOTER_HEIGHT = 560
+DRIVER_DEBUG_FOOTER_HEIGHT = 640
 DRIVER_DEBUG_HEIGHT = DRIVER_DEBUG_VIDEO_HEIGHT + DRIVER_DEBUG_FOOTER_HEIGHT
 
 
@@ -258,6 +258,15 @@ def _fmt_vec(values: tuple[float | None, ...], digits: int = 2) -> str:
     return ", ".join(parts)
 
 
+def _humanize_platform(value: str | None) -> str:
+    if not value:
+        return "Unknown platform"
+    text = str(value).strip()
+    if not text:
+        return "Unknown platform"
+    return text.replace("_", " ").title()
+
+
 def _driver_face_anchor(rect, *, face_x: float, face_y: float, device_type: str) -> tuple[float, float]:
     base_x = 1080.0 - (1714.0 * face_x)
     base_y = -135.0 + (504.0 + abs(face_x) * 112.0) + (1205.0 - abs(face_x) * 724.0) * face_y
@@ -303,8 +312,7 @@ def compute_driver_face_box_rect(
     orient_std = max((float(value) for value in face_orientation_std[:2]), default=0.0)
 
     # The DM model provides a coarse face anchor, not a real detected face bounds box.
-    # Widen and bias the region using pose/std so the estimate reads as an approximate face region.
-    center_x -= yaw * rect.width * 0.09
+    # Keep position close to the upstream anchor and use pose/std mostly to size the estimate.
     center_y += pitch * rect.height * 0.04
 
     base_width = rect.width * (0.06 if (device_type or "").strip().lower() == "mici" else 0.08)
@@ -380,15 +388,15 @@ class DriverDebugOverlayRenderer:
     def _draw_badge(self, x: float, y: float, label: str, *, color) -> float:
         import pyray as rl
 
-        font_size = 16
-        padding_x = 16
-        padding_y = 5
+        font_size = 17
+        padding_x = 22
+        height = 42
         text_size = rl.measure_text_ex(self._label_font, label, font_size, 0)
-        width = text_size.x + (padding_x * 2) + 4
-        height = text_size.y + (padding_y * 2)
+        width = text_size.x + (padding_x * 2) + 12
         rl.draw_rectangle_rounded(rl.Rectangle(x, y, width, height), 0.35, 10, rl.Color(0, 0, 0, 135))
         rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x, y, width, height), 0.35, 10, 2, color)
-        rl.draw_text_ex(self._label_font, label, rl.Vector2(x + padding_x, y + padding_y), font_size, 0, color)
+        text_y = y + ((height - text_size.y) / 2) - 1
+        rl.draw_text_ex(self._label_font, label, rl.Vector2(x + padding_x, text_y), font_size, 0, color)
         return width
 
     def _draw_badges_flow(self, x: float, y: float, max_x: float, badges: list[tuple[str, object]]) -> float:
@@ -401,12 +409,11 @@ class DriverDebugOverlayRenderer:
         gap_y = 10.0
 
         for label, color in badges:
-            font_size = 16
-            padding_x = 16
-            padding_y = 5
+            font_size = 17
+            padding_x = 22
+            height = 42
             text_size = rl.measure_text_ex(self._label_font, label, font_size, 0)
-            width = text_size.x + (padding_x * 2) + 4
-            height = text_size.y + (padding_y * 2)
+            width = text_size.x + (padding_x * 2) + 12
             if cursor_x + width > max_x and cursor_x > x:
                 cursor_x = x
                 cursor_y += line_height + gap_y
@@ -458,24 +465,28 @@ class DriverDebugOverlayRenderer:
 
         title_x = rect.x + outer_pad_x
         title_y = rect.y + outer_pad_y
-        rl.draw_text_ex(self._label_font, "DRIVER DEBUG", rl.Vector2(title_x, title_y), 22, 0, blue)
-
         time_text = f"T+{int(route_seconds) // 60:02d}:{int(route_seconds) % 60:02d}"
-        rl.draw_text_ex(self._value_font, time_text, rl.Vector2(title_x, title_y + 26), 38, 0, white)
+        rl.draw_text_ex(self._label_font, "DRIVER DEBUG", rl.Vector2(title_x, title_y), 24, 0, blue)
+        rl.draw_text_ex(self._value_font, time_text, rl.Vector2(title_x, title_y + 28), 34, 0, white)
 
+        platform_text = ""
+        route_label = ""
+        device_label = ""
         if metadata:
+            platform_text = _humanize_platform(metadata.get("platform", ""))
             route_label = metadata.get("route", "")
-            if route_label:
-                route_font_size = 16
-                route_text = rl.measure_text_ex(self._label_font, route_label, route_font_size, 0)
-                rl.draw_text_ex(
-                    self._label_font,
-                    route_label,
-                    rl.Vector2(rect.x + rect.width - route_text.x - outer_pad_x, title_y + 6),
-                    route_font_size,
-                    0,
-                    dim,
-                )
+            device_label = str(metadata.get("device_type", "") or "").upper()
+        meta_text = "  •  ".join(part for part in [device_label, platform_text] if part)
+        if meta_text:
+            meta_font_size = 18
+            meta_size = rl.measure_text_ex(self._value_font, meta_text, meta_font_size, 0)
+            meta_x = rect.x + rect.width - meta_size.x - outer_pad_x
+            rl.draw_text_ex(self._value_font, meta_text, rl.Vector2(meta_x, title_y + 4), meta_font_size, 0, white)
+        if route_label:
+            route_font_size = 15
+            route_size = rl.measure_text_ex(self._label_font, route_label, route_font_size, 0)
+            route_x = rect.x + rect.width - route_size.x - outer_pad_x
+            rl.draw_text_ex(self._label_font, route_label, rl.Vector2(route_x, title_y + 34), route_font_size, 0, dim)
 
         subtitle_parts = [
             f"side {telemetry.selected_side}",
@@ -485,22 +496,22 @@ class DriverDebugOverlayRenderer:
         rl.draw_text_ex(
             self._label_font,
             " | ".join(subtitle_parts),
-            rl.Vector2(title_x, title_y + 70),
+            rl.Vector2(title_x, title_y + 76),
             16,
             0,
             dim,
         )
 
         badges = [
-            (f"MODE {'ACTIVE' if telemetry.is_active_mode else 'PASSIVE'}", green if telemetry.is_active_mode else orange),
-            (f"DISTRACTED {'YES' if telemetry.is_distracted else 'NO'}", red if telemetry.is_distracted else green),
-            (f"FACE {'YES' if telemetry.face_detected else 'NO'}", green if telemetry.face_detected else red),
+            (f"Mode {'Active' if telemetry.is_active_mode else 'Passive'}", green if telemetry.is_active_mode else orange),
+            (f"Distracted {'Yes' if telemetry.is_distracted else 'No'}", red if telemetry.is_distracted else green),
+            (f"Face {'Yes' if telemetry.face_detected else 'No'}", green if telemetry.face_detected else red),
         ]
         if telemetry.alert_name:
             badges.append((telemetry.alert_name, orange if telemetry.is_distracted else blue))
-        badge_bottom = self._draw_badges_flow(title_x + 220, title_y + 22, rect.x + rect.width - outer_pad_x, badges)
+        badge_bottom = self._draw_badges_flow(title_x, title_y + 116, rect.x + rect.width - outer_pad_x, badges)
 
-        section_top = max(title_y + 112, badge_bottom + 28)
+        section_top = max(title_y + 166, badge_bottom + 28)
         section_height = rect.height - (section_top - rect.y) - outer_pad_y
         col_gap = 36
         col_width = (rect.width - (2 * outer_pad_x) - (2 * col_gap)) / 3
