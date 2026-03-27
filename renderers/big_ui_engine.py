@@ -699,6 +699,29 @@ def get_frame_dimensions(camera_path: str) -> tuple[int, int]:
     return stream["width"], stream["height"]
 
 
+def load_qcam_segment_frames(path: str, *, width: int, height: int):
+    import numpy as np
+    from openpilot.tools.lib.filereader import FileReader
+
+    if os.path.exists(path):
+        proc = subprocess.run(
+            ["ffmpeg", "-v", "quiet", "-i", path, "-f", "rawvideo", "-pix_fmt", "nv12", "-"],
+            capture_output=True,
+            check=True,
+        )
+        result = proc.stdout
+    else:
+        with FileReader(path) as handle:
+            proc = subprocess.run(
+                ["ffmpeg", "-v", "quiet", "-i", "-", "-f", "rawvideo", "-pix_fmt", "nv12", "-"],
+                input=handle.read(),
+                capture_output=True,
+                check=True,
+            )
+            result = proc.stdout
+    return np.frombuffer(result, dtype=np.uint8).reshape(-1, width * height * 3 // 2)
+
+
 class IndexedFrameQueue:
     def __init__(self, camera_paths: list[str], frame_refs: list[CameraFrameRef], *, use_qcam: bool) -> None:
         self.frame_refs = frame_refs
@@ -718,7 +741,6 @@ class IndexedFrameQueue:
 
     def _worker(self, camera_paths: list[str], frame_refs: list[CameraFrameRef], use_qcam: bool) -> None:
         import numpy as np
-        from openpilot.tools.lib.filereader import FileReader
         from openpilot.tools.lib.framereader import FrameReader
 
         current_segment = -1
@@ -734,18 +756,7 @@ class IndexedFrameQueue:
                         raise RuntimeError(f"No camera file for segment {current_segment}")
                     if use_qcam:
                         width, height = get_frame_dimensions(path)
-                        if os.path.exists(path):
-                            result = os.popen(f"ffmpeg -v quiet -i {path!s} -f rawvideo -pix_fmt nv12 -").buffer.read()
-                        else:
-                            with FileReader(path) as handle:
-                                proc = subprocess.run(
-                                    ["ffmpeg", "-v", "quiet", "-i", "-", "-f", "rawvideo", "-pix_fmt", "nv12", "-"],
-                                    input=handle.read(),
-                                    capture_output=True,
-                                    check=True,
-                                )
-                                result = proc.stdout
-                        segment_frames = np.frombuffer(result, dtype=np.uint8).reshape(-1, width * height * 3 // 2)
+                        segment_frames = load_qcam_segment_frames(path, width=width, height=height)
                     else:
                         segment_frames = FrameReader(path, pix_fmt="nv12")
 
