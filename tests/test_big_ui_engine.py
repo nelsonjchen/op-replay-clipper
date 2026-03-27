@@ -152,6 +152,139 @@ def test_draw_current_speed_overlay_is_noop_without_required_hud_fields() -> Non
     big_ui_engine.draw_current_speed_overlay(view)
 
 
+def test_project_model_input_quad_projects_corners_to_screen() -> None:
+    quad = big_ui_engine.project_model_input_quad(
+        model_size=(4, 3),
+        warp_matrix=(
+            (2.0, 0.0, 10.0),
+            (0.0, 2.0, 20.0),
+            (0.0, 0.0, 1.0),
+        ),
+        video_transform=(
+            (1.0, 0.0, 5.0),
+            (0.0, 1.0, 7.0),
+            (0.0, 0.0, 1.0),
+        ),
+    )
+
+    assert quad == ((15.0, 27.0), (21.0, 27.0), (21.0, 31.0), (15.0, 31.0))
+
+
+def test_compute_model_input_overlay_quad_uses_requested_camera_geometry(monkeypatch) -> None:
+    fake_model_module = SimpleNamespace(
+        MEDMODEL_INPUT_SIZE=(4, 3),
+        SBIGMODEL_INPUT_SIZE=(8, 5),
+        get_warp_matrix=lambda *_args, **_kwargs: (
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "openpilot", SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "openpilot.common", SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "openpilot.common.transformations", SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "openpilot.common.transformations.model", fake_model_module)
+    monkeypatch.setattr(
+        big_ui_engine,
+        "compute_camera_view_video_transform",
+        lambda *_args, **_kwargs: (
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+        ),
+    )
+
+    view = SimpleNamespace(
+        device_camera=SimpleNamespace(
+            fcam=SimpleNamespace(intrinsics=((1.0, 0.0, 2.0), (0.0, 1.0, 1.0), (0.0, 0.0, 1.0))),
+            ecam=SimpleNamespace(intrinsics=((1.0, 0.0, 4.0), (0.0, 1.0, 2.0), (0.0, 0.0, 1.0))),
+        )
+    )
+    state = {
+        "liveCalibration": FakeMsg("liveCalibration", 0, SimpleNamespace(rpyCalib=[0.0, 0.0, 0.0])),
+    }
+
+    road_quad = big_ui_engine.compute_model_input_overlay_quad(
+        view,
+        state,
+        use_wide_camera=False,
+        bigmodel_frame=False,
+    )
+    wide_quad = big_ui_engine.compute_model_input_overlay_quad(
+        view,
+        state,
+        use_wide_camera=True,
+        bigmodel_frame=True,
+    )
+
+    assert road_quad == ((0.0, 0.0), (3.0, 0.0), (3.0, 2.0), (0.0, 2.0))
+    assert wide_quad == ((0.0, 0.0), (7.0, 0.0), (7.0, 4.0), (0.0, 4.0))
+
+
+def test_compute_model_input_overlay_quad_returns_none_without_live_calibration() -> None:
+    view = SimpleNamespace()
+
+    quad = big_ui_engine.compute_model_input_overlay_quad(
+        view,
+        {},
+        use_wide_camera=False,
+        bigmodel_frame=False,
+    )
+
+    assert quad is None
+
+
+def test_draw_ui_alt_model_input_overlays_draws_road_and_wide(monkeypatch) -> None:
+    calls: list[tuple[bool, bool]] = []
+    drawn: list[tuple[tuple[tuple[float, float], ...], object]] = []
+
+    def fake_compute(_view, _state, *, use_wide_camera: bool, bigmodel_frame: bool):
+        calls.append((use_wide_camera, bigmodel_frame))
+        return ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0))
+
+    monkeypatch.setattr(big_ui_engine, "compute_model_input_overlay_quad", fake_compute)
+    monkeypatch.setattr(
+        big_ui_engine,
+        "draw_model_input_overlay",
+        lambda quad, *, clip_rect=None: drawn.append((quad, clip_rect)),
+    )
+
+    road_rect = SimpleNamespace(x=1, y=2, width=3, height=4)
+    wide_rect = SimpleNamespace(x=5, y=6, width=7, height=8)
+    big_ui_engine.draw_ui_alt_model_input_overlays(
+        SimpleNamespace(_content_rect=road_rect),
+        SimpleNamespace(_content_rect=wide_rect),
+        {},
+    )
+
+    assert calls == [(False, False), (True, True)]
+    assert drawn == [
+        (((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)), road_rect),
+        (((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)), wide_rect),
+    ]
+
+
+def test_draw_model_input_overlay_scissors_to_clip_rect(monkeypatch) -> None:
+    events: list[tuple] = []
+
+    fake_rl = SimpleNamespace(
+        Color=lambda *args: ("color", args),
+        Vector2=lambda x, y: (x, y),
+        begin_scissor_mode=lambda x, y, w, h: events.append(("begin", x, y, w, h)),
+        draw_line_ex=lambda start, end, width, color: events.append(("line", start, end, width, color)),
+        end_scissor_mode=lambda: events.append(("end",)),
+    )
+    monkeypatch.setitem(sys.modules, "pyray", fake_rl)
+
+    big_ui_engine.draw_model_input_overlay(
+        ((0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)),
+        clip_rect=SimpleNamespace(x=11, y=12, width=13, height=14),
+    )
+
+    assert events[0] == ("begin", 11, 12, 13, 14)
+    assert events[-1] == ("end",)
+
+
 def test_compute_shader_gradient_vectors_uses_view_rect_not_full_canvas() -> None:
     origin_rect = SimpleNamespace(x=0.0, y=1080.0, width=2160.0, height=1080.0)
     gradient = SimpleNamespace(start=(0.0, 1.0), end=(0.0, 0.0))

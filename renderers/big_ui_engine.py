@@ -29,6 +29,11 @@ UI_ALT_FOOTER_COLUMN_GAP = 36.0
 UI_ALT_CONFIDENCE_RAIL_WIDTH = 84.0
 UI_ALT_CONFIDENCE_RAIL_GAP = 24.0
 UI_ALT_CONFIDENCE_LABEL_NUDGE_X = -4.0
+MODEL_INPUT_OVERLAY_COLOR = (0, 255, 204, 255)
+MODEL_INPUT_OVERLAY_SHADOW = (0, 0, 0, 180)
+MODEL_INPUT_OVERLAY_LINE_WIDTH = 2.0
+MODEL_INPUT_OVERLAY_SHADOW_WIDTH = 6.0
+INF_POINT = (1000.0, 0.0, 0.0)
 logger = logging.getLogger("big_ui_engine")
 
 
@@ -342,6 +347,181 @@ def setup_env(output_path: str, *, big: bool, target_mb: float, duration: int, h
     os.environ.setdefault("SCALE", "1")
 
 
+def _mat3_mul(left, right) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+    rows = []
+    for row in range(3):
+        rows.append(
+            tuple(
+                float(sum(float(left[row][idx]) * float(right[idx][col]) for idx in range(3)))
+                for col in range(3)
+            )
+        )
+    return tuple(rows)
+
+
+def _mat3_vec_mul(matrix, vector) -> tuple[float, float, float]:
+    return tuple(
+        float(sum(float(matrix[row][idx]) * float(vector[idx]) for idx in range(3)))
+        for row in range(3)
+    )
+
+
+def project_model_input_quad(
+    *,
+    model_size: tuple[int, int],
+    warp_matrix,
+    video_transform,
+) -> tuple[tuple[float, float], ...] | None:
+    model_width, model_height = model_size
+    if model_width <= 0 or model_height <= 0:
+        return None
+
+    corners = (
+        (0.0, 0.0, 1.0),
+        (model_width - 1.0, 0.0, 1.0),
+        (model_width - 1.0, model_height - 1.0, 1.0),
+        (0.0, model_height - 1.0, 1.0),
+    )
+    projected_xy: list[tuple[float, float]] = []
+    for corner in corners:
+        camera_point = _mat3_vec_mul(warp_matrix, corner)
+        screen_point = _mat3_vec_mul(video_transform, camera_point)
+        if abs(screen_point[2]) < 1e-6:
+            return None
+        x = screen_point[0] / screen_point[2]
+        y = screen_point[1] / screen_point[2]
+        if not math.isfinite(x) or not math.isfinite(y):
+            return None
+        projected_xy.append((float(x), float(y)))
+    return tuple(projected_xy)
+
+
+def compute_camera_view_video_transform(view, *, use_wide_camera: bool) -> tuple[tuple[float, float, float], ...] | None:
+    content_rect = getattr(view, "_content_rect", None)
+    device_camera = getattr(view, "device_camera", None)
+    if content_rect is None or device_camera is None:
+        return None
+
+    width = float(getattr(content_rect, "width", 0.0) or 0.0)
+    height = float(getattr(content_rect, "height", 0.0) or 0.0)
+    if width <= 0.0 or height <= 0.0:
+        return None
+
+    intrinsic = device_camera.ecam.intrinsics if use_wide_camera else device_camera.fcam.intrinsics
+    calibration = getattr(view, "view_from_wide_calib", None) if use_wide_camera else getattr(view, "view_from_calib", None)
+    if calibration is None:
+        return None
+
+    zoom = 2.0 if use_wide_camera else 1.1
+    calib_transform = _mat3_mul(intrinsic, calibration)
+    kep = _mat3_vec_mul(calib_transform, INF_POINT)
+
+    x = float(content_rect.x)
+    y = float(content_rect.y)
+    cx = float(intrinsic[0, 2])
+    cy = float(intrinsic[1, 2])
+    zoom = max(zoom, width / (2 * cx), height / (2 * cy))
+
+    margin = 5.0
+    max_x_offset = max(0.0, cx * zoom - width / 2 - margin)
+    max_y_offset = max(0.0, cy * zoom - height / 2 - margin)
+
+    try:
+        if abs(float(kep[2])) > 1e-6:
+            x_offset = max(-max_x_offset, min(max_x_offset, (float(kep[0]) / float(kep[2]) - cx) * zoom))
+            y_offset = max(-max_y_offset, min(max_y_offset, (float(kep[1]) / float(kep[2]) - cy) * zoom))
+        else:
+            x_offset, y_offset = 0.0, 0.0
+    except (ZeroDivisionError, OverflowError):
+        x_offset, y_offset = 0.0, 0.0
+
+    return (
+        (zoom, 0.0, (width / 2 + x - x_offset) - (cx * zoom)),
+        (0.0, zoom, (height / 2 + y - y_offset) - (cy * zoom)),
+        (0.0, 0.0, 1.0),
+    )
+
+
+def compute_model_input_overlay_quad(
+    view,
+    state: Mapping[str, object],
+    *,
+    use_wide_camera: bool,
+    bigmodel_frame: bool,
+) -> tuple[tuple[float, float], ...] | None:
+    live_calibration_msg = state.get("liveCalibration")
+    live_calibration = getattr(live_calibration_msg, "liveCalibration", None) if live_calibration_msg is not None else None
+    if live_calibration is None:
+        return None
+
+    rpy_calib = list(getattr(live_calibration, "rpyCalib", []) or [])
+    if len(rpy_calib) != 3:
+        return None
+
+    video_transform = compute_camera_view_video_transform(view, use_wide_camera=use_wide_camera)
+    if video_transform is None:
+        return None
+
+    device_camera = getattr(view, "device_camera", None)
+    if device_camera is None:
+        return None
+
+    from openpilot.common.transformations.model import MEDMODEL_INPUT_SIZE, SBIGMODEL_INPUT_SIZE, get_warp_matrix
+
+    intrinsics = device_camera.ecam.intrinsics if use_wide_camera else device_camera.fcam.intrinsics
+    model_size = SBIGMODEL_INPUT_SIZE if bigmodel_frame else MEDMODEL_INPUT_SIZE
+    warp_matrix = get_warp_matrix(rpy_calib, intrinsics, bigmodel_frame=bigmodel_frame)
+    return project_model_input_quad(model_size=model_size, warp_matrix=warp_matrix, video_transform=video_transform)
+
+
+def draw_model_input_overlay(quad: tuple[tuple[float, float], ...] | None, *, clip_rect=None) -> None:
+    import pyray as rl
+
+    if quad is None or len(quad) != 4:
+        return
+
+    shadow = rl.Color(*MODEL_INPUT_OVERLAY_SHADOW)
+    outline = rl.Color(*MODEL_INPUT_OVERLAY_COLOR)
+    points = [rl.Vector2(float(x), float(y)) for x, y in quad]
+    if clip_rect is not None:
+        rl.begin_scissor_mode(
+            int(clip_rect.x),
+            int(clip_rect.y),
+            int(clip_rect.width),
+            int(clip_rect.height),
+        )
+    try:
+        for start, end in zip(points, points[1:] + points[:1], strict=False):
+            rl.draw_line_ex(start, end, MODEL_INPUT_OVERLAY_SHADOW_WIDTH, shadow)
+            rl.draw_line_ex(start, end, MODEL_INPUT_OVERLAY_LINE_WIDTH, outline)
+    finally:
+        if clip_rect is not None:
+            rl.end_scissor_mode()
+
+
+def draw_ui_alt_model_input_overlays(road_view, wide_view, state: Mapping[str, object]) -> None:
+    road_quad = compute_model_input_overlay_quad(
+        road_view,
+        state,
+        use_wide_camera=False,
+        bigmodel_frame=False,
+    )
+    if road_quad is not None:
+        draw_model_input_overlay(road_quad, clip_rect=getattr(road_view, "_content_rect", None))
+
+    if wide_view is None:
+        return
+
+    wide_quad = compute_model_input_overlay_quad(
+        wide_view,
+        state,
+        use_wide_camera=True,
+        bigmodel_frame=True,
+    )
+    if wide_quad is not None:
+        draw_model_input_overlay(wide_quad, clip_rect=getattr(wide_view, "_content_rect", None))
+
+
 def load_segment_messages(route, *, seg_start: int, seg_end: int) -> list[list]:
     from openpilot.selfdrive.test.process_replay.migration import migrate_all
     from openpilot.tools.lib.logreader import LogReader
@@ -632,6 +812,14 @@ def draw_current_speed_overlay(road_view) -> None:
         content_rect.y + 290 - unit_size.y / 2,
     )
     rl.draw_text_ex(font_medium, unit_text, unit_pos, 66, 0, rl.Color(255, 255, 255, 200))
+
+
+def redraw_hud_overlay(view) -> None:
+    hud_renderer = getattr(view, "_hud_renderer", None)
+    content_rect = getattr(view, "_content_rect", None)
+    if hud_renderer is None or content_rect is None:
+        return
+    hud_renderer.render(content_rect)
 
 
 def compute_shader_gradient_vectors(origin_rect, gradient, *, screen_height: float) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -1262,6 +1450,8 @@ def clip(
                     road_view.render()
                     if wide_view is not None:
                         wide_view.render()
+                        draw_ui_alt_model_input_overlays(road_view, wide_view, step.state)
+                        redraw_hud_overlay(road_view)
                         draw_current_speed_overlay(wide_view)
                         draw_text_box("ROAD", layout_rects.road_rect[0] + 18, layout_rects.road_rect[1] + 18, 22, gui_app, font)
                         assert layout_rects.wide_rect is not None
