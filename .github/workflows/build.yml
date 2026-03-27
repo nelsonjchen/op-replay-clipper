@@ -1,0 +1,108 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: macos-latest
+            python-version: "3.13"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.0"
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Sync locked environment
+        run: uv sync --frozen --all-extras
+
+      - name: Render Cog build artifacts
+        run: ./cog/render_artifacts.sh
+
+      - name: Compile Python sources
+        run: uv run python -m compileall clip.py cog_predictor.py replicate_run.py core renderers tests
+
+      - name: Smoke test CLI entrypoints
+        run: |
+          uv run python clip.py --help >/dev/null
+          uv run python replicate_run.py --help >/dev/null
+
+      - name: Run test suite
+        run: uv run pytest
+
+  render-smoke:
+    name: ubuntu-latest / Mici UI Smoke
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.0"
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Sync locked environment
+        run: uv sync --frozen --all-extras
+
+      - name: Install UI render dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            capnproto \
+            ffmpeg \
+            git-lfs \
+            libegl1-mesa-dev \
+            libxcursor-dev \
+            libxext-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libxrandr-dev \
+            mesa-utils \
+            xorg-dev \
+            xserver-xorg-core \
+            zstd
+
+      - name: Render mici UI smoke clip
+        run: bash ./common/render_mici_smoke.sh
+
+      - name: Upload mici UI smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mici-ui-smoke-${{ github.event_name }}
+          path: |
+            shared/ci-e2e/mici-ui-smoke.mp4
+            shared/ci-e2e/mici-ui-smoke.png
+            shared/ci-e2e/mici-ui-smoke.json
+          if-no-files-found: warn
+          retention-days: 7

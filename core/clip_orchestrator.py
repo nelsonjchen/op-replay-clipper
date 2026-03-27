@@ -215,6 +215,7 @@ def run_clip(request: ClipRequest) -> ClipResult:
                 openpilot_dir=plan.openpilot_dir,
                 headless=plan.headless,
                 layout_mode="alt" if plan.render_type == "ui-alt" else "default",
+                qcam=plan.qcam,
             )
         )
         return ClipResult(

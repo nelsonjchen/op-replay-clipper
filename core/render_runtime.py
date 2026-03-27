@@ -142,8 +142,11 @@ def _temporary_xorg_display(env: dict[str, str]):
             proc.kill()
             proc.wait(timeout=5)
         log_handle.close()
-        log_path.unlink(missing_ok=True)
-        Path(f"{log_path}.stdout").unlink(missing_ok=True)
+        for cleanup_path in (log_path, Path(f"{log_path}.stdout")):
+            try:
+                cleanup_path.unlink(missing_ok=True)
+            except PermissionError:
+                pass
 
 
 @contextlib.contextmanager

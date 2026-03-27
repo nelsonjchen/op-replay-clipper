@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import types
+from unittest import mock
 import sys
 from types import SimpleNamespace
 
@@ -92,6 +94,37 @@ def test_build_render_steps_future_backfills_car_params_for_early_frames() -> No
     assert len(steps) == 1
     assert steps[0].state["carParams"] is car_params
     assert steps[0].state["carParams"].carParams.openpilotLongitudinalControl is True
+
+
+def test_load_qcam_segment_frames_accepts_pipe_characters_in_local_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    qcam_path = "dongle|route/1/qcamera.ts"
+    commands: list[list[str]] = []
+
+    monkeypatch.setattr(big_ui_engine.os.path, "exists", lambda path: path == qcam_path)
+    monkeypatch.setitem(sys.modules, "openpilot", types.ModuleType("openpilot"))
+    monkeypatch.setitem(sys.modules, "openpilot.tools", types.ModuleType("openpilot.tools"))
+    monkeypatch.setitem(sys.modules, "openpilot.tools.lib", types.ModuleType("openpilot.tools.lib"))
+    monkeypatch.setitem(sys.modules, "openpilot.tools.lib.filereader", types.SimpleNamespace(FileReader=object))
+    monkeypatch.setitem(sys.modules, "openpilot.tools.lib.framereader", types.SimpleNamespace(FrameReader=object))
+    monkeypatch.setitem(
+        sys.modules,
+        "numpy",
+        types.SimpleNamespace(
+            uint8="uint8",
+            frombuffer=lambda data, dtype: mock.Mock(reshape=lambda rows, cols: mock.Mock(shape=(1, 6))),
+        ),
+    )
+
+    def _fake_run(cmd, **kwargs):
+        commands.append(cmd)
+        return mock.Mock(stdout=b"\x00" * 6)
+
+    monkeypatch.setattr(big_ui_engine.subprocess, "run", _fake_run)
+
+    frames = big_ui_engine.load_qcam_segment_frames(qcam_path, width=2, height=2)
+
+    assert frames.shape == (1, 6)
+    assert commands == [["ffmpeg", "-v", "quiet", "-i", qcam_path, "-f", "rawvideo", "-pix_fmt", "nv12", "-"]]
 
 
 def test_build_layout_rects_default_uses_full_canvas() -> None:
