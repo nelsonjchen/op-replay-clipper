@@ -107,6 +107,8 @@ def test_extract_footer_telemetry_reads_driver_and_op_inputs() -> None:
             SimpleNamespace(
                 steeringAngleDeg=12.5,
                 steeringPressed=True,
+                leftBlinker=True,
+                rightBlinker=False,
                 gasDEPRECATED=0.25,
                 brake=0.1,
                 gasPressed=True,
@@ -141,6 +143,8 @@ def test_extract_footer_telemetry_reads_driver_and_op_inputs() -> None:
     assert telemetry.steering_target_deg == 10.0
     assert telemetry.steering_applied_deg == 10.4
     assert telemetry.steering_pressed is True
+    assert telemetry.left_blinker is True
+    assert telemetry.right_blinker is False
     assert telemetry.driver_gas == 0.25
     assert telemetry.driver_brake == 0.1
     assert telemetry.driver_gas_pressed is True

@@ -68,6 +68,8 @@ class FooterTelemetry:
     steering_target_deg: float | None = None
     steering_applied_deg: float | None = None
     steering_pressed: bool = False
+    left_blinker: bool = False
+    right_blinker: bool = False
     driver_gas: float = 0.0
     driver_brake: float = 0.0
     driver_gas_pressed: bool = False
@@ -185,6 +187,8 @@ def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
         steering_target_deg=steering_target_deg,
         steering_applied_deg=steering_applied_deg,
         steering_pressed=bool(getattr(car_state, "steeringPressed", False)),
+        left_blinker=bool(getattr(car_state, "leftBlinker", False)),
+        right_blinker=bool(getattr(car_state, "rightBlinker", False)),
         driver_gas=_clip01(float(getattr(car_state, "gasDEPRECATED", 0.0) or 0.0)),
         driver_brake=_clip01(float(getattr(car_state, "brake", 0.0) or 0.0)),
         driver_gas_pressed=bool(getattr(car_state, "gasPressed", False)),
@@ -581,6 +585,46 @@ class SteeringFooterRenderer:
         draw_dot(telemetry.steering_applied_deg, applied_color, base_radius + 2)
         draw_dot(telemetry.steering_angle_deg, actual_color, base_radius - 10)
 
+    def _draw_blinker_arrows(self, *, center_x: float, center_y: float, telemetry: FooterTelemetry) -> None:
+        import pyray as rl
+
+        inactive_color = rl.Color(255, 255, 255, 60)
+        active_color = rl.Color(94, 214, 135, 255)
+        hazard_color = rl.Color(255, 176, 87, 255)
+        shadow_color = rl.Color(0, 0, 0, 210)
+
+        def draw_chevron(*, arrow_center_x: float, direction: int, color) -> None:
+            arm_len = 18
+            arm_rise = 14
+            line_width = 7
+
+            apex_x = arrow_center_x + (direction * 8)
+            outer_x = arrow_center_x - (direction * arm_len)
+
+            for dx, dy, draw_color in ((2, 2, shadow_color), (0, 0, color)):
+                rl.draw_line_ex(
+                    rl.Vector2(outer_x + dx, center_y - arm_rise + dy),
+                    rl.Vector2(apex_x + dx, center_y + dy),
+                    line_width,
+                    draw_color,
+                )
+                rl.draw_line_ex(
+                    rl.Vector2(outer_x + dx, center_y + arm_rise + dy),
+                    rl.Vector2(apex_x + dx, center_y + dy),
+                    line_width,
+                    draw_color,
+                )
+
+        left_color = hazard_color if telemetry.left_blinker and telemetry.right_blinker else (
+            active_color if telemetry.left_blinker else inactive_color
+        )
+        right_color = hazard_color if telemetry.left_blinker and telemetry.right_blinker else (
+            active_color if telemetry.right_blinker else inactive_color
+        )
+
+        draw_chevron(arrow_center_x=center_x - 70, direction=-1, color=left_color)
+        draw_chevron(arrow_center_x=center_x + 70, direction=1, color=right_color)
+
     def _draw_steering_summary(self, rect, *, telemetry: FooterTelemetry) -> None:
         import pyray as rl
 
@@ -589,7 +633,7 @@ class SteeringFooterRenderer:
         accent = rl.Color(125, 196, 255, 255)
         applied = rl.Color(255, 176, 87, 255)
         label_size = 18
-        value_size = 30
+        value_size = 28
         row_gap = 36
         value_x = rect.x + 130
 
@@ -671,6 +715,11 @@ class SteeringFooterRenderer:
             center_x=wheel_center_x,
             center_y=wheel_center_y,
             wheel_size=wheel_size,
+            telemetry=telemetry,
+        )
+        self._draw_blinker_arrows(
+            center_x=wheel_center_x,
+            center_y=wheel_center_y - (wheel_size / 2) - 28,
             telemetry=telemetry,
         )
 
