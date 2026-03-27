@@ -356,17 +356,18 @@ class DriverDebugOverlayRenderer:
         width: float,
         value_color,
         value_size: int = 24,
+        value_x: float | None = None,
     ) -> None:
         import pyray as rl
 
         label_size = 17
         dim = rl.Color(255, 255, 255, 145)
         rl.draw_text_ex(self._label_font, label, rl.Vector2(x, y), label_size, 0, dim)
-        value_width = rl.measure_text_ex(self._value_font, value, value_size, 0).x
+        value_draw_x = value_x if value_x is not None else x + (width * 0.58)
         rl.draw_text_ex(
             self._value_font,
             value,
-            rl.Vector2(x + width - value_width, y - 2),
+            rl.Vector2(value_draw_x, y - 2),
             value_size,
             0,
             value_color,
@@ -534,6 +535,7 @@ class DriverDebugOverlayRenderer:
         self._draw_micro_stat(left_x, micro_y + 68, "step", _fmt_float(telemetry.step_change, 3), color=white)
         self._draw_micro_stat(left_x + 180, micro_y + 68, "speed", _fmt_float(telemetry.v_ego, 1, " m/s"), color=white)
         left_bottom_y = card_rects[0].y + card_rects[0].height - 64
+        left_value_x = left_x + 255
         self._draw_kv_row(
             left_x,
             left_bottom_y,
@@ -542,10 +544,12 @@ class DriverDebugOverlayRenderer:
             width=card_rects[0].width - (2 * card_pad_x),
             value_color=green if telemetry.engaged else dim,
             value_size=20,
+            value_x=left_value_x,
         )
 
         mid_x = card_rects[1].x + card_pad_x
         mid_y = card_rects[1].y + card_pad_y
+        mid_value_x = mid_x + 250
         self._draw_section_title(mid_x, mid_y, "MODEL")
         middle_rows = [
             ("face / wheel side", f"{_fmt_percent(telemetry.face_prob)} / {_fmt_percent(telemetry.wheel_on_right_prob)}", white),
@@ -563,10 +567,12 @@ class DriverDebugOverlayRenderer:
                 value,
                 width=card_rects[1].width - (2 * card_pad_x),
                 value_color=color,
+                value_x=mid_value_x,
             )
 
         right_x = card_rects[2].x + card_pad_x
         right_y = card_rects[2].y + card_pad_y
+        right_value_x = right_x + 250
         self._draw_section_title(right_x, right_y, "POSE")
         right_rows = [
             ("orientation", _fmt_vec(telemetry.face_orientation), white),
@@ -584,6 +590,7 @@ class DriverDebugOverlayRenderer:
                 value,
                 width=card_rects[2].width - (2 * card_pad_x),
                 value_color=color,
+                value_x=right_value_x,
             )
 
 
