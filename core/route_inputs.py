@@ -240,7 +240,7 @@ def parseRouteOrUrl(
     length_seconds: int,
     jwt_token: str = None,
 ) -> ParsedRouteOrURL:
-    route_or_url = _normalize_route_text(route_or_url)
+    route_or_url = _coerce_route_text(route_or_url)
     # if the route_or_url is a route, just return it
     # Assume that a route is a string with a pipe in it
     if "|" in route_or_url:
