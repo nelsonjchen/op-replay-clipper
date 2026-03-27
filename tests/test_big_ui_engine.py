@@ -96,6 +96,25 @@ def test_build_layout_rects_alt_with_wide_splits_camera_area() -> None:
     assert rects.footer_rect == (0, 810, 1920, 270)
 
 
+def test_compute_ui_alt_dual_canvas_height_preserves_full_height_views() -> None:
+    assert big_ui_engine.compute_ui_alt_footer_height(1080) == 270
+    assert big_ui_engine.compute_ui_alt_dual_canvas_height(1080) == 2430
+
+
+def test_build_layout_rects_alt_with_wide_can_keep_footer_as_addon() -> None:
+    rects = big_ui_engine.build_layout_rects(
+        width=2160,
+        height=2430,
+        layout_mode="alt",
+        show_wide_panel=True,
+        footer_height_override=270,
+    )
+
+    assert rects.road_rect == (0, 0, 2160, 1080)
+    assert rects.wide_rect == (0, 1080, 2160, 1080)
+    assert rects.footer_rect == (0, 2160, 2160, 270)
+
+
 def test_extract_steering_angle_deg_uses_car_state_when_present() -> None:
     state = {
         "carState": FakeMsg("carState", 0, SimpleNamespace(steeringAngleDeg=12.5)),
@@ -106,6 +125,25 @@ def test_extract_steering_angle_deg_uses_car_state_when_present() -> None:
 
 def test_extract_steering_angle_deg_defaults_to_zero_when_missing() -> None:
     assert big_ui_engine.extract_steering_angle_deg({}) == 0.0
+
+
+def test_draw_current_speed_overlay_is_noop_without_required_hud_fields() -> None:
+    view = SimpleNamespace(
+        _content_rect="content-rect",
+        _hud_renderer=SimpleNamespace(),
+    )
+
+    big_ui_engine.draw_current_speed_overlay(view)
+
+
+def test_compute_shader_gradient_vectors_uses_view_rect_not_full_canvas() -> None:
+    origin_rect = SimpleNamespace(x=0.0, y=1080.0, width=2160.0, height=1080.0)
+    gradient = SimpleNamespace(start=(0.0, 1.0), end=(0.0, 0.0))
+
+    start_xy, end_xy = big_ui_engine.compute_shader_gradient_vectors(origin_rect, gradient, screen_height=2430.0)
+
+    assert start_xy == (0.0, 1350.0)
+    assert end_xy == (0.0, 270.0)
 
 
 def test_extract_footer_telemetry_reads_driver_and_op_inputs() -> None:

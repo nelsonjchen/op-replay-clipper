@@ -23,7 +23,6 @@ TEXT_BOX_PADDING_Y = 4
 UI_ALT_FOOTER_MIN_HEIGHT = 220
 UI_ALT_FOOTER_MAX_HEIGHT = 320
 UI_ALT_FOOTER_HEIGHT_RATIO = 0.25
-UI_ALT_DUAL_CANVAS_HEIGHT = 2160
 logger = logging.getLogger("big_ui_engine")
 
 
@@ -38,6 +37,16 @@ def _configure_gui_app_canvas(gui_app, *, width: int, height: int) -> None:
     gui_app._scaled_height = int(height * gui_app._scale)
     gui_app._scaled_width += gui_app._scaled_width % 2
     gui_app._scaled_height += gui_app._scaled_height % 2
+
+
+def compute_ui_alt_footer_height(height: int) -> int:
+    footer_height = int(height * UI_ALT_FOOTER_HEIGHT_RATIO)
+    footer_height = max(UI_ALT_FOOTER_MIN_HEIGHT, min(UI_ALT_FOOTER_MAX_HEIGHT, footer_height))
+    return min(footer_height, max(1, height - 1))
+
+
+def compute_ui_alt_dual_canvas_height(base_height: int) -> int:
+    return (base_height * 2) + compute_ui_alt_footer_height(base_height)
 
 
 def _add_openpilot_to_sys_path(openpilot_dir: Path) -> None:
@@ -122,15 +131,20 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def build_layout_rects(*, width: int, height: int, layout_mode: str, show_wide_panel: bool = False) -> LayoutRects:
+def build_layout_rects(
+    *,
+    width: int,
+    height: int,
+    layout_mode: str,
+    show_wide_panel: bool = False,
+    footer_height_override: int | None = None,
+) -> LayoutRects:
     if layout_mode == "default":
         return LayoutRects(road_rect=(0, 0, width, height))
     if layout_mode != "alt":
         raise ValueError(f"Unknown layout mode: {layout_mode}")
 
-    footer_height = int(height * UI_ALT_FOOTER_HEIGHT_RATIO)
-    footer_height = max(UI_ALT_FOOTER_MIN_HEIGHT, min(UI_ALT_FOOTER_MAX_HEIGHT, footer_height))
-    footer_height = min(footer_height, max(1, height - 1))
+    footer_height = footer_height_override if footer_height_override is not None else compute_ui_alt_footer_height(height)
     road_height = height - footer_height
     if show_wide_panel:
         top_height = road_height - (road_height // 2)
@@ -479,6 +493,108 @@ def draw_text_box(text, x, y, size, gui_app, font, color=None, center=False) -> 
         box_color,
     )
     rl.draw_text_ex(font, text, rl.Vector2(x, y), size, 0, text_color)
+
+
+def draw_current_speed_overlay(road_view) -> None:
+    hud_renderer = getattr(road_view, "_hud_renderer", None)
+    content_rect = getattr(road_view, "_content_rect", None)
+    if hud_renderer is None or content_rect is None:
+        return
+    speed = getattr(hud_renderer, "speed", None)
+    font_bold = getattr(hud_renderer, "_font_bold", None)
+    font_medium = getattr(hud_renderer, "_font_medium", None)
+    if speed is None or font_bold is None or font_medium is None:
+        return
+
+    import pyray as rl
+    from openpilot.selfdrive.ui.ui_state import ui_state
+    from openpilot.system.ui.lib.multilang import tr
+    from openpilot.system.ui.lib.text_measure import measure_text_cached
+
+    speed_text = str(round(float(speed)))
+    speed_size = measure_text_cached(font_bold, speed_text, 176)
+    speed_pos = rl.Vector2(
+        content_rect.x + content_rect.width / 2 - speed_size.x / 2,
+        content_rect.y + 180 - speed_size.y / 2,
+    )
+    rl.draw_text_ex(font_bold, speed_text, speed_pos, 176, 0, rl.WHITE)
+
+    unit_text = tr("km/h") if ui_state.is_metric else tr("mph")
+    unit_size = measure_text_cached(font_medium, unit_text, 66)
+    unit_pos = rl.Vector2(
+        content_rect.x + content_rect.width / 2 - unit_size.x / 2,
+        content_rect.y + 290 - unit_size.y / 2,
+    )
+    rl.draw_text_ex(font_medium, unit_text, unit_pos, 66, 0, rl.Color(255, 255, 255, 200))
+
+
+def compute_shader_gradient_vectors(origin_rect, gradient, *, screen_height: float) -> tuple[tuple[float, float], tuple[float, float]]:
+    # openpilot gradients are specified in top-left UI coordinates, but the shader samples gl_FragCoord,
+    # which uses a bottom-left origin. Convert to shader space and swap start/end so t=0 stays at the path bottom.
+    start_x = origin_rect.x + gradient.end[0] * origin_rect.width
+    start_y = screen_height - (origin_rect.y + gradient.end[1] * origin_rect.height)
+    end_x = origin_rect.x + gradient.start[0] * origin_rect.width
+    end_y = screen_height - (origin_rect.y + gradient.start[1] * origin_rect.height)
+    return (start_x, start_y), (end_x, end_y)
+
+
+def patch_shader_polygon_gradient_coordinates() -> None:
+    from openpilot.system.ui.lib import shader_polygon
+
+    if getattr(shader_polygon, "_clipper_gradient_patch", False):
+        return
+
+    def _configure_shader_color_patched(state, color, gradient, origin_rect):
+        assert (color is not None) != (gradient is not None), "Either color or gradient must be provided"
+
+        use_gradient = 1 if (gradient is not None and len(gradient.colors) >= 1) else 0
+        state.use_gradient_ptr[0] = use_gradient
+        shader_polygon.rl.set_shader_value(state.shader, state.locations['useGradient'], state.use_gradient_ptr, shader_polygon.UNIFORM_INT)
+
+        if use_gradient:
+            gradient = shader_polygon.cast(shader_polygon.Gradient, gradient)
+            state.color_count_ptr[0] = len(gradient.colors)
+            for i in range(len(gradient.colors)):
+                c = gradient.colors[i]
+                base = i * 4
+                state.gradient_colors_ptr[base:base + 4] = [c.r / 255.0, c.g / 255.0, c.b / 255.0, c.a / 255.0]
+            shader_polygon.rl.set_shader_value_v(
+                state.shader,
+                state.locations['gradientColors'],
+                state.gradient_colors_ptr,
+                shader_polygon.UNIFORM_VEC4,
+                len(gradient.colors),
+            )
+
+            for i in range(len(gradient.stops)):
+                s = float(gradient.stops[i])
+                state.gradient_stops_ptr[i] = 0.0 if s < 0.0 else 1.0 if s > 1.0 else s
+            shader_polygon.rl.set_shader_value_v(
+                state.shader,
+                state.locations['gradientStops'],
+                state.gradient_stops_ptr,
+                shader_polygon.UNIFORM_FLOAT,
+                len(gradient.stops),
+            )
+            shader_polygon.rl.set_shader_value(
+                state.shader,
+                state.locations['gradientColorCount'],
+                state.color_count_ptr,
+                shader_polygon.UNIFORM_INT,
+            )
+
+            start_xy, end_xy = compute_shader_gradient_vectors(origin_rect, gradient, screen_height=shader_polygon.gui_app.height)
+            start_vec = shader_polygon.rl.Vector2(*start_xy)
+            end_vec = shader_polygon.rl.Vector2(*end_xy)
+            shader_polygon.rl.set_shader_value(state.shader, state.locations['gradientStart'], start_vec, shader_polygon.UNIFORM_VEC2)
+            shader_polygon.rl.set_shader_value(state.shader, state.locations['gradientEnd'], end_vec, shader_polygon.UNIFORM_VEC2)
+        else:
+            color = color or shader_polygon.rl.WHITE
+            state.fill_color_ptr[0:4] = [color.r / 255.0, color.g / 255.0, color.b / 255.0, color.a / 255.0]
+            shader_polygon.rl.set_shader_value(state.shader, state.locations['fillColor'], state.fill_color_ptr, shader_polygon.UNIFORM_VEC4)
+
+    shader_polygon._configure_shader_color = _configure_shader_color_patched
+    shader_polygon._clipper_gradient_patch = True
 
 
 def render_overlays(gui_app, font, big, metadata, title, route_seconds, show_metadata, show_time) -> None:
@@ -846,6 +962,8 @@ def clip(
     from openpilot.selfdrive.ui.ui_state import ui_state
     from openpilot.system.ui.lib.application import FontWeight, gui_app
 
+    patch_shader_polygon_gradient_coordinates()
+
     if big:
         from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView
     else:
@@ -890,8 +1008,14 @@ def clip(
         vipc.start_listener()
 
         patch_submaster(render_steps, ui_state)
+        footer_height_override = None
         if layout_mode == "alt" and has_wide_stream:
-            _configure_gui_app_canvas(gui_app, width=gui_app.width, height=UI_ALT_DUAL_CANVAS_HEIGHT)
+            footer_height_override = compute_ui_alt_footer_height(gui_app.height)
+            _configure_gui_app_canvas(
+                gui_app,
+                width=gui_app.width,
+                height=compute_ui_alt_dual_canvas_height(gui_app.height),
+            )
         gui_app.init_window("repo-owned clip", fps=FRAMERATE)
 
         layout_rects = build_layout_rects(
@@ -899,6 +1023,7 @@ def clip(
             height=gui_app.height,
             layout_mode=layout_mode,
             show_wide_panel=layout_mode == "alt" and has_wide_stream,
+            footer_height_override=footer_height_override,
         )
         road_view = AugmentedRoadView()
         wide_view = None
@@ -909,7 +1034,8 @@ def clip(
             wide_view = AugmentedRoadView(stream_type=VisionStreamType.VISION_STREAM_WIDE_ROAD)
             wide_view._switch_stream_if_needed = lambda sm: None
             wide_view._pm.send = lambda *args, **kwargs: None
-            wide_view._hud_renderer.render = lambda rect: None
+            # Keep the wide HUD readable, but suppress the duplicate alert body and driver-state bubble.
+            wide_view.alert_renderer.will_render = lambda: (None, True)
             wide_view.alert_renderer.render = lambda rect: None
             wide_view.driver_state_renderer.render = lambda rect: None
         road_view.set_rect(rl.Rectangle(*layout_rects.road_rect))
@@ -962,6 +1088,7 @@ def clip(
                     road_view.render()
                     if wide_view is not None:
                         wide_view.render()
+                        draw_current_speed_overlay(wide_view)
                         draw_text_box("ROAD", layout_rects.road_rect[0] + 18, layout_rects.road_rect[1] + 18, 22, gui_app, font)
                         assert layout_rects.wide_rect is not None
                         draw_text_box("WIDE", layout_rects.wide_rect[0] + 18, layout_rects.wide_rect[1] + 18, 22, gui_app, font)
