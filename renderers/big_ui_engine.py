@@ -549,6 +549,21 @@ def redraw_ui_alt_dual_view_overlays(road_view, wide_view, state: Mapping[str, o
         redraw_hud_overlay(wide_view)
 
 
+def redraw_ui_alt_dual_view_borders(road_view, wide_view, layout_rects: LayoutRects) -> None:
+    import pyray as rl
+
+    road_draw_border = getattr(road_view, "_draw_border", None)
+    if callable(road_draw_border):
+        road_draw_border(rl.Rectangle(*layout_rects.road_rect))
+
+    if wide_view is None or layout_rects.wide_rect is None:
+        return
+
+    wide_draw_border = getattr(wide_view, "_draw_border", None)
+    if callable(wide_draw_border):
+        wide_draw_border(rl.Rectangle(*layout_rects.wide_rect))
+
+
 def load_segment_messages(route, *, seg_start: int, seg_end: int) -> list[list]:
     from openpilot.selfdrive.test.process_replay.migration import migrate_all
     from openpilot.tools.lib.logreader import LogReader
@@ -1491,6 +1506,7 @@ def clip(
                     if wide_view is not None:
                         wide_view.render()
                         redraw_ui_alt_dual_view_overlays(road_view, wide_view, step.state)
+                        redraw_ui_alt_dual_view_borders(road_view, wide_view, layout_rects)
                         road_label_x, road_label_y = compute_ui_alt_panel_label_position(layout_rects.road_rect)
                         draw_text_box("ROAD", road_label_x, road_label_y, 22, gui_app, font)
                         assert layout_rects.wide_rect is not None

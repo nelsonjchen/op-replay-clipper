@@ -294,6 +294,14 @@ def _patch_augmented_road_view_fill(path: Path) -> bool:
         1,
     )
     updated = updated.replace("    super()._render(rect)\n", "    super()._render(self._content_rect)\n", 1)
+    mask_comment = "    # Fake a rounded clip mask so the rectangular camera viewport does not peek past the curved frame\n"
+    known_mask_lines = (
+        "    rl.draw_rectangle_rounded_lines_ex(self._content_rect, 0.12 * 1.02, 10, UI_BORDER_SIZE * 2, rl.BLACK)\n",
+        "    rl.draw_rectangle_rounded_lines_ex(self._content_rect, 0.2 * 1.02, 10, 50, rl.BLACK)\n",
+    )
+    for mask_line in known_mask_lines:
+        updated = updated.replace(mask_comment + mask_line + "\n", "")
+        updated = updated.replace(mask_comment + mask_line, "")
 
     if updated != source:
         path.write_text(updated)

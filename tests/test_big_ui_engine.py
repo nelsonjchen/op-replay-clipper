@@ -154,6 +154,27 @@ def test_compute_ui_alt_panel_label_position_uses_safe_inset() -> None:
     assert big_ui_engine.compute_ui_alt_panel_label_position((0, 1080, 2160, 1080)) == (32, 1108)
 
 
+def test_redraw_ui_alt_dual_view_borders_redraws_both_panels(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    fake_rl = SimpleNamespace(Rectangle=lambda x, y, width, height: (x, y, width, height))
+    monkeypatch.setitem(sys.modules, "pyray", fake_rl)
+
+    road_view = SimpleNamespace(_draw_border=lambda rect: calls.append(("road", rect)))
+    wide_view = SimpleNamespace(_draw_border=lambda rect: calls.append(("wide", rect)))
+    layout_rects = big_ui_engine.LayoutRects(
+        road_rect=(0, 0, 2160, 1080),
+        wide_rect=(0, 1080, 2160, 1080),
+    )
+
+    big_ui_engine.redraw_ui_alt_dual_view_borders(road_view, wide_view, layout_rects)
+
+    assert calls == [
+        ("road", (0, 0, 2160, 1080)),
+        ("wide", (0, 1080, 2160, 1080)),
+    ]
+
+
 def test_extract_steering_angle_deg_uses_car_state_when_present() -> None:
     state = {
         "carState": FakeMsg("carState", 0, SimpleNamespace(steeringAngleDeg=12.5)),
