@@ -335,28 +335,10 @@ def _draw_driver_debug_face_box(rect, *, driver_data, device_type: str) -> None:
     outline = rl.Color(255, 255, 255, int(255 * alpha))
     shadow = rl.Color(0, 0, 0, int(190 * alpha))
     fill = rl.Color(255, 255, 255, int(16 * alpha))
-    label = "FACE ESTIMATE"
-    font_size = 18
-    padding_x = 10
-    padding_y = 4
-    text_size = rl.measure_text_ex(rl.get_font_default(), label, font_size, 0)
-    label_w = text_size.x + (padding_x * 2)
-    label_h = text_size.y + (padding_y * 2)
-    label_rect = rl.Rectangle(box.x, max(rect.y + 6, box.y - label_h - 8), label_w, label_h)
 
     rl.draw_rectangle_rounded(box, 0.12, 12, fill)
     rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(box.x + 2, box.y + 2, box.width, box.height), 0.12, 12, 6, shadow)
     rl.draw_rectangle_rounded_lines_ex(box, 0.12, 12, 3, outline)
-    rl.draw_rectangle_rounded(label_rect, 0.25, 8, rl.Color(0, 0, 0, int(165 * alpha)))
-    rl.draw_rectangle_rounded_lines_ex(label_rect, 0.25, 8, 2, outline)
-    rl.draw_text_ex(
-        rl.get_font_default(),
-        label,
-        rl.Vector2(label_rect.x + padding_x, label_rect.y + padding_y),
-        font_size,
-        0,
-        outline,
-    )
 
 
 class DriverDebugOverlayRenderer:
@@ -386,7 +368,7 @@ class DriverDebugOverlayRenderer:
         rl.draw_text_ex(self._label_font, label, rl.Vector2(x + padding_x, y + padding_y), font_size, 0, color)
         return width
 
-    def render(self, rect, *, telemetry: DriverDebugTelemetry) -> None:
+    def render(self, rect, *, telemetry: DriverDebugTelemetry, route_seconds: float, metadata: dict[str, str] | None) -> None:
         import pyray as rl
 
         panel_bg = rl.Color(5, 10, 18, 205)
@@ -407,12 +389,32 @@ class DriverDebugOverlayRenderer:
         badge_x = rect.x + 18
         badge_gap = 10
         badge_x += self._draw_badge(badge_x, badge_y, "DRIVER DEBUG", color=blue) + badge_gap
+        badge_x += self._draw_badge(
+            badge_x,
+            badge_y,
+            f"T+{int(route_seconds) // 60:02d}:{int(route_seconds) % 60:02d}",
+            color=white,
+        ) + badge_gap
         badge_x += self._draw_badge(badge_x, badge_y, f"MODE {'ACTIVE' if telemetry.is_active_mode else 'PASSIVE'}", color=green if telemetry.is_active_mode else orange) + badge_gap
         badge_x += self._draw_badge(badge_x, badge_y, f"FACE {'YES' if telemetry.face_detected else 'NO'}", color=green if telemetry.face_detected else red) + badge_gap
         badge_x += self._draw_badge(badge_x, badge_y, f"DISTRACTED {'YES' if telemetry.is_distracted else 'NO'}", color=red if telemetry.is_distracted else green) + badge_gap
         badge_x += self._draw_badge(badge_x, badge_y, f"SIDE {telemetry.selected_side.upper()}", color=blue) + badge_gap
         if telemetry.alert_name:
             self._draw_badge(badge_x, badge_y, telemetry.alert_name, color=orange if telemetry.is_distracted else blue)
+
+        if metadata:
+            route_label = metadata.get("route", "")
+            if route_label:
+                route_font_size = 16
+                route_text = rl.measure_text_ex(self._label_font, route_label, route_font_size, 0)
+                rl.draw_text_ex(
+                    self._label_font,
+                    route_label,
+                    rl.Vector2(rect.x + rect.width - route_text.x - 18, rect.y + 24),
+                    route_font_size,
+                    0,
+                    dim,
+                )
 
         section_top = rect.y + 64
         section_height = rect.height - 82
@@ -477,6 +479,23 @@ def _install_driver_debug_face_box(driver_view, *, device_type: str) -> None:
         return driver_data
 
     driver_view._draw_face_detection = types.MethodType(_draw_face_detection_override, driver_view)
+
+    def _draw_eyes_override(self, rect, driver_data):
+        return None
+
+    driver_view._draw_eyes = types.MethodType(_draw_eyes_override, driver_view)
+
+    def _render_dm_alerts_override(self, rect):
+        return None
+
+    if hasattr(driver_view, "_render_dm_alerts"):
+        driver_view._render_dm_alerts = types.MethodType(_render_dm_alerts_override, driver_view)
+
+    if hasattr(driver_view, "driver_state_renderer"):
+        def _render_driver_state_override(*args, **kwargs):
+            return None
+
+        driver_view.driver_state_renderer.render = _render_driver_state_override
 
 
 def clip(
@@ -572,17 +591,11 @@ def clip(
                     debug_overlay.render(
                         rl.Rectangle(18, DRIVER_DEBUG_VIDEO_HEIGHT + 18, gui_app.width - 36, DRIVER_DEBUG_FOOTER_HEIGHT - 36),
                         telemetry=extract_driver_debug_telemetry(step.state),
+                        route_seconds=step.route_seconds,
+                        metadata=metadata,
                     )
-                    render_overlays(
-                        gui_app,
-                        font,
-                        False,
-                        metadata,
-                        title,
-                        step.route_seconds,
-                        show_metadata,
-                        show_time,
-                    )
+                    if title:
+                        draw_text_box(title, 18, DRIVER_DEBUG_VIDEO_HEIGHT + 24, 22, gui_app, font)
 
                 frame_idx += 1
                 progress.update(1)
