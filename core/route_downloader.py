@@ -7,6 +7,7 @@ import requests
 import subprocess
 import re
 import time
+from urllib.parse import urlparse
 
 # Filelist type
 
@@ -31,6 +32,66 @@ class FileListDict(TypedDict):
 class RouteInfoDict(TypedDict):
     segment_end_times: List[int]
     segment_start_times: List[int]
+
+
+DOWNLOAD_MAX_ATTEMPTS = 3
+DOWNLOAD_RETRY_DELAY_SECONDS = 2
+
+
+def _filename_from_url(url: str) -> str:
+    path = urlparse(url).path
+    name = Path(path).name
+    if not name:
+        raise ValueError(f"Could not determine filename from URL: {url}")
+    return name
+
+
+def _download_with_requests(url: str, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with requests.get(url, stream=True, timeout=(10, 120)) as response:
+        response.raise_for_status()
+        with destination.open("wb") as handle:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    handle.write(chunk)
+
+
+def _retry_failed_downloads(results: Results, *, max_conn: int) -> None:
+    failed = list(results.errors)
+    if not failed:
+        return
+
+    for attempt in range(2, DOWNLOAD_MAX_ATTEMPTS + 1):
+        print(f"Retrying {len(failed)} failed downloads (attempt {attempt}/{DOWNLOAD_MAX_ATTEMPTS})")
+        retry = parfive.Downloader(max_conn=max(1, min(max_conn, 2)))
+        for error in failed:
+            partial = error.filepath_partial
+            if not partial:
+                continue
+            partial_path = Path(partial)
+            retry.enqueue_file(error.url, path=partial_path.parent, filename=partial_path.name, overwrite=True)
+        retry_results: Results = retry.download()
+        failed = list(retry_results.errors)
+        if not failed:
+            return
+        if attempt < DOWNLOAD_MAX_ATTEMPTS:
+            time.sleep(DOWNLOAD_RETRY_DELAY_SECONDS)
+
+    if failed:
+        print(f"Falling back to direct downloads for {len(failed)} remaining files")
+    final_errors = []
+    for error in failed:
+        partial = error.filepath_partial
+        try:
+            if partial:
+                destination = Path(partial)
+            else:
+                destination = Path.cwd() / _filename_from_url(error.url)
+            _download_with_requests(error.url, destination)
+        except Exception as fallback_error:
+            final_errors.append(f"{error.url}\n{fallback_error}")
+    if final_errors:
+        raise ValueError("Download failed after retries: " + "; ".join(final_errors))
 
 def downloadSegments(
     data_dir: Union[str, Path],
@@ -284,10 +345,7 @@ def downloadSegments(
 
     # Start the download
     results: Results = downloader.download()
-    # Assume that the download is done when the results are done
-    # Check if the download was successful
-    if results.errors:
-        raise ValueError(f"Download failed: {results.errors}")
+    _retry_failed_downloads(results, max_conn=20)
 
     # Decompress the logs
     for segment_id in segment_ids:
