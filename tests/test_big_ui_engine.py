@@ -311,6 +311,43 @@ def test_render_overlays_includes_device_type_in_metadata(monkeypatch) -> None:
     assert any("mici" in text for text in calls)
 
 
+def test_render_overlays_insets_timer_inside_video_frame(monkeypatch) -> None:
+    calls: list[tuple[str, int, int, int]] = []
+
+    monkeypatch.setattr(
+        big_ui_engine,
+        "draw_text_box",
+        lambda text, x, y, size, *args, **kwargs: calls.append((text, x, y, size)),
+    )
+
+    def fake_measure(_font, text, _size):
+        return SimpleNamespace(x=len(text) * 8, y=16)
+
+    monkeypatch.setitem(__import__("sys").modules, "openpilot.system.ui.lib.text_measure", SimpleNamespace(measure_text_cached=fake_measure))
+    monkeypatch.setitem(__import__("sys").modules, "openpilot.system.ui.lib.wrap_text", SimpleNamespace(wrap_text=lambda *_args: []))
+
+    gui_app = SimpleNamespace(width=2160)
+    big_ui_engine.render_overlays(
+        gui_app,
+        font=object(),
+        big=True,
+        metadata=None,
+        title=None,
+        route_seconds=90,
+        show_metadata=False,
+        show_time=True,
+    )
+
+    assert calls == [
+        (
+            "01:30",
+            gui_app.width - (len("01:30") * 8) - big_ui_engine.TEXT_BOX_PADDING_X - 10,
+            big_ui_engine.TEXT_BOX_PADDING_Y + 10,
+            24,
+        )
+    ]
+
+
 def test_ui_recording_encoder_prefers_nvidia(monkeypatch) -> None:
     env: dict[str, str] = {}
     monkeypatch.setattr(ui_renderer, "_has_nvidia", lambda: True)

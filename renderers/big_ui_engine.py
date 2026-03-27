@@ -15,6 +15,8 @@ from pathlib import Path
 FRAMERATE = 20
 CAMERA_SERVICE = "roadEncodeIdx"
 MODEL_SERVICE = "modelV2"
+TEXT_BOX_PADDING_X = 8
+TEXT_BOX_PADDING_Y = 4
 logger = logging.getLogger("big_ui_engine")
 
 
@@ -304,7 +306,13 @@ def draw_text_box(text, x, y, size, gui_app, font, color=None, center=False) -> 
     text_width, text_height = int(text_size.x), int(text_size.y)
     if center:
         x = (gui_app.width - text_width) // 2
-    rl.draw_rectangle(x - 8, y - 4, text_width + 16, text_height + 8, box_color)
+    rl.draw_rectangle(
+        x - TEXT_BOX_PADDING_X,
+        y - TEXT_BOX_PADDING_Y,
+        text_width + (2 * TEXT_BOX_PADDING_X),
+        text_height + (2 * TEXT_BOX_PADDING_Y),
+        box_color,
+    )
     rl.draw_text_ex(font, text, rl.Vector2(x, y), size, 0, text_color)
 
 
@@ -315,12 +323,20 @@ def render_overlays(gui_app, font, big, metadata, title, route_seconds, show_met
     metadata_size = 16 if big else 12
     title_size = 32 if big else 24
     time_size = 24 if big else 16
+    time_edge_margin = 10 if big else 6
 
     time_width = 0
     if show_time:
         time_text = f"{int(route_seconds) // 60:02d}:{int(route_seconds) % 60:02d}"
         time_width = int(measure_text_cached(font, time_text, time_size).x)
-        draw_text_box(time_text, gui_app.width - time_width - 5, 0, time_size, gui_app, font)
+        draw_text_box(
+            time_text,
+            gui_app.width - time_width - TEXT_BOX_PADDING_X - time_edge_margin,
+            TEXT_BOX_PADDING_Y + time_edge_margin,
+            time_size,
+            gui_app,
+            font,
+        )
 
     if show_metadata and metadata:
         text = ", ".join(
@@ -334,7 +350,7 @@ def render_overlays(gui_app, font, big, metadata, title, route_seconds, show_met
                 f"Dirty: {metadata['dirty']}",
             ]
         )
-        margin = 2 * (time_width + 10 if show_time else 20)
+        margin = 2 * (time_width + (2 * TEXT_BOX_PADDING_X) + time_edge_margin if show_time else 20)
         max_width = gui_app.width - margin
         lines = wrap_text(font, text, metadata_size, max_width)
         y_offset = 6
