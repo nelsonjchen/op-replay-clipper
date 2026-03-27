@@ -377,10 +377,10 @@ class DriverDebugOverlayRenderer:
         import pyray as rl
 
         font_size = 16
-        padding_x = 12
+        padding_x = 16
         padding_y = 5
         text_size = rl.measure_text_ex(self._label_font, label, font_size, 0)
-        width = text_size.x + (padding_x * 2)
+        width = text_size.x + (padding_x * 2) + 4
         height = text_size.y + (padding_y * 2)
         rl.draw_rectangle_rounded(rl.Rectangle(x, y, width, height), 0.35, 10, rl.Color(0, 0, 0, 135))
         rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(x, y, width, height), 0.35, 10, 2, color)
@@ -398,10 +398,10 @@ class DriverDebugOverlayRenderer:
 
         for label, color in badges:
             font_size = 16
-            padding_x = 12
+            padding_x = 16
             padding_y = 5
             text_size = rl.measure_text_ex(self._label_font, label, font_size, 0)
-            width = text_size.x + (padding_x * 2)
+            width = text_size.x + (padding_x * 2) + 4
             height = text_size.y + (padding_y * 2)
             if cursor_x + width > max_x and cursor_x > x:
                 cursor_x = x
