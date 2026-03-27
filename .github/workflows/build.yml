@@ -53,10 +53,10 @@ jobs:
         run: uv run pytest
 
   render-smoke:
-    name: ubuntu-latest / Mici Render Smoke
+    name: ubuntu-latest / Mici UI Smoke
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     steps:
       - name: Check out repository
@@ -72,20 +72,37 @@ jobs:
       - name: Sync locked environment
         run: uv sync --frozen --all-extras
 
-      - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install UI render dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            capnproto \
+            ffmpeg \
+            git-lfs \
+            libegl1-mesa-dev \
+            libxcursor-dev \
+            libxext-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libxrandr-dev \
+            mesa-utils \
+            xorg-dev \
+            xserver-xorg-core \
+            zstd
 
-      - name: Render mici forward smoke clip
+      - name: Render mici UI smoke clip
         run: bash ./common/render_mici_smoke.sh
 
-      - name: Upload mici smoke artifacts
+      - name: Upload mici UI smoke artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: mici-forward-render-smoke-${{ github.event_name }}
+          name: mici-ui-smoke-${{ github.event_name }}
           path: |
-            shared/ci-e2e/mici-forward-smoke.mp4
-            shared/ci-e2e/mici-forward-smoke.png
-            shared/ci-e2e/mici-forward-smoke.json
+            shared/ci-e2e/mici-ui-smoke.mp4
+            shared/ci-e2e/mici-ui-smoke.png
+            shared/ci-e2e/mici-ui-smoke.json
           if-no-files-found: warn
           retention-days: 7

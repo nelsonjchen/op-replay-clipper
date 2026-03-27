@@ -5,19 +5,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." >/dev/null 2>&1 && pwd -P)"
 ARTIFACT_DIR="${1:-${ROOT_DIR}/shared/ci-e2e}"
-OUTPUT_MP4="${ARTIFACT_DIR}/mici-forward-smoke.mp4"
-OUTPUT_PNG="${ARTIFACT_DIR}/mici-forward-smoke.png"
-OUTPUT_JSON="${ARTIFACT_DIR}/mici-forward-smoke.json"
+OUTPUT_MP4="${ARTIFACT_DIR}/mici-ui-smoke.mp4"
+OUTPUT_PNG="${ARTIFACT_DIR}/mici-ui-smoke.png"
+OUTPUT_JSON="${ARTIFACT_DIR}/mici-ui-smoke.json"
 DATA_ROOT="${ARTIFACT_DIR}/data"
+OPENPILOT_DIR="${ARTIFACT_DIR}/openpilot-local"
 
 rm -rf "${ARTIFACT_DIR}"
 mkdir -p "${ARTIFACT_DIR}"
 
 uv run python "${ROOT_DIR}/clip.py" \
-  forward \
+  ui \
   --demo \
+  --qcam \
   --length-seconds 2 \
+  --smear-seconds 0 \
   --accel cpu \
+  --openpilot-dir "${OPENPILOT_DIR}" \
   --output "${OUTPUT_MP4}" \
   --data-root "${DATA_ROOT}"
 
