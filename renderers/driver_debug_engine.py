@@ -675,7 +675,7 @@ class DriverDebugOverlayRenderer:
         mid_value_x = mid_x + 250
         self._draw_section_title(mid_x, mid_y, "MODEL")
         middle_rows = [
-            ("face / wheel side", f"{_fmt_percent(telemetry.face_prob)} / {_fmt_percent(telemetry.wheel_on_right_prob)}", white),
+            ("face / RHD prob", f"{_fmt_percent(telemetry.face_prob)} / {_fmt_percent(telemetry.wheel_on_right_prob)}", white),
             ("eyes L / R", f"{_fmt_percent(telemetry.left_eye_prob)} / {_fmt_percent(telemetry.right_eye_prob)}", white),
             ("blink L / R", f"{_fmt_percent(telemetry.left_blink_prob)} / {_fmt_percent(telemetry.right_blink_prob)}", orange),
             ("sunglasses / phone", f"{_fmt_percent(telemetry.sunglasses_prob)} / {_fmt_percent(telemetry.phone_prob)}", white),
