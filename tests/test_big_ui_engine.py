@@ -441,13 +441,13 @@ def test_compute_shader_gradient_vectors_uses_view_rect_not_full_canvas() -> Non
 def test_torque_ring_endpoint_angle_clamps_and_centers_on_neutral() -> None:
     assert big_ui_engine.torque_ring_endpoint_angle(0.0) == pytest.approx(big_ui_engine.TORQUE_RING_NEUTRAL_DEG)
     assert big_ui_engine.torque_ring_endpoint_angle(0.5) == pytest.approx(
-        big_ui_engine.TORQUE_RING_NEUTRAL_DEG + (big_ui_engine.TORQUE_RING_MAX_SPAN_DEG * 0.5)
-    )
-    assert big_ui_engine.torque_ring_endpoint_angle(-0.5) == pytest.approx(
         big_ui_engine.TORQUE_RING_NEUTRAL_DEG - (big_ui_engine.TORQUE_RING_MAX_SPAN_DEG * 0.5)
     )
+    assert big_ui_engine.torque_ring_endpoint_angle(-0.5) == pytest.approx(
+        big_ui_engine.TORQUE_RING_NEUTRAL_DEG + (big_ui_engine.TORQUE_RING_MAX_SPAN_DEG * 0.5)
+    )
     assert big_ui_engine.torque_ring_endpoint_angle(2.0) == pytest.approx(
-        big_ui_engine.TORQUE_RING_NEUTRAL_DEG + big_ui_engine.TORQUE_RING_MAX_SPAN_DEG
+        big_ui_engine.TORQUE_RING_NEUTRAL_DEG - big_ui_engine.TORQUE_RING_MAX_SPAN_DEG
     )
 
 

@@ -325,7 +325,7 @@ def _lateral_control_state_branch(controls_state: object) -> tuple[str | None, o
 
 def torque_ring_endpoint_angle(value: float, *, max_span_deg: float = TORQUE_RING_MAX_SPAN_DEG) -> float:
     clamped = max(-1.0, min(1.0, float(value)))
-    return TORQUE_RING_NEUTRAL_DEG + (clamped * max_span_deg)
+    return TORQUE_RING_NEUTRAL_DEG - (clamped * max_span_deg)
 
 
 def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
