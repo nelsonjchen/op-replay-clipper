@@ -396,6 +396,19 @@ def test_compute_shader_gradient_vectors_uses_view_rect_not_full_canvas() -> Non
     assert end_xy == (0.0, 270.0)
 
 
+def test_torque_ring_endpoint_angle_clamps_and_centers_on_neutral() -> None:
+    assert big_ui_engine.torque_ring_endpoint_angle(0.0) == pytest.approx(big_ui_engine.TORQUE_RING_NEUTRAL_DEG)
+    assert big_ui_engine.torque_ring_endpoint_angle(0.5) == pytest.approx(
+        big_ui_engine.TORQUE_RING_NEUTRAL_DEG + (big_ui_engine.TORQUE_RING_MAX_SPAN_DEG * 0.5)
+    )
+    assert big_ui_engine.torque_ring_endpoint_angle(-0.5) == pytest.approx(
+        big_ui_engine.TORQUE_RING_NEUTRAL_DEG - (big_ui_engine.TORQUE_RING_MAX_SPAN_DEG * 0.5)
+    )
+    assert big_ui_engine.torque_ring_endpoint_angle(2.0) == pytest.approx(
+        big_ui_engine.TORQUE_RING_NEUTRAL_DEG + big_ui_engine.TORQUE_RING_MAX_SPAN_DEG
+    )
+
+
 def test_extract_footer_telemetry_reads_driver_and_op_inputs() -> None:
     state = {
         "carState": FakeMsg(
@@ -499,7 +512,55 @@ def test_extract_footer_telemetry_uses_controls_state_as_steering_target_fallbac
     assert telemetry.steering_angle_deg == -5.2
     assert telemetry.steering_target_deg == -5.5
     assert telemetry.steering_applied_deg is None
+    assert telemetry.steering_control_kind == "angle"
     assert telemetry.steering_pressed is False
+
+
+def test_extract_footer_telemetry_uses_torque_values_for_torque_state_routes() -> None:
+    state = {
+        "carState": FakeMsg(
+            "carState",
+            0,
+            SimpleNamespace(
+                steeringAngleDeg=11.8,
+                steeringPressed=False,
+            ),
+        ),
+        "carControl": FakeMsg(
+            "carControl",
+            0,
+            SimpleNamespace(
+                actuators=SimpleNamespace(accel=0.2, steeringAngleDeg=0.0, torque=0.58),
+            ),
+        ),
+        "carOutput": FakeMsg(
+            "carOutput",
+            0,
+            SimpleNamespace(
+                actuatorsOutput=SimpleNamespace(accel=0.1, steeringAngleDeg=0.0, torque=0.55),
+            ),
+        ),
+        "controlsState": FakeMsg(
+            "controlsState",
+            0,
+            SimpleNamespace(
+                lateralControlState=SimpleNamespace(
+                    which=lambda: "torqueState",
+                    torqueState=SimpleNamespace(output=0.58, saturated=True),
+                )
+            ),
+        ),
+    }
+
+    telemetry = big_ui_engine.extract_footer_telemetry(state)
+
+    assert telemetry.steering_angle_deg == 11.8
+    assert telemetry.steering_target_deg is None
+    assert telemetry.steering_applied_deg is None
+    assert telemetry.steering_target_torque == pytest.approx(0.58)
+    assert telemetry.steering_applied_torque == pytest.approx(0.55)
+    assert telemetry.steering_control_kind == "torque"
+    assert telemetry.steering_saturated is True
 
 
 def test_extract_footer_telemetry_falls_back_to_plan_accels_and_brake_command() -> None:
