@@ -134,6 +134,48 @@ def test_build_layout_rects_default_uses_full_canvas() -> None:
     assert rects.footer_rect is None
 
 
+def test_load_route_metadata_falls_back_to_car_fingerprint_when_platform_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeLogReader:
+        def __init__(self, _path: str) -> None:
+            pass
+
+        def first(self, which: str):
+            if which == "initData":
+                return SimpleNamespace(
+                    deviceType="tizi",
+                    gitRemote="https://github.com/commaai/openpilot.git",
+                    gitBranch="nightly",
+                    gitCommit="deadbeefcafebabe",
+                    dirty=False,
+                )
+            if which == "carParams":
+                return SimpleNamespace(carFingerprint="TOYOTA_COROLLA_TSS2")
+            return None
+
+    class FakeSegment:
+        @staticmethod
+        def _get_route_metadata(_canonical_name: str) -> dict[str, str]:
+            return {}
+
+    monkeypatch.setitem(sys.modules, "openpilot", types.ModuleType("openpilot"))
+    monkeypatch.setitem(sys.modules, "openpilot.tools", types.ModuleType("openpilot.tools"))
+    monkeypatch.setitem(sys.modules, "openpilot.tools.lib", types.ModuleType("openpilot.tools.lib"))
+    monkeypatch.setitem(sys.modules, "openpilot.tools.lib.logreader", SimpleNamespace(LogReader=FakeLogReader))
+    monkeypatch.setitem(sys.modules, "openpilot.tools.lib.route", SimpleNamespace(Segment=FakeSegment))
+
+    route = SimpleNamespace(
+        log_paths=lambda: ["/tmp/fake-rlog.zst"],
+        name=SimpleNamespace(canonical_name="dongle|route"),
+    )
+
+    metadata = big_ui_engine.load_route_metadata(route)
+
+    assert metadata["device_type"] == "tizi"
+    assert metadata["platform"] == "TOYOTA_COROLLA_TSS2"
+    assert metadata["branch"] == "nightly"
+    assert metadata["commit"] == "deadbeef"
+
+
 def test_reapply_hidden_window_flag_sets_hidden_state(monkeypatch) -> None:
     called: list[int] = []
     fake_pyray = SimpleNamespace(

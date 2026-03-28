@@ -846,6 +846,7 @@ def load_route_metadata(route) -> dict[str, str]:
         raise RuntimeError("error getting route metadata: cannot find any uploaded logs")
     lr = LogReader(path)
     init_data = lr.first("initData")
+    car_params = lr.first("carParams")
 
     route_info = {}
     try:
@@ -853,10 +854,12 @@ def load_route_metadata(route) -> dict[str, str]:
     except Exception:
         route_info = {}
 
+    platform = route_info.get("platform") or getattr(car_params, "carFingerprint", None) or "unknown"
+
     return {
         "route": route.name.canonical_name,
         "device_type": str(getattr(init_data, "deviceType", None) or "unknown"),
-        "platform": route_info.get("platform") or "unknown",
+        "platform": str(platform),
         "remote": init_data.gitRemote or route_info.get("git_remote") or "unknown",
         "branch": init_data.gitBranch or route_info.get("git_branch") or "unknown",
         "commit": (init_data.gitCommit or route_info.get("git_commit") or "unknown")[:8],
