@@ -305,7 +305,7 @@ def build_footer_panel_layout(rect) -> FooterPanelLayout:
     meters_right = confidence_rect[0] - UI_ALT_CONFIDENCE_RAIL_GAP
     main_panel_w = max(0.0, meters_right - right_x)
     meter_w = max(120.0, (main_panel_w - UI_ALT_FOOTER_COLUMN_GAP) / 2)
-    accel_summary_y = footer_bottom_y - 54.0
+    accel_summary_y = rect.y + UI_ALT_FOOTER_OUTER_PAD_Y + 198.0
     return FooterPanelLayout(
         wheel_col_w=wheel_col_w,
         right_x=right_x,
@@ -1624,9 +1624,9 @@ class SteeringFooterRenderer:
         self._draw_steering_summary(
             rl.Rectangle(
                 rect.x + UI_ALT_FOOTER_OUTER_PAD_X,
-                rect.y + UI_ALT_FOOTER_OUTER_PAD_Y + 18,
+                rect.y + UI_ALT_FOOTER_OUTER_PAD_Y + 26,
                 layout.wheel_col_w - 108,
-                steering_content_height - 18,
+                steering_content_height - 26,
             ),
             telemetry=telemetry,
         )

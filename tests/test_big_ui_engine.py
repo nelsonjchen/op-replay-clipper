@@ -729,7 +729,7 @@ def test_build_footer_panel_layout_reserves_confidence_rail() -> None:
 
     assert layout.meter_w > 120.0
     assert layout.confidence_rect == pytest.approx((1802.0, 602.0, 84.0, 410.0))
-    assert layout.accel_rect == pytest.approx((843.2, 958.0, 934.8, 54.0))
+    assert layout.accel_rect == pytest.approx((843.2, 800.0, 934.8, 54.0))
 
 
 def test_footer_confidence_target_value_uses_hidden_disengaged_target() -> None:
