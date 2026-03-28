@@ -1,3 +1,13 @@
+"""Styled text helpers for pyray-based overlays.
+
+This module includes a small Python/pyray port of ideas from
+`DrawTextStyle.h` in NathanGuilhot/Raylib_DrawTextStyle:
+https://github.com/NathanGuilhot/Raylib_DrawTextStyle/tree/main
+
+Upstream is MIT-licensed. Copyright (c) 2021 Nighten.
+See the upstream repository LICENSE file for the original terms.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
