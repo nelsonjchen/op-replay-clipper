@@ -279,11 +279,11 @@ def _fmt_vec(values: tuple[float | None, ...], digits: int = 2) -> str:
 
 def _humanize_platform(value: str | None) -> str:
     if not value:
-        return "Unknown platform"
+        return "unknown"
     text = str(value).strip()
     if not text:
-        return "Unknown platform"
-    return text.replace("_", " ").title()
+        return "unknown"
+    return text
 
 
 def _humanize_git_remote(value: str | None) -> str:
@@ -546,6 +546,23 @@ class DriverDebugOverlayRenderer:
         rl.draw_text_ex(self._label_font, label.upper(), rl.Vector2(x, y), 14, 0, rl.Color(255, 255, 255, 120))
         rl.draw_text_ex(self._value_font, value, rl.Vector2(x, y + 18), 28, 0, color)
 
+    def _draw_right_aligned_text(
+        self,
+        *,
+        right_x: float,
+        y: float,
+        text: str,
+        font,
+        font_size: int,
+        color,
+    ) -> None:
+        import pyray as rl
+
+        if not text:
+            return
+        text_size = rl.measure_text_ex(font, text, font_size, 0)
+        rl.draw_text_ex(font, text, rl.Vector2(right_x - text_size.x, y), font_size, 0, color)
+
     def render(self, rect, *, telemetry: DriverDebugTelemetry, route_seconds: float, metadata: dict[str, str] | None) -> None:
         import pyray as rl
 
@@ -566,6 +583,7 @@ class DriverDebugOverlayRenderer:
 
         title_x = rect.x + outer_pad_x
         title_y = rect.y + outer_pad_y
+        header_right_x = rect.x + rect.width - (outer_pad_x * 2)
         time_text = f"T+{int(route_seconds) // 60:02d}:{int(route_seconds) % 60:02d}"
         rl.draw_text_ex(self._label_font, "DRIVER DEBUG", rl.Vector2(title_x, title_y), 24, 0, blue)
         rl.draw_text_ex(self._value_font, time_text, rl.Vector2(title_x, title_y + 28), 34, 0, white)
@@ -577,24 +595,36 @@ class DriverDebugOverlayRenderer:
         if metadata:
             platform_text = _humanize_platform(metadata.get("platform", ""))
             route_label = metadata.get("route", "")
-            device_label = str(metadata.get("device_type", "") or "").upper()
+            device_label = str(metadata.get("device_type", "") or "").strip()
             git_text = _git_metadata_text(metadata)
         meta_text = "  •  ".join(part for part in [device_label, platform_text] if part)
         if meta_text:
-            meta_font_size = 18
-            meta_size = rl.measure_text_ex(self._value_font, meta_text, meta_font_size, 0)
-            meta_x = rect.x + rect.width - meta_size.x - outer_pad_x
-            rl.draw_text_ex(self._value_font, meta_text, rl.Vector2(meta_x, title_y + 4), meta_font_size, 0, white)
+            self._draw_right_aligned_text(
+                right_x=header_right_x,
+                y=title_y + 4,
+                text=meta_text,
+                font=self._value_font,
+                font_size=22,
+                color=white,
+            )
         if route_label:
-            route_font_size = 15
-            route_size = rl.measure_text_ex(self._label_font, route_label, route_font_size, 0)
-            route_x = rect.x + rect.width - route_size.x - outer_pad_x
-            rl.draw_text_ex(self._label_font, route_label, rl.Vector2(route_x, title_y + 34), route_font_size, 0, dim)
+            self._draw_right_aligned_text(
+                right_x=header_right_x,
+                y=title_y + 34,
+                text=route_label,
+                font=self._label_font,
+                font_size=17,
+                color=dim,
+            )
         if git_text:
-            git_font_size = 14
-            git_size = rl.measure_text_ex(self._label_font, git_text, git_font_size, 0)
-            git_x = rect.x + rect.width - git_size.x - outer_pad_x
-            rl.draw_text_ex(self._label_font, git_text, rl.Vector2(git_x, title_y + 56), git_font_size, 0, dim)
+            self._draw_right_aligned_text(
+                right_x=header_right_x,
+                y=title_y + 56,
+                text=git_text,
+                font=self._label_font,
+                font_size=16,
+                color=dim,
+            )
 
         subtitle_parts = [
             f"side {telemetry.selected_side}",

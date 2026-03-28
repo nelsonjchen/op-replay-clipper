@@ -152,9 +152,9 @@ def test_normalize_cli_paths_resolves_relative_paths_against_original_cwd(tmp_pa
     assert normalized.data_dir == str((tmp_path / "shared/data_dir").resolve())
 
 
-def test_humanize_platform_replaces_underscores_and_titles_words() -> None:
-    assert driver_debug_engine._humanize_platform("FORD_BRONCO_SPORT_MK1") == "Ford Bronco Sport Mk1"
-    assert driver_debug_engine._humanize_platform("") == "Unknown platform"
+def test_humanize_platform_preserves_raw_platform_text() -> None:
+    assert driver_debug_engine._humanize_platform("FORD_BRONCO_SPORT_MK1") == "FORD_BRONCO_SPORT_MK1"
+    assert driver_debug_engine._humanize_platform("") == "unknown"
 
 
 def test_humanize_git_remote_and_git_metadata_text_compact_openpilot_repo_info() -> None:
