@@ -7,7 +7,7 @@ import json
 import os
 import time
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import urljoin
@@ -41,6 +41,7 @@ class Route:
     fullname: str
     route_id: str
     start_time: str | None
+    end_time: str | None
     maxqlog: int
     procqlog: int | None
     url: str
@@ -144,9 +145,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--jwt-token", default=os.environ.get("COMMA_JWT", ""), help="Comma JWT token. Defaults to COMMA_JWT.")
     parser.add_argument("--timezone", default=os.environ.get("TZ", "America/Los_Angeles"))
     parser.add_argument(
-        "--date",
-        default="today",
-        help="Target local date in YYYY-MM-DD format, or 'today'. Defaults to today's date in --timezone.",
+        "--lookback-hours",
+        type=int,
+        default=48,
+        help="Only inspect routes whose local start time is within this many hours. Defaults to 48.",
     )
     parser.add_argument("--poll-seconds", type=int, default=30, help="Polling interval while waiting for bookmarks or uploads.")
     parser.add_argument(
@@ -192,12 +194,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def local_date_from_arg(raw: str, tz: ZoneInfo) -> date:
-    if raw == "today":
-        return datetime.now(tz).date()
-    return date.fromisoformat(raw)
-
-
 def parse_route_start_local(start_time: str | None, tz: ZoneInfo) -> datetime | None:
     if not start_time:
         return None
@@ -239,7 +235,7 @@ def select_devices(devices: Iterable[dict[str, Any]], device_alias: str | None, 
     return selected
 
 
-def list_routes_for_local_date(api: CommaApi, dongle_id: str, target_date: date, tz: ZoneInfo) -> list[Route]:
+def list_routes_in_lookback_window(api: CommaApi, dongle_id: str, *, window_start: datetime, tz: ZoneInfo) -> list[Route]:
     routes: list[Route] = []
     created_before: int | None = None
 
@@ -249,16 +245,13 @@ def list_routes_for_local_date(api: CommaApi, dongle_id: str, target_date: date,
             break
         for item in batch:
             start_local = parse_route_start_local(item.get("start_time"), tz)
-            if start_local is None:
-                route_date = datetime.now(tz).date()
-            else:
-                route_date = start_local.date()
-            if route_date == target_date:
+            if start_local is not None and start_local >= window_start:
                 routes.append(
                     Route(
                         fullname=item["fullname"],
                         route_id=route_id_from_fullname(item["fullname"]),
                         start_time=item.get("start_time"),
+                        end_time=item.get("end_time"),
                         maxqlog=item.get("maxqlog", 0),
                         procqlog=item.get("procqlog"),
                         url=item["url"],
@@ -266,7 +259,7 @@ def list_routes_for_local_date(api: CommaApi, dongle_id: str, target_date: date,
                 )
         created_before = batch[-1]["create_time"]
         oldest_local = parse_route_start_local(batch[-1].get("start_time"), tz)
-        if oldest_local is not None and oldest_local.date() < target_date:
+        if oldest_local is not None and oldest_local < window_start:
             break
 
     routes.sort(key=lambda route: parse_route_start_local(route.start_time, tz) or datetime.max.replace(tzinfo=tz))
@@ -298,6 +291,28 @@ def expand_segments(bookmarked: Iterable[int], *, previous_segments: int, next_s
         end = min(max_segment, segment + next_segments)
         expanded.update(range(start, end + 1))
     return sorted(expanded)
+
+
+def prioritize_segments(bookmarked: Iterable[int], *, previous_segments: int, next_segments: int, max_segment: int) -> list[int]:
+    ordered: list[int] = []
+    seen: set[int] = set()
+
+    for segment in bookmarked:
+        candidates = [segment]
+        if previous_segments >= 1:
+            candidates.append(segment - 1)
+        if next_segments >= 1:
+            candidates.append(segment + 1)
+        for offset in range(2, previous_segments + 1):
+            candidates.append(segment - offset)
+
+        for candidate in candidates:
+            if candidate < 0 or candidate > max_segment or candidate in seen:
+                continue
+            seen.add(candidate)
+            ordered.append(candidate)
+
+    return ordered
 
 
 def normalize_uploaded_paths(filelist: dict[str, list[str]]) -> set[str]:
@@ -354,6 +369,9 @@ def generate_candidate_paths(route: Route, segments: Iterable[int], file_types: 
     candidates: list[str] = []
     for segment in segments:
         for file_type in file_types:
+            if file_type == "logs":
+                candidates.append(f"{route.route_id}--{segment}/rlog.zst")
+                continue
             for filename in FILE_TYPE_NAMES[file_type]:
                 candidates.append(f"{route.route_id}--{segment}/{filename}")
     return candidates
@@ -384,7 +402,7 @@ def scan_once(
     api: CommaApi,
     *,
     device_alias: str,
-    target_date: date,
+    lookback_hours: int,
     tz: ZoneInfo,
     previous_segments: int,
     next_segments: int,
@@ -396,15 +414,20 @@ def scan_once(
     all_bookmarked_files_satisfied = True
     queue_cleared = False
     devices = select_devices(api.get_devices(), device_alias or None)
-    print(f"[{datetime.now(tz).isoformat()}] Watching {len(devices)} device(s) on {target_date.isoformat()}")
+    now_local = datetime.now(tz)
+    window_start = now_local - timedelta(hours=lookback_hours)
+    print(
+        f"[{now_local.isoformat()}] Watching {len(devices)} device(s) in the last {lookback_hours} hour(s) "
+        f"since {window_start.isoformat()}"
+    )
     if not devices:
         return ScanOutcome(bookmarks_found=False, uploads_queued=False, all_bookmarked_files_satisfied=False, queue_cleared=False)
 
     any_routes_found = False
     for device in devices:
         print(f"Device {device.alias or device.dongle_id} ({device.dongle_id})")
-        routes = list_routes_for_local_date(api, device.dongle_id, target_date, tz)
-        print(f"Found {len(routes)} route(s) for target date")
+        routes = list_routes_in_lookback_window(api, device.dongle_id, window_start=window_start, tz=tz)
+        print(f"Found {len(routes)} route(s) in lookback window")
         if not routes:
             continue
         any_routes_found = True
@@ -421,6 +444,7 @@ def scan_once(
                 fullname=route.fullname,
                 route_id=route.route_id,
                 start_time=route_detail.get("start_time"),
+                end_time=route_detail.get("end_time", route.end_time),
                 maxqlog=route_detail.get("maxqlog", route.maxqlog),
                 procqlog=route_detail.get("procqlog", route.procqlog),
                 url=route_detail.get("url", route.url),
@@ -448,10 +472,17 @@ def scan_once(
                 next_segments=next_segments,
                 max_segment=hydrated_route.maxqlog,
             )
+            prioritized_segments = prioritize_segments(
+                bookmark_segments,
+                previous_segments=previous_segments,
+                next_segments=next_segments,
+                max_segment=hydrated_route.maxqlog,
+            )
             print(f"Expanded segment window: {target_segments}")
+            print(f"Upload priority order: {prioritized_segments}")
 
             uploaded_paths = normalize_uploaded_paths(route_files)
-            desired_paths = generate_candidate_paths(hydrated_route, target_segments, file_types)
+            desired_paths = generate_candidate_paths(hydrated_route, prioritized_segments, file_types)
             target_paths.update(desired_paths)
             missing_paths = [path for path in desired_paths if path not in uploaded_paths and path not in queued_paths]
             print(
@@ -505,7 +536,6 @@ def main() -> int:
         raise SystemExit("Missing JWT token. Set COMMA_JWT or pass --jwt-token.")
 
     tz = ZoneInfo(args.timezone)
-    target_date = local_date_from_arg(args.date, tz)
     api = CommaApi(args.jwt_token)
 
     start_time = time.monotonic()
@@ -515,7 +545,7 @@ def main() -> int:
             outcome = scan_once(
                 api,
                 device_alias=args.device_alias,
-                target_date=target_date,
+                lookback_hours=args.lookback_hours,
                 tz=tz,
                 previous_segments=args.previous_segments,
                 next_segments=args.next_segments,

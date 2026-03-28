@@ -1,12 +1,10 @@
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
-
 from comma_watch import (
     Device,
+    generate_candidate_paths,
     is_owned_online_device,
+    prioritize_segments,
     Route,
     expand_segments,
-    local_date_from_arg,
     normalize_online_queue_item_path,
     normalize_queue_paths,
     normalize_uploaded_paths,
@@ -17,6 +15,10 @@ from comma_watch import (
 
 def test_expand_segments_clamps_route_bounds() -> None:
     assert expand_segments([0, 5], previous_segments=3, next_segments=1, max_segment=6) == [0, 1, 2, 3, 4, 5, 6]
+
+
+def test_prioritize_segments_radiates_out_from_bookmark() -> None:
+    assert prioritize_segments([5], previous_segments=3, next_segments=1, max_segment=6) == [5, 4, 6, 3, 2]
 
 
 def test_normalize_uploaded_paths_extracts_route_segment_and_filename() -> None:
@@ -50,13 +52,6 @@ def test_normalize_queue_paths_handles_online_and_offline_shapes() -> None:
     }
 
 
-def test_local_date_from_arg_today_uses_timezone_today() -> None:
-    tz = ZoneInfo("America/Los_Angeles")
-    today = datetime.now(tz).date()
-    assert local_date_from_arg("today", tz) == today
-    assert local_date_from_arg(today.isoformat(), tz) == date.fromisoformat(today.isoformat())
-
-
 def test_normalize_online_queue_item_path_extracts_segment_dir_and_filename() -> None:
     item = {"path": "/data/media/0/realdata/0000026f--c5469f881d--2/fcamera.hevc"}
     assert normalize_online_queue_item_path(item) == "0000026f--c5469f881d--2/fcamera.hevc"
@@ -67,11 +62,28 @@ def test_parsed_segment_upper_bound_clamps_to_available_segments() -> None:
         fullname="fde53c3c109fb4c0|0000026f--c5469f881d",
         route_id="0000026f--c5469f881d",
         start_time="2026-03-28T04:59:16",
+        end_time="2026-03-28T05:19:16",
         maxqlog=20,
         procqlog=17,
         url="https://example.test/route",
     )
     assert parsed_segment_upper_bound(route) == 17
+
+
+def test_generate_candidate_paths_requests_rlog_zst_only() -> None:
+    route = Route(
+        fullname="fde53c3c109fb4c0|0000026f--c5469f881d",
+        route_id="0000026f--c5469f881d",
+        start_time="2026-03-28T04:59:16",
+        end_time="2026-03-28T05:19:16",
+        maxqlog=20,
+        procqlog=20,
+        url="https://example.test/route",
+    )
+    assert generate_candidate_paths(route, [2], ["cameras", "logs"]) == [
+        "0000026f--c5469f881d--2/fcamera.hevc",
+        "0000026f--c5469f881d--2/rlog.zst",
+    ]
 
 
 def test_select_devices_defaults_to_owned_online_devices() -> None:
