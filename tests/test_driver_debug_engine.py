@@ -173,6 +173,63 @@ def test_humanize_git_remote_and_git_metadata_text_compact_openpilot_repo_info()
     )
 
 
+def test_driver_face_anchor_uses_upstream_style_projection_for_unmirrored_mici_view() -> None:
+    class Rect:
+        x = 0.0
+        y = 0.0
+        width = 1910.0
+        height = 1080.0
+
+    anchor_x, anchor_y = driver_debug_engine._driver_face_anchor(
+        Rect(), face_x=0.19, face_y=0.16, device_type="mici"
+    )
+
+    assert round(anchor_x, 2) == 1314.96
+    assert round(anchor_y, 2) == 566.34
+
+
+def test_compute_driver_monitoring_input_quad_matches_tici_dm_crop() -> None:
+    class Rect:
+        x = 0.0
+        y = 0.0
+        width = 1928.0
+        height = 1208.0
+
+    quad = driver_debug_engine.compute_driver_monitoring_input_quad(
+        Rect(),
+        frame_width=1928.0,
+        frame_height=1208.0,
+    )
+
+    assert quad is not None
+    assert quad[0] == (244.0, 248.0)
+    assert quad[1] == (1683.0, 248.0)
+    assert quad[2] == (1683.0, 1207.0)
+    assert quad[3] == (244.0, 1207.0)
+
+
+def test_compute_driver_monitoring_input_quad_matches_mici_dm_crop_and_bottom_overhang() -> None:
+    class Rect:
+        x = 0.0
+        y = 0.0
+        width = 1344.0
+        height = 760.0
+
+    quad = driver_debug_engine.compute_driver_monitoring_input_quad(
+        Rect(),
+        frame_width=1344.0,
+        frame_height=760.0,
+    )
+
+    assert quad is not None
+    assert round(quad[0][0], 2) == 132.0
+    assert round(quad[0][1], 2) == 113.0
+    assert round(quad[1][0], 2) == 1211.25
+    assert round(quad[1][1], 2) == 113.0
+    assert round(quad[3][0], 2) == 132.0
+    assert quad[2][1] > Rect.height
+
+
 def test_compute_driver_face_box_rect_stays_close_to_anchor_while_expanding_for_yaw() -> None:
     class Rect:
         x = 0.0
@@ -196,7 +253,106 @@ def test_compute_driver_face_box_rect_stays_close_to_anchor_while_expanding_for_
 
     anchor_x, _ = driver_debug_engine._driver_face_anchor(Rect(), face_x=0.197, face_y=0.158, device_type="mici")
     box_center_x = box_x + (box_w / 2)
-    assert abs(box_center_x - anchor_x) < 20
+    assert box_center_x > anchor_x
+    assert (box_center_x - anchor_x) < 90
+
+
+def test_compute_driver_face_box_rect_biases_center_in_yaw_direction() -> None:
+    class Rect:
+        x = 0.0
+        y = 0.0
+        width = 1920.0
+        height = 1080.0
+
+    neutral_driver_data = SimpleNamespace(
+        facePosition=[0.19, 0.16],
+        facePositionStd=[0.0, 0.01],
+        faceOrientation=[0.09, 0.0, 0.0],
+        faceOrientationStd=[0.06, 0.06, 0.04],
+    )
+    yawed_driver_data = SimpleNamespace(
+        facePosition=[0.19, 0.16],
+        facePositionStd=[0.0, 0.01],
+        faceOrientation=[0.09, 0.49, 0.0],
+        faceOrientationStd=[0.06, 0.06, 0.04],
+    )
+
+    neutral_box = driver_debug_engine.compute_driver_face_box_rect(
+        Rect(), driver_data=neutral_driver_data, device_type="mici"
+    )
+    yawed_box = driver_debug_engine.compute_driver_face_box_rect(
+        Rect(), driver_data=yawed_driver_data, device_type="mici"
+    )
+
+    assert neutral_box is not None
+    assert yawed_box is not None
+
+    neutral_center_x = neutral_box[0] + (neutral_box[2] / 2)
+    yawed_center_x = yawed_box[0] + (yawed_box[2] / 2)
+
+    assert yawed_center_x > neutral_center_x
+    assert yawed_box[2] > neutral_box[2]
+
+
+def test_compute_driver_face_box_rect_preserves_tici_yaw_behavior_without_leaving_frame() -> None:
+    class Rect:
+        x = 0.0
+        y = 0.0
+        width = 1920.0
+        height = 1080.0
+
+    neutral_driver_data = SimpleNamespace(
+        facePosition=[0.03, 0.12],
+        facePositionStd=[0.005, 0.01],
+        faceOrientation=[0.02, 0.0, 0.0],
+        faceOrientationStd=[0.05, 0.06, 0.02],
+    )
+    yawed_driver_data = SimpleNamespace(
+        facePosition=[0.03, 0.12],
+        facePositionStd=[0.005, 0.01],
+        faceOrientation=[0.02, 0.45, 0.0],
+        faceOrientationStd=[0.05, 0.06, 0.02],
+    )
+
+    neutral_box = driver_debug_engine.compute_driver_face_box_rect(
+        Rect(), driver_data=neutral_driver_data, device_type="tici"
+    )
+    yawed_box = driver_debug_engine.compute_driver_face_box_rect(
+        Rect(), driver_data=yawed_driver_data, device_type="tici"
+    )
+
+    assert neutral_box is not None
+    assert yawed_box is not None
+
+    neutral_center_x = neutral_box[0] + (neutral_box[2] / 2)
+    yawed_center_x = yawed_box[0] + (yawed_box[2] / 2)
+
+    assert yawed_center_x > neutral_center_x
+    assert yawed_box[2] > neutral_box[2]
+    assert 0.0 <= yawed_box[0] <= Rect.width - yawed_box[2]
+    assert 0.0 <= yawed_box[1] <= Rect.height - yawed_box[3]
+
+
+def test_compute_driver_face_box_rect_clamps_extreme_positions_to_visible_rect() -> None:
+    class Rect:
+        x = 0.0
+        y = 0.0
+        width = 1920.0
+        height = 1080.0
+
+    driver_data = SimpleNamespace(
+        facePosition=[-0.85, 0.05],
+        facePositionStd=[0.04, 0.03],
+        faceOrientation=[0.0, -0.6, 0.0],
+        faceOrientationStd=[0.08, 0.09, 0.02],
+    )
+
+    box = driver_debug_engine.compute_driver_face_box_rect(Rect(), driver_data=driver_data, device_type="mici")
+
+    assert box is not None
+    box_x, box_y, box_w, box_h = box
+    assert 0.0 <= box_x <= Rect.width - box_w
+    assert 0.0 <= box_y <= Rect.height - box_h
 
 
 def test_install_unmirrored_driver_camera_patches_nested_camera_view() -> None:
@@ -204,7 +360,7 @@ def test_install_unmirrored_driver_camera_patches_nested_camera_view() -> None:
     camera_view = SimpleNamespace(_render=original_render)
     driver_view = SimpleNamespace(_camera_view=camera_view)
 
-    driver_debug_engine._install_unmirrored_driver_camera(driver_view)
+    driver_debug_engine._install_unmirrored_driver_camera(driver_view, device_type="tici")
 
     assert camera_view._render is not original_render
     assert getattr(camera_view._render, "__self__", None) is camera_view

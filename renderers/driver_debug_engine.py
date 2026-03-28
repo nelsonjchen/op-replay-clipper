@@ -22,6 +22,7 @@ from renderers.big_ui_engine import (
     _add_openpilot_to_sys_path,
     _reapply_hidden_window_flag,
     build_camera_frame_refs,
+    draw_model_input_overlay,
     draw_text_box,
     emit_runtime_log,
     load_route_metadata,
@@ -39,6 +40,13 @@ DRIVER_DEBUG_WIDTH = 1920
 DRIVER_DEBUG_VIDEO_HEIGHT = 1080
 DRIVER_DEBUG_FOOTER_HEIGHT = 640
 DRIVER_DEBUG_HEIGHT = DRIVER_DEBUG_VIDEO_HEIGHT + DRIVER_DEBUG_FOOTER_HEIGHT
+DM_INPUT_SIZE = (1440.0, 960.0)
+AR_OX_DRIVER_FRAME = (1928.0, 1208.0)
+OS_DRIVER_FRAME = (1344.0, 760.0)
+AR_OX_DRIVER_FOCAL = 567.0
+OS_DRIVER_FOCAL = AR_OX_DRIVER_FOCAL * 0.75
+DM_INTRINSIC_CX = DM_INPUT_SIZE[0] / 2.0
+DM_INTRINSIC_CY = (DM_INPUT_SIZE[1] / 2.0) - ((AR_OX_DRIVER_FRAME[1] - DM_INPUT_SIZE[1]) / 2.0)
 
 
 @dataclass(frozen=True)
@@ -304,6 +312,9 @@ def _git_metadata_text(metadata: dict[str, str] | None) -> str:
 
 
 def _driver_face_anchor(rect, *, face_x: float, face_y: float, device_type: str) -> tuple[float, float]:
+    # The DM pose output is not in raw displayed-pixel coordinates.
+    # Openpilot's UI uses an approximate back-projection for the driver box;
+    # keep that shape here and adapt it to our unmirrored raw-like view.
     base_x = 1080.0 - (1714.0 * face_x)
     base_y = -135.0 + (504.0 + abs(face_x) * 112.0) + (1205.0 - abs(face_x) * 724.0) * face_y
     normalized = (device_type or "").strip().lower()
@@ -324,12 +335,62 @@ def _driver_face_anchor(rect, *, face_x: float, face_y: float, device_type: str)
     return rect.x + rect.width - (anchor_x - rect.x), anchor_y
 
 
+def compute_driver_monitoring_input_quad(
+    rect,
+    *,
+    frame_width: float,
+    frame_height: float,
+) -> tuple[tuple[float, float], ...] | None:
+    frame_width = float(frame_width or 0.0)
+    frame_height = float(frame_height or 0.0)
+    rect_width = float(getattr(rect, "width", 0.0) or 0.0)
+    rect_height = float(getattr(rect, "height", 0.0) or 0.0)
+    if frame_width <= 0.0 or frame_height <= 0.0 or rect_width <= 0.0 or rect_height <= 0.0:
+        return None
+
+    if int(round(frame_width)) == int(OS_DRIVER_FRAME[0]) and int(round(frame_height)) == int(OS_DRIVER_FRAME[1]):
+        focal_length = OS_DRIVER_FOCAL
+    else:
+        focal_length = AR_OX_DRIVER_FOCAL
+
+    cam_cx = frame_width / 2.0
+    cam_cy = frame_height / 2.0
+    scale = focal_length / AR_OX_DRIVER_FOCAL
+    translate_x = cam_cx - (DM_INTRINSIC_CX * scale)
+    translate_y = cam_cy - (DM_INTRINSIC_CY * scale)
+
+    corners = (
+        (0.0, 0.0),
+        (DM_INPUT_SIZE[0] - 1.0, 0.0),
+        (DM_INPUT_SIZE[0] - 1.0, DM_INPUT_SIZE[1] - 1.0),
+        (0.0, DM_INPUT_SIZE[1] - 1.0),
+    )
+    projected_xy: list[tuple[float, float]] = []
+    for dm_x, dm_y in corners:
+        camera_x = translate_x + (scale * dm_x)
+        camera_y = translate_y + (scale * dm_y)
+        screen_x = rect.x + ((camera_x / frame_width) * rect_width)
+        screen_y = rect.y + ((camera_y / frame_height) * rect_height)
+        projected_xy.append((float(screen_x), float(screen_y)))
+    return tuple(projected_xy)
+
+
+def _draw_driver_monitoring_input_overlay(content_rect, *, frame_width: float, frame_height: float) -> None:
+    quad = compute_driver_monitoring_input_quad(
+        content_rect,
+        frame_width=frame_width,
+        frame_height=frame_height,
+    )
+    draw_model_input_overlay(quad, clip_rect=content_rect)
+
+
 def compute_driver_face_box_rect(
     rect,
     *,
     driver_data,
     device_type: str,
 ):
+    normalized_device_type = (device_type or "").strip().lower()
     face_position = list(getattr(driver_data, "facePosition", []) or [])
     face_position_std = list(getattr(driver_data, "facePositionStd", []) or [])
     face_orientation = list(getattr(driver_data, "faceOrientation", []) or [])
@@ -348,13 +409,15 @@ def compute_driver_face_box_rect(
     orient_std = max((float(value) for value in face_orientation_std[:2]), default=0.0)
 
     # The DM model provides a coarse face anchor, not a real detected face bounds box.
-    # Keep position close to the upstream anchor and use pose/std mostly to size the estimate.
+    # Keep position close to the upstream anchor, but bias the center slightly in the
+    # yaw direction so the box stays over the visible face instead of the ear/cheek.
+    center_x += yaw * rect.width * (0.055 if normalized_device_type == "mici" else 0.045)
     center_y += pitch * rect.height * 0.04
 
-    base_width = rect.width * (0.06 if (device_type or "").strip().lower() == "mici" else 0.08)
+    base_width = rect.width * (0.06 if normalized_device_type == "mici" else 0.08)
     width = (
         base_width
-        + (abs(yaw) * rect.width * 0.03)
+        + (abs(yaw) * rect.width * 0.04)
         + (pos_std_x * rect.width * 4.0)
         + (orient_std * rect.width * 0.04)
     )
@@ -362,7 +425,9 @@ def compute_driver_face_box_rect(
     height = (width * 1.16) + (pos_std_y * rect.height * 2.0)
     height = max(width, min(height, rect.height * 0.28))
 
-    return center_x - (width / 2), center_y - (height / 2), width, height
+    box_x = max(rect.x, min(center_x - (width / 2), rect.x + rect.width - width))
+    box_y = max(rect.y, min(center_y - (height / 2), rect.y + rect.height - height))
+    return box_x, box_y, width, height
 
 
 def _draw_driver_debug_face_box(rect, *, driver_data, device_type: str) -> None:
@@ -665,6 +730,31 @@ def _select_driver_camera_dialog(*, device_type: str):
     return module.DriverCameraDialog
 
 
+def _driver_camera_view_base_class(*, device_type: str):
+    normalized = (device_type or "").strip().lower()
+    module_name = (
+        "openpilot.selfdrive.ui.mici.onroad.cameraview"
+        if normalized == "mici"
+        else "openpilot.selfdrive.ui.onroad.cameraview"
+    )
+    module = __import__(module_name, fromlist=["CameraView"])
+    return module.CameraView
+
+
+def _camera_destination_rect(camera_view, rect):
+    import pyray as rl
+
+    transform = camera_view._calc_frame_matrix(rect)
+    scale_x = rect.width * transform[0, 0]
+    scale_y = rect.height * transform[1, 1]
+
+    x_offset = rect.x + (rect.width - scale_x) / 2
+    y_offset = rect.y + (rect.height - scale_y) / 2
+    x_offset += transform[0, 2] * rect.width / 2
+    y_offset += transform[1, 2] * rect.height / 2
+    return rl.Rectangle(x_offset, y_offset, scale_x, scale_y)
+
+
 def _install_driver_debug_face_box(driver_view, *, device_type: str) -> None:
     def _draw_face_detection_override(self, rect):
         from openpilot.selfdrive.ui.ui_state import ui_state
@@ -673,10 +763,23 @@ def _install_driver_debug_face_box(driver_view, *, device_type: str) -> None:
         driver_state = ui_state.sm["driverStateV2"]
         is_rhd = bool(getattr(dm_state, "isRHD", False))
         driver_data = getattr(driver_state, "rightDriverData", None) if is_rhd else getattr(driver_state, "leftDriverData", None)
-        if driver_data is None or not bool(getattr(dm_state, "faceDetected", False)):
+        if driver_data is None:
             return None
 
-        _draw_driver_debug_face_box(rect, driver_data=driver_data, device_type=device_type)
+        face_prob = float(getattr(driver_data, "faceProb", 0.0) or 0.0)
+        if face_prob < 0.5 and not bool(getattr(dm_state, "faceDetected", False)):
+            return None
+
+        camera_view = getattr(self, "_camera_view", self)
+        content_rect = _camera_destination_rect(camera_view, rect) if getattr(camera_view, "frame", None) is not None else rect
+        frame = getattr(camera_view, "frame", None)
+        if frame is not None:
+            _draw_driver_monitoring_input_overlay(
+                content_rect,
+                frame_width=float(getattr(frame, "width", 0.0) or 0.0),
+                frame_height=float(getattr(frame, "height", 0.0) or 0.0),
+            )
+        _draw_driver_debug_face_box(content_rect, driver_data=driver_data, device_type=device_type)
         return driver_data
 
     driver_view._draw_face_detection = types.MethodType(_draw_face_detection_override, driver_view)
@@ -699,8 +802,20 @@ def _install_driver_debug_face_box(driver_view, *, device_type: str) -> None:
         driver_view.driver_state_renderer.render = _render_driver_state_override
 
 
-def _install_unmirrored_driver_camera(driver_view) -> None:
+def _install_unmirrored_driver_camera(driver_view, *, device_type: str) -> None:
     camera_view = getattr(driver_view, "_camera_view", driver_view)
+    patches_nested_camera_view = camera_view is not driver_view
+
+    try:
+        base_camera_view = _driver_camera_view_base_class(device_type=device_type)
+    except ModuleNotFoundError:
+        base_camera_view = None
+
+    if base_camera_view is not None:
+        def _calc_frame_matrix_unzoomed(self, rect):
+            return base_camera_view._calc_frame_matrix(self, rect)
+
+        camera_view._calc_frame_matrix = types.MethodType(_calc_frame_matrix_unzoomed, camera_view)
 
     def _render_unmirrored(self, rect):
         import pyray as rl
@@ -735,11 +850,18 @@ def _install_unmirrored_driver_camera(driver_view) -> None:
         y_offset += transform[1, 2] * rect.height / 2
 
         dst_rect = rl.Rectangle(x_offset, y_offset, scale_x, scale_y)
+        self._content_rect = dst_rect
 
         if self.egl_texture is not None:
             self._render_egl(src_rect, dst_rect)
         else:
             self._render_textures(src_rect, dst_rect)
+
+        if not patches_nested_camera_view:
+            self._draw_face_detection(rect)
+            if hasattr(self, "driver_state_renderer"):
+                self.driver_state_renderer.render(rect)
+            return -1
 
     camera_view._render = types.MethodType(_render_unmirrored, camera_view)
 
@@ -802,7 +924,7 @@ def clip(
 
         DriverCameraDialog = _select_driver_camera_dialog(device_type=route_metadata.get("device_type", "unknown"))
         driver_view = DriverCameraDialog()
-        _install_unmirrored_driver_camera(driver_view)
+        _install_unmirrored_driver_camera(driver_view, device_type=route_metadata.get("device_type", "unknown"))
         _install_driver_debug_face_box(driver_view, device_type=route_metadata.get("device_type", "unknown"))
         driver_view.set_rect(rl.Rectangle(0, 0, gui_app.width, DRIVER_DEBUG_VIDEO_HEIGHT))
         font = gui_app.font(FontWeight.NORMAL)
