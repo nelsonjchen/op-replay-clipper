@@ -18,6 +18,7 @@ from renderers.big_ui_engine import (
     CameraFrameRef,
     IndexedFrameQueue,
     RenderStep,
+    UI_ALT_FOOTER_CTA_URL_DISPLAY,
     _configure_gui_app_canvas,
     _add_openpilot_to_sys_path,
     _reapply_hidden_window_flag,
@@ -31,6 +32,7 @@ from renderers.big_ui_engine import (
     render_overlays,
     setup_env,
 )
+from renderers.styled_text import StyledTextFonts, StyledTextPaint, StyledTextRun, StyledTextState, draw_styled_text_line, measure_styled_text_line, parse_inline_text
 
 
 logger = logging.getLogger("driver_debug_engine")
@@ -40,6 +42,10 @@ DRIVER_DEBUG_WIDTH = 1920
 DRIVER_DEBUG_VIDEO_HEIGHT = 1080
 DRIVER_DEBUG_FOOTER_HEIGHT = 640
 DRIVER_DEBUG_HEIGHT = DRIVER_DEBUG_VIDEO_HEIGHT + DRIVER_DEBUG_FOOTER_HEIGHT
+DRIVER_DEBUG_CTA_HEIGHT = 70
+DRIVER_DEBUG_CTA_PAD_Y = 10.0
+DRIVER_DEBUG_BOTTOM_SAFE_PAD = 76
+DRIVER_DEBUG_CTA_LINE = "Make your own `driver-debug` clips with"
 DM_INPUT_SIZE = (1440.0, 960.0)
 AR_OX_DRIVER_FRAME = (1928.0, 1208.0)
 OS_DRIVER_FRAME = (1344.0, 760.0)
@@ -458,6 +464,7 @@ class DriverDebugOverlayRenderer:
     def __init__(self, *, label_font, value_font) -> None:
         self._label_font = label_font
         self._value_font = value_font
+        self._styled_fonts = StyledTextFonts(regular=value_font, bold=value_font, italic=value_font, bold_italic=value_font)
 
     def _draw_kv_row(
         self,
@@ -468,19 +475,19 @@ class DriverDebugOverlayRenderer:
         *,
         width: float,
         value_color,
-        value_size: int = 24,
+        value_size: int = 22,
         value_x: float | None = None,
     ) -> None:
         import pyray as rl
 
-        label_size = 17
+        label_size = 15
         dim = rl.Color(255, 255, 255, 145)
         rl.draw_text_ex(self._label_font, label, rl.Vector2(x, y), label_size, 0, dim)
         value_draw_x = value_x if value_x is not None else x + (width * 0.58)
         rl.draw_text_ex(
             self._value_font,
             value,
-            rl.Vector2(value_draw_x, y - 2),
+            rl.Vector2(value_draw_x, y - 1),
             value_size,
             0,
             value_color,
@@ -528,14 +535,14 @@ class DriverDebugOverlayRenderer:
     def _draw_section_title(self, x: float, y: float, title: str) -> None:
         import pyray as rl
 
-        rl.draw_text_ex(self._label_font, title, rl.Vector2(x, y), 22, 0, rl.Color(255, 255, 255, 145))
+        rl.draw_text_ex(self._label_font, title, rl.Vector2(x, y), 21, 0, rl.Color(255, 255, 255, 145))
 
     def _draw_card(self, rect, *, accent) -> None:
         import pyray as rl
 
-        fill = rl.Color(8, 16, 24, 180)
+        fill = rl.Color(7, 17, 25, 198)
         border = rl.Color(255, 255, 255, 28)
-        glow = rl.Color(accent.r, accent.g, accent.b, 26)
+        glow = rl.Color(accent.r, accent.g, accent.b, 22)
         rl.draw_rectangle_rounded(rect, 0.05, 12, fill)
         rl.draw_rectangle_rounded(rl.Rectangle(rect.x, rect.y, rect.width, 6), 0.4, 8, glow)
         rl.draw_rectangle_rounded_lines_ex(rect, 0.05, 12, 2, border)
@@ -543,8 +550,70 @@ class DriverDebugOverlayRenderer:
     def _draw_micro_stat(self, x: float, y: float, label: str, value: str, *, color) -> None:
         import pyray as rl
 
-        rl.draw_text_ex(self._label_font, label.upper(), rl.Vector2(x, y), 14, 0, rl.Color(255, 255, 255, 120))
+        rl.draw_text_ex(self._label_font, label, rl.Vector2(x, y), 14, 0, rl.Color(255, 255, 255, 120))
         rl.draw_text_ex(self._value_font, value, rl.Vector2(x, y + 18), 28, 0, color)
+
+    def _draw_footer_cta(self, rect) -> None:
+        import pyray as rl
+
+        lead_text = DRIVER_DEBUG_CTA_LINE
+        url = UI_ALT_FOOTER_CTA_URL_DISPLAY
+        font_size = 28
+        lead_color = rl.Color(255, 255, 255, 195)
+        url_color = rl.Color(118, 210, 255, 255)
+        code_fill = rl.Color(255, 255, 255, 18)
+        code_border = rl.Color(255, 255, 255, 45)
+        panel_fill = rl.Color(255, 255, 255, 8)
+        panel_border = rl.Color(118, 210, 255, 60)
+
+        panel_rect = rl.Rectangle(
+            rect.x,
+            rect.y + DRIVER_DEBUG_CTA_PAD_Y,
+            rect.width,
+            max(0.0, rect.height - (2 * DRIVER_DEBUG_CTA_PAD_Y)),
+        )
+        cta_runs = parse_inline_text(f"{lead_text} ")
+        cta_runs.append(StyledTextRun(url, StyledTextState(), color=url_color))
+        line_metrics = measure_styled_text_line(
+            fonts=self._styled_fonts,
+            text=cta_runs,
+            font_size=font_size,
+            spacing=0,
+            code_padding_x=10.0,
+            code_padding_y=4.0,
+        )
+        target_width = panel_rect.width - 72.0
+        if line_metrics.width > target_width and line_metrics.width > 0:
+            font_size = max(18, int(font_size * (target_width / line_metrics.width)))
+            line_metrics = measure_styled_text_line(
+                fonts=self._styled_fonts,
+                text=cta_runs,
+                font_size=font_size,
+                spacing=0,
+                code_padding_x=9.0,
+                code_padding_y=4.0,
+            )
+
+        line_top_y = float(int(round(panel_rect.y + ((panel_rect.height - line_metrics.height) / 2))))
+        start_x = float(int(round(panel_rect.x + max(0.0, (panel_rect.width - line_metrics.width) / 2))))
+
+        rl.draw_rectangle_rounded(panel_rect, 0.16, 16, panel_fill)
+        rl.draw_rectangle_rounded_lines_ex(panel_rect, 0.16, 16, 2, panel_border)
+        draw_styled_text_line(
+            fonts=self._styled_fonts,
+            text=cta_runs,
+            position=rl.Vector2(start_x, line_top_y),
+            font_size=font_size,
+            spacing=0,
+            paint=StyledTextPaint(
+                color=lead_color,
+                code_text_color=rl.WHITE,
+                code_fill_color=code_fill,
+                code_border_color=code_border,
+            ),
+            code_padding_x=9.0,
+            code_padding_y=4.0,
+        )
 
     def _draw_right_aligned_text(
         self,
@@ -576,6 +645,7 @@ class DriverDebugOverlayRenderer:
         blue = rl.Color(125, 196, 255, 255)
         outer_pad_x = 34
         outer_pad_y = 28
+        bottom_safe_pad = DRIVER_DEBUG_BOTTOM_SAFE_PAD
 
         rl.draw_rectangle(int(rect.x), int(rect.y), int(rect.width), int(rect.height), rl.Color(0, 0, 0, 255))
         rl.draw_rectangle_gradient_v(int(rect.x), int(rect.y), int(rect.width), int(rect.height), panel_bg, panel_bg_bottom)
@@ -633,9 +703,9 @@ class DriverDebugOverlayRenderer:
         ]
         rl.draw_text_ex(
             self._label_font,
-            " | ".join(subtitle_parts),
+            "  •  ".join(subtitle_parts),
             rl.Vector2(title_x, title_y + 92),
-            16,
+            17,
             0,
             dim,
         )
@@ -647,10 +717,10 @@ class DriverDebugOverlayRenderer:
         ]
         if telemetry.alert_name:
             badges.append((telemetry.alert_name, orange if telemetry.is_distracted else blue))
-        badge_bottom = self._draw_badges_flow(title_x, title_y + 132, rect.x + rect.width - outer_pad_x, badges)
+        badge_bottom = self._draw_badges_flow(title_x, title_y + 126, rect.x + rect.width - outer_pad_x, badges)
 
-        section_top = max(title_y + 182, badge_bottom + 28)
-        section_height = rect.height - (section_top - rect.y) - outer_pad_y
+        section_top = max(title_y + 174, badge_bottom + 20)
+        section_height = rect.height - (section_top - rect.y) - outer_pad_y - bottom_safe_pad
         col_gap = 36
         col_width = (rect.width - (2 * outer_pad_x) - (2 * col_gap)) / 3
         col1_x = rect.x + outer_pad_x
@@ -682,22 +752,24 @@ class DriverDebugOverlayRenderer:
             0,
             dim,
         )
-        micro_y = left_y + 134
+        micro_y = left_y + 126
         self._draw_micro_stat(left_x, micro_y, "uncertain", str(telemetry.uncertain_count), color=orange if telemetry.uncertain_count else white)
         self._draw_micro_stat(left_x + 180, micro_y, "hi std", str(telemetry.hi_std_count), color=white)
-        self._draw_micro_stat(left_x, micro_y + 68, "step", _fmt_float(telemetry.step_change, 3), color=white)
-        self._draw_micro_stat(left_x + 180, micro_y + 68, "speed", _fmt_float(telemetry.v_ego, 1, " m/s"), color=white)
-        left_bottom_y = card_rects[0].y + card_rects[0].height - 64
-        left_value_x = left_x + 255
-        self._draw_kv_row(
-            left_x,
-            left_bottom_y,
-            "status",
-            f"{'ENGAGED' if telemetry.engaged else 'OFF'} / {'HANDS ON' if telemetry.steering_pressed else 'HANDS OFF'}",
-            width=card_rects[0].width - (2 * card_pad_x),
-            value_color=green if telemetry.engaged else dim,
-            value_size=20,
-            value_x=left_value_x,
+        self._draw_micro_stat(left_x, micro_y + 60, "step", _fmt_float(telemetry.step_change, 3), color=white)
+        self._draw_micro_stat(left_x + 180, micro_y + 60, "speed", _fmt_float(telemetry.v_ego, 1, " m/s"), color=white)
+        status_text = f"{'ENGAGED' if telemetry.engaged else 'OFF'} / {'HANDS ON' if telemetry.steering_pressed else 'HANDS OFF'}"
+        status_size = 17
+        status_width = rl.measure_text_ex(self._value_font, status_text, status_size, 0).x
+        rl.draw_text_ex(
+            self._value_font,
+            status_text,
+            rl.Vector2(
+                card_rects[0].x + card_rects[0].width - card_pad_x - 28 - status_width,
+                card_rects[0].y + card_rects[0].height - 82,
+            ),
+            status_size,
+            0,
+            green if telemetry.engaged else dim,
         )
 
         mid_x = card_rects[1].x + card_pad_x
@@ -712,10 +784,12 @@ class DriverDebugOverlayRenderer:
             ("model / gpu", f"{_fmt_float(telemetry.model_execution_time, 3, 's')} / {_fmt_float(telemetry.gpu_execution_time, 3, 's')}", white),
             ("distracted type", str(telemetry.distracted_type), red if telemetry.distracted_type else green),
         ]
+        middle_rows_y = mid_y + 34
+        middle_row_gap = 34
         for idx, (label, value, color) in enumerate(middle_rows):
             self._draw_kv_row(
                 mid_x,
-                mid_y + 42 + (idx * 40),
+                middle_rows_y + (idx * middle_row_gap),
                 label,
                 value,
                 width=card_rects[1].width - (2 * card_pad_x),
@@ -735,16 +809,27 @@ class DriverDebugOverlayRenderer:
             ("pitch off / count", f"{_fmt_float(telemetry.pitch_offset, 3)} / {telemetry.pitch_valid_count}", white),
             ("yaw off / count", f"{_fmt_float(telemetry.yaw_offset, 3)} / {telemetry.yaw_valid_count}", white),
         ]
+        right_rows_y = right_y + 34
+        right_row_gap = 34
         for idx, (label, value, color) in enumerate(right_rows):
             self._draw_kv_row(
                 right_x,
-                right_y + 42 + (idx * 40),
+                right_rows_y + (idx * right_row_gap),
                 label,
                 value,
                 width=card_rects[2].width - (2 * card_pad_x),
                 value_color=color,
                 value_x=right_value_x,
             )
+
+        self._draw_footer_cta(
+            rl.Rectangle(
+                rect.x + outer_pad_x,
+                rect.y + rect.height - DRIVER_DEBUG_CTA_HEIGHT,
+                rect.width - (2 * outer_pad_x),
+                DRIVER_DEBUG_CTA_HEIGHT,
+            )
+        )
 
 
 def _driver_camera_dialog_module(*, device_type: str) -> str:
