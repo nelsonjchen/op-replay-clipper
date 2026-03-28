@@ -566,6 +566,7 @@ def test_extract_footer_telemetry_uses_torque_values_for_torque_state_routes() -
             SimpleNamespace(
                 steeringAngleDeg=11.8,
                 steeringPressed=False,
+                vEgo=17.0,
             ),
         ),
         "carControl": FakeMsg(
@@ -588,8 +589,15 @@ def test_extract_footer_telemetry_uses_torque_values_for_torque_state_routes() -
             SimpleNamespace(
                 lateralControlState=SimpleNamespace(
                     which=lambda: "torqueState",
-                    torqueState=SimpleNamespace(output=0.58, saturated=True),
-                )
+                    torqueState=SimpleNamespace(
+                        output=0.58,
+                        saturated=True,
+                        desiredLateralAccel=1.42,
+                        actualLateralAccel=1.08,
+                    ),
+                ),
+                curvature=0.01,
+                desiredCurvature=0.02,
             ),
         ),
     }
@@ -601,8 +609,41 @@ def test_extract_footer_telemetry_uses_torque_values_for_torque_state_routes() -
     assert telemetry.steering_applied_deg is None
     assert telemetry.steering_target_torque == pytest.approx(0.58)
     assert telemetry.steering_applied_torque == pytest.approx(0.55)
+    assert telemetry.desired_lateral_accel == pytest.approx(1.42)
+    assert telemetry.actual_lateral_accel == pytest.approx(1.08)
     assert telemetry.steering_control_kind == "torque"
     assert telemetry.steering_saturated is True
+
+
+def test_extract_footer_telemetry_derives_lateral_accel_when_torque_log_fields_are_missing() -> None:
+    state = {
+        "carState": FakeMsg(
+            "carState",
+            0,
+            SimpleNamespace(
+                steeringAngleDeg=2.0,
+                steeringPressed=False,
+                vEgo=20.0,
+            ),
+        ),
+        "controlsState": FakeMsg(
+            "controlsState",
+            0,
+            SimpleNamespace(
+                lateralControlState=SimpleNamespace(
+                    which=lambda: "torqueState",
+                    torqueState=SimpleNamespace(output=0.12, saturated=False),
+                ),
+                curvature=0.01,
+                desiredCurvature=0.015,
+            ),
+        ),
+    }
+
+    telemetry = big_ui_engine.extract_footer_telemetry(state)
+
+    assert telemetry.actual_lateral_accel == pytest.approx(4.0)
+    assert telemetry.desired_lateral_accel == pytest.approx(6.0)
 
 
 def test_extract_footer_telemetry_falls_back_to_plan_accels_and_brake_command() -> None:

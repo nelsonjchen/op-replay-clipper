@@ -37,6 +37,7 @@ UI_ALT_BLINKER_CORNER_INSET_Y = 20
 UI_ALT_STEERING_DISPLAY_RING_PAD = 52
 TORQUE_RING_MAX_SPAN_DEG = 112.0
 TORQUE_RING_NEUTRAL_DEG = 270.0
+UI_ALT_LAT_ACCEL_MAX = 3.0
 MODEL_INPUT_OVERLAY_COLOR = (0, 255, 204, 255)
 MODEL_INPUT_OVERLAY_SHADOW = (0, 0, 0, 180)
 MODEL_INPUT_OVERLAY_LINE_WIDTH = 2.0
@@ -111,6 +112,8 @@ class FooterTelemetry:
     steering_applied_deg: float | None = None
     steering_target_torque: float | None = None
     steering_applied_torque: float | None = None
+    desired_lateral_accel: float | None = None
+    actual_lateral_accel: float | None = None
     steering_control_kind: str = "angle"
     steering_saturated: bool = False
     steering_pressed: bool = False
@@ -328,6 +331,14 @@ def torque_ring_endpoint_angle(value: float, *, max_span_deg: float = TORQUE_RIN
     return TORQUE_RING_NEUTRAL_DEG - (clamped * max_span_deg)
 
 
+def lateral_accel_ring_endpoint_angle(
+    value: float, *, max_accel: float = UI_ALT_LAT_ACCEL_MAX, max_span_deg: float = TORQUE_RING_MAX_SPAN_DEG
+) -> float:
+    normalized = 0.0 if max_accel <= 0 else (float(value) / max_accel)
+    clamped = max(-1.0, min(1.0, normalized))
+    return TORQUE_RING_NEUTRAL_DEG - (clamped * max_span_deg)
+
+
 def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
     car_state_msg = state.get("carState")
     car_control_msg = state.get("carControl")
@@ -369,6 +380,18 @@ def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
     steering_applied_deg = float(steering_applied_attr) if steering_applied_attr is not None else None
     steering_target_torque = float(steering_target_torque_attr) if uses_torque_control and steering_target_torque_attr is not None else None
     steering_applied_torque = float(steering_applied_torque_attr) if uses_torque_control and steering_applied_torque_attr is not None else None
+    desired_lateral_accel_attr = getattr(lateral_control_branch, "desiredLateralAccel", None)
+    actual_lateral_accel_attr = getattr(lateral_control_branch, "actualLateralAccel", None)
+    controls_curvature_attr = getattr(controls_state, "curvature", None)
+    desired_curvature_attr = getattr(controls_state, "desiredCurvature", None)
+    v_ego = float(getattr(car_state, "vEgo", 0.0) or 0.0)
+    if uses_torque_control:
+        if desired_lateral_accel_attr is None and desired_curvature_attr is not None:
+            desired_lateral_accel_attr = float(desired_curvature_attr) * (v_ego ** 2)
+        if actual_lateral_accel_attr is None and controls_curvature_attr is not None:
+            actual_lateral_accel_attr = float(controls_curvature_attr) * (v_ego ** 2)
+    desired_lateral_accel = float(desired_lateral_accel_attr) if uses_torque_control and desired_lateral_accel_attr is not None else None
+    actual_lateral_accel = float(actual_lateral_accel_attr) if uses_torque_control and actual_lateral_accel_attr is not None else None
     steering_saturated = bool(getattr(lateral_control_branch, "saturated", False))
     disengage_predictions = getattr(getattr(model, "meta", None), "disengagePredictions", None)
     brake_probs = list(getattr(disengage_predictions, "brakeDisengageProbs", []) or [1])
@@ -385,6 +408,8 @@ def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
         steering_applied_deg=steering_applied_deg,
         steering_target_torque=steering_target_torque,
         steering_applied_torque=steering_applied_torque,
+        desired_lateral_accel=desired_lateral_accel,
+        actual_lateral_accel=actual_lateral_accel,
         steering_control_kind="torque" if uses_torque_control else "angle",
         steering_saturated=steering_saturated,
         steering_pressed=bool(getattr(car_state, "steeringPressed", False)),
@@ -1124,8 +1149,10 @@ class SteeringFooterRenderer:
         import pyray as rl
 
         actual_color = rl.WHITE
-        target_color = rl.Color(125, 196, 255, 255)
-        applied_color = rl.Color(255, 176, 87, 255)
+        desired_lat_color = rl.Color(118, 210, 255, 255)
+        actual_lat_color = rl.Color(112, 242, 168, 255)
+        target_torque_color = rl.Color(255, 212, 102, 255)
+        applied_torque_color = rl.Color(255, 132, 72, 255)
         orbit_color = rl.Color(255, 255, 255, 36)
         base_radius = (wheel_size / 2) + 16
 
@@ -1156,35 +1183,63 @@ class SteeringFooterRenderer:
             rl.draw_circle(int(tip_x), int(tip_y), 4, color)
             return endpoint
 
+        def draw_lateral_accel_arc(value: float | None, color, *, inner_radius: float, outer_radius: float) -> float | None:
+            if value is None or abs(value) < 1e-3:
+                return None
+            endpoint = lateral_accel_ring_endpoint_angle(value)
+            start_angle = min(TORQUE_RING_NEUTRAL_DEG, endpoint)
+            end_angle = max(TORQUE_RING_NEUTRAL_DEG, endpoint)
+            rl.draw_ring(center, inner_radius, outer_radius, start_angle, end_angle, 40, color)
+            tip_radius = (inner_radius + outer_radius) / 2
+            tip_theta = math.radians(endpoint)
+            tip_x = center_x + (math.cos(tip_theta) * tip_radius)
+            tip_y = center_y + (math.sin(tip_theta) * tip_radius)
+            rl.draw_circle(int(tip_x), int(tip_y), 6, rl.Color(0, 0, 0, 220))
+            rl.draw_circle(int(tip_x), int(tip_y), 4, color)
+            return endpoint
+
         if telemetry.steering_control_kind == "torque":
             track_start = TORQUE_RING_NEUTRAL_DEG - TORQUE_RING_MAX_SPAN_DEG
             track_end = TORQUE_RING_NEUTRAL_DEG + TORQUE_RING_MAX_SPAN_DEG
-            rl.draw_ring(center, base_radius + 18, base_radius + 28, track_start, track_end, 48, rl.Color(255, 255, 255, 22))
-            rl.draw_ring(center, base_radius + 4, base_radius + 14, track_start, track_end, 48, rl.Color(255, 255, 255, 18))
+            rl.draw_ring(center, base_radius + 28, base_radius + 38, track_start, track_end, 48, rl.Color(255, 255, 255, 24))
+            rl.draw_ring(center, base_radius + 16, base_radius + 24, track_start, track_end, 48, rl.Color(255, 255, 255, 20))
+            rl.draw_ring(center, base_radius + 6, base_radius + 12, track_start, track_end, 48, rl.Color(255, 255, 255, 18))
 
+            desired_lat_endpoint = draw_lateral_accel_arc(
+                telemetry.desired_lateral_accel,
+                desired_lat_color,
+                inner_radius=base_radius + 28,
+                outer_radius=base_radius + 38,
+            )
+            actual_lat_endpoint = draw_lateral_accel_arc(
+                telemetry.actual_lateral_accel,
+                actual_lat_color,
+                inner_radius=base_radius + 16,
+                outer_radius=base_radius + 24,
+            )
             target_endpoint = draw_torque_arc(
                 telemetry.steering_target_torque,
-                target_color,
-                inner_radius=base_radius + 18,
-                outer_radius=base_radius + 28,
+                target_torque_color,
+                inner_radius=base_radius + 10,
+                outer_radius=base_radius + 14,
             )
             applied_endpoint = draw_torque_arc(
                 telemetry.steering_applied_torque,
-                applied_color,
-                inner_radius=base_radius + 4,
-                outer_radius=base_radius + 14,
+                applied_torque_color,
+                inner_radius=base_radius + 2,
+                outer_radius=base_radius + 8,
             )
 
-            if target_endpoint is not None and applied_endpoint is not None:
-                delta = abs((telemetry.steering_target_torque or 0.0) - (telemetry.steering_applied_torque or 0.0))
+            if desired_lat_endpoint is not None and actual_lat_endpoint is not None:
+                delta = abs((telemetry.desired_lateral_accel or 0.0) - (telemetry.actual_lateral_accel or 0.0))
                 mismatch_alpha = int(80 + (175 * _clip01(delta)))
                 mismatch_color = rl.Color(255, 82, 82, mismatch_alpha)
                 rl.draw_ring(
                     center,
-                    base_radius + 31,
-                    base_radius + 35,
-                    min(target_endpoint, applied_endpoint),
-                    max(target_endpoint, applied_endpoint),
+                    base_radius + 41,
+                    base_radius + 45,
+                    min(desired_lat_endpoint, actual_lat_endpoint),
+                    max(desired_lat_endpoint, actual_lat_endpoint),
                     40,
                     mismatch_color,
                 )
@@ -1197,16 +1252,16 @@ class SteeringFooterRenderer:
                 saturation_span = 8.0
                 rl.draw_ring(
                     center,
-                    base_radius + 38,
-                    base_radius + 45,
+                    base_radius + 48,
+                    base_radius + 55,
                     saturation_angle - saturation_span,
                     saturation_angle + saturation_span,
                     24,
                     rl.Color(255, 82, 82, 240),
                 )
         else:
-            draw_dot(telemetry.steering_target_deg, target_color, base_radius + 14)
-            draw_dot(telemetry.steering_applied_deg, applied_color, base_radius + 2)
+            draw_dot(telemetry.steering_target_deg, desired_lat_color, base_radius + 14)
+            draw_dot(telemetry.steering_applied_deg, applied_torque_color, base_radius + 2)
         draw_dot(telemetry.steering_angle_deg, actual_color, base_radius - 10)
 
     def _draw_blinker_arrows(self, *, center_x: float, center_y: float, wheel_size: int, telemetry: FooterTelemetry) -> None:
@@ -1259,56 +1314,70 @@ class SteeringFooterRenderer:
 
         label_color = rl.Color(255, 255, 255, 150)
         value_color = rl.WHITE
-        accent = rl.Color(125, 196, 255, 255)
-        applied = rl.Color(255, 176, 87, 255)
+        desired_lat_color = rl.Color(118, 210, 255, 255)
+        actual_lat_color = rl.Color(112, 242, 168, 255)
+        target_torque_color = rl.Color(255, 212, 102, 255)
+        applied_torque_color = rl.Color(255, 132, 72, 255)
         label_size = 18
         value_size = 28
         row_gap = 36
         value_x = rect.x + 130
 
-        rows = [("ACTUAL", f"{telemetry.steering_angle_deg:+.1f} deg", value_color)]
+        rows: list[tuple[str, str, object]] = []
         if telemetry.steering_control_kind == "torque":
             rows.extend(
                 [
                     (
-                        "TARGET",
-                        f"{telemetry.steering_target_torque:+.2f} tq"
-                        if telemetry.steering_target_torque is not None
+                        "DES LAT",
+                        f"{telemetry.desired_lateral_accel:+.2f} m/s2"
+                        if telemetry.desired_lateral_accel is not None
                         else "--",
-                        accent,
+                        desired_lat_color,
                     ),
                     (
-                        "APPLIED",
-                        f"{telemetry.steering_applied_torque:+.2f} tq"
+                        "ACT LAT",
+                        f"{telemetry.actual_lateral_accel:+.2f} m/s2"
+                        if telemetry.actual_lateral_accel is not None
+                        else "--",
+                        actual_lat_color,
+                    ),
+                    (
+                        "TGT %",
+                        f"{(telemetry.steering_target_torque * 100.0):+.0f}%"
+                        if telemetry.steering_target_torque is not None
+                        else "--",
+                        target_torque_color,
+                    ),
+                    (
+                        "APP %",
+                        f"{(telemetry.steering_applied_torque * 100.0):+.0f}%"
                         if telemetry.steering_applied_torque is not None
                         else "--",
-                        applied,
+                        applied_torque_color,
                     ),
                 ]
             )
-            torque_delta = None
-            if telemetry.steering_target_torque is not None and telemetry.steering_applied_torque is not None:
-                torque_delta = telemetry.steering_target_torque - telemetry.steering_applied_torque
-            rows.append(("DELTA", f"{torque_delta:+.2f} tq" if torque_delta is not None else "--", accent))
+            rows.append(("ACTUAL", f"{telemetry.steering_angle_deg:+.1f} deg", value_color))
         else:
             rows.extend(
                 [
                     (
                         "TARGET",
                         f"{telemetry.steering_target_deg:+.1f} deg" if telemetry.steering_target_deg is not None else "--",
-                        accent,
+                        desired_lat_color,
                     ),
                     (
                         "APPLIED",
                         f"{telemetry.steering_applied_deg:+.1f} deg" if telemetry.steering_applied_deg is not None else "--",
-                        applied,
+                        applied_torque_color,
                     ),
                 ]
             )
             delta = None
             if telemetry.steering_target_deg is not None:
                 delta = telemetry.steering_target_deg - telemetry.steering_angle_deg
-            rows.append(("DELTA", f"{delta:+.1f} deg" if delta is not None else "--", accent))
+            rows.append(("DELTA", f"{delta:+.1f} deg" if delta is not None else "--", desired_lat_color))
+            rows.append(("ACTUAL", f"{telemetry.steering_angle_deg:+.1f} deg", value_color))
         rows.append(
             (
                 "HANDS",
