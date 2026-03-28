@@ -9,6 +9,7 @@ import pytest
 
 from core import openpilot_integration, render_runtime
 from renderers import big_ui_engine, ui_renderer
+from renderers import styled_text
 
 
 class FakeMsg:
@@ -94,6 +95,28 @@ def test_build_render_steps_future_backfills_car_params_for_early_frames() -> No
     assert len(steps) == 1
     assert steps[0].state["carParams"] is car_params
     assert steps[0].state["carParams"].carParams.openpilotLongitudinalControl is True
+
+
+def test_compute_inline_text_run_positions_centers_and_snaps_segments() -> None:
+    positions = big_ui_engine.compute_inline_text_run_positions(
+        x=10.0,
+        width=400.0,
+        widths=[100.0, 50.0, 75.0],
+        gaps=[20.0, 30.0],
+        snap_to_pixels=True,
+    )
+
+    assert positions == [72.0, 192.0, 272.0]
+
+
+def test_parse_styled_text_tracks_inline_code_segments() -> None:
+    segments = styled_text.parse_inline_text("Make your own `ui-alt` clips with")
+
+    assert [(segment.text, segment.state.code) for segment in segments] == [
+        ("Make your own ", False),
+        ("ui-alt", True),
+        (" clips with", False),
+    ]
 
 
 def test_load_qcam_segment_frames_accepts_pipe_characters_in_local_paths(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -192,36 +215,36 @@ def test_reapply_hidden_window_flag_sets_hidden_state(monkeypatch) -> None:
 def test_build_layout_rects_alt_reserves_footer() -> None:
     rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="alt")
 
-    assert rects.road_rect == (0, 0, 1920, 810)
+    assert rects.road_rect == (0, 0, 1920, 578)
     assert rects.wide_rect is None
-    assert rects.footer_rect == (0, 810, 1920, 270)
+    assert rects.footer_rect == (0, 578, 1920, 502)
 
 
 def test_build_layout_rects_alt_with_wide_splits_camera_area() -> None:
     rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="alt", show_wide_panel=True)
 
-    assert rects.road_rect == (0, 0, 1920, 405)
-    assert rects.wide_rect == (0, 405, 1920, 405)
-    assert rects.footer_rect == (0, 810, 1920, 270)
+    assert rects.road_rect == (0, 0, 1920, 289)
+    assert rects.wide_rect == (0, 289, 1920, 289)
+    assert rects.footer_rect == (0, 578, 1920, 502)
 
 
 def test_compute_ui_alt_dual_canvas_height_preserves_full_height_views() -> None:
-    assert big_ui_engine.compute_ui_alt_footer_height(1080) == 270
-    assert big_ui_engine.compute_ui_alt_dual_canvas_height(1080) == 2430
+    assert big_ui_engine.compute_ui_alt_footer_height(1080) == 502
+    assert big_ui_engine.compute_ui_alt_dual_canvas_height(1080) == 2662
 
 
 def test_build_layout_rects_alt_with_wide_can_keep_footer_as_addon() -> None:
     rects = big_ui_engine.build_layout_rects(
         width=2160,
-        height=2430,
+        height=2662,
         layout_mode="alt",
         show_wide_panel=True,
-        footer_height_override=270,
+        footer_height_override=502,
     )
 
     assert rects.road_rect == (0, 0, 2160, 1080)
     assert rects.wide_rect == (0, 1080, 2160, 1080)
-    assert rects.footer_rect == (0, 2160, 2160, 270)
+    assert rects.footer_rect == (0, 2160, 2160, 502)
 
 
 def test_compute_ui_alt_panel_label_position_uses_safe_inset() -> None:
@@ -702,11 +725,11 @@ def test_extract_footer_telemetry_maps_preenabled_to_override() -> None:
 
 
 def test_build_footer_panel_layout_reserves_confidence_rail() -> None:
-    layout = big_ui_engine.build_footer_panel_layout(SimpleNamespace(x=0.0, y=810.0, width=1920.0, height=270.0))
+    layout = big_ui_engine.build_footer_panel_layout(SimpleNamespace(x=0.0, y=578.0, width=1920.0, height=502.0))
 
     assert layout.meter_w > 120.0
-    assert layout.confidence_rect == pytest.approx((1802.0, 834.0, 84.0, 222.0))
-    assert layout.accel_rect == pytest.approx((763.6, 1024.0, 1014.4, 54.0))
+    assert layout.confidence_rect == pytest.approx((1802.0, 602.0, 84.0, 410.0))
+    assert layout.accel_rect == pytest.approx((843.2, 958.0, 934.8, 54.0))
 
 
 def test_footer_confidence_target_value_uses_hidden_disengaged_target() -> None:

@@ -13,6 +13,19 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from renderers.styled_text import (
+    StyledTextFonts,
+    StyledTextPaint,
+    draw_styled_text_line,
+    measure_styled_text_line,
+    parse_inline_text,
+    StyledTextRun,
+    StyledTextState,
+)
 
 FRAMERATE = 20
 CAMERA_SERVICE = "roadEncodeIdx"
@@ -23,18 +36,24 @@ TEXT_BOX_PADDING_Y = 4
 TIME_OVERLAY_EDGE_MARGIN_BIG = 24
 TIME_OVERLAY_EDGE_MARGIN_SMALL = 14
 UI_ALT_FOOTER_MIN_HEIGHT = 220
-UI_ALT_FOOTER_MAX_HEIGHT = 320
-UI_ALT_FOOTER_HEIGHT_RATIO = 0.25
+UI_ALT_FOOTER_MAX_HEIGHT = 520
+UI_ALT_FOOTER_HEIGHT_RATIO = 0.465
 UI_ALT_PANEL_LABEL_INSET_X = 32
 UI_ALT_PANEL_LABEL_INSET_Y = 28
 UI_ALT_FOOTER_OUTER_PAD_X = 34.0
 UI_ALT_FOOTER_OUTER_PAD_Y = 24.0
+UI_ALT_FOOTER_BOTTOM_SAFE_PAD = 68.0
+UI_ALT_FOOTER_CTA_PAD_Y = 10.0
 UI_ALT_FOOTER_COLUMN_GAP = 36.0
+UI_ALT_FOOTER_MAIN_PANEL_INSET_X = 22.0
 UI_ALT_CONFIDENCE_RAIL_WIDTH = 84.0
 UI_ALT_CONFIDENCE_RAIL_GAP = 24.0
 UI_ALT_CONFIDENCE_LABEL_NUDGE_X = -4.0
 UI_ALT_BLINKER_CORNER_INSET_Y = 20
 UI_ALT_STEERING_DISPLAY_RING_PAD = 52
+UI_ALT_FOOTER_CTA_LINE = "Make your own `ui-alt` clips with"
+UI_ALT_FOOTER_CTA_URL = "https://github.com/nelsonjchen/op-replay-clipper"
+UI_ALT_FOOTER_CTA_URL_DISPLAY = "github.com/nelsonjchen/op-replay-clipper"
 TORQUE_RING_MAX_SPAN_DEG = 112.0
 TORQUE_RING_NEUTRAL_DEG = 270.0
 UI_ALT_LAT_ACCEL_MAX = 3.0
@@ -68,6 +87,29 @@ def compute_ui_alt_footer_height(height: int) -> int:
 
 def compute_ui_alt_dual_canvas_height(base_height: int) -> int:
     return (base_height * 2) + compute_ui_alt_footer_height(base_height)
+
+
+def compute_inline_text_total_width(*, widths: list[float], gaps: list[float]) -> float:
+    return sum(widths) + sum(gaps)
+
+
+def compute_inline_text_run_positions(
+    *,
+    x: float,
+    width: float,
+    widths: list[float],
+    gaps: list[float],
+    snap_to_pixels: bool = True,
+) -> list[float]:
+    total_width = compute_inline_text_total_width(widths=widths, gaps=gaps)
+    cursor = x + max(0.0, (width - total_width) / 2)
+    positions: list[float] = []
+    for idx, segment_width in enumerate(widths):
+        positions.append(float(int(round(cursor))) if snap_to_pixels else cursor)
+        cursor += segment_width
+        if idx < len(gaps):
+            cursor += gaps[idx]
+    return positions
 
 
 def _add_openpilot_to_sys_path(openpilot_dir: Path) -> None:
@@ -250,19 +292,20 @@ def compute_confidence_dot_center_y(*, rail_y: float, rail_height: float, dot_ra
 
 
 def build_footer_panel_layout(rect) -> FooterPanelLayout:
-    wheel_col_w = rect.width * 0.38
-    right_x = rect.x + wheel_col_w + UI_ALT_FOOTER_OUTER_PAD_X
-    right_w = rect.width - wheel_col_w - (2 * UI_ALT_FOOTER_OUTER_PAD_X)
+    wheel_col_w = rect.width * 0.41
+    right_x = rect.x + wheel_col_w + UI_ALT_FOOTER_OUTER_PAD_X + UI_ALT_FOOTER_MAIN_PANEL_INSET_X
+    right_w = rect.width - wheel_col_w - (2 * UI_ALT_FOOTER_OUTER_PAD_X) - UI_ALT_FOOTER_MAIN_PANEL_INSET_X
+    footer_bottom_y = rect.y + rect.height - UI_ALT_FOOTER_BOTTOM_SAFE_PAD
     confidence_rect = (
         rect.x + rect.width - UI_ALT_FOOTER_OUTER_PAD_X - UI_ALT_CONFIDENCE_RAIL_WIDTH,
         rect.y + UI_ALT_FOOTER_OUTER_PAD_Y,
         UI_ALT_CONFIDENCE_RAIL_WIDTH,
-        rect.height - (2 * UI_ALT_FOOTER_OUTER_PAD_Y),
+        footer_bottom_y - (rect.y + UI_ALT_FOOTER_OUTER_PAD_Y),
     )
     meters_right = confidence_rect[0] - UI_ALT_CONFIDENCE_RAIL_GAP
     main_panel_w = max(0.0, meters_right - right_x)
     meter_w = max(120.0, (main_panel_w - UI_ALT_FOOTER_COLUMN_GAP) / 2)
-    accel_summary_y = rect.y + UI_ALT_FOOTER_OUTER_PAD_Y + 34 + 74 + 82
+    accel_summary_y = footer_bottom_y - 54.0
     return FooterPanelLayout(
         wheel_col_w=wheel_col_w,
         right_x=right_x,
@@ -1088,6 +1131,7 @@ class SteeringFooterRenderer:
 
         self._label_font = label_font
         self._value_font = value_font
+        self._styled_fonts = StyledTextFonts(regular=value_font, bold=value_font, italic=value_font, bold_italic=value_font)
         self._wheel_texture = gui_app.texture("icons_mici/wheel.png", 220, 220)
         self._confidence_filter = FirstOrderFilter(-0.5, 0.5, 1 / gui_app.target_fps)
 
@@ -1320,8 +1364,8 @@ class SteeringFooterRenderer:
         applied_torque_color = rl.Color(255, 132, 72, 255)
         label_size = 18
         value_size = 28
-        row_gap = 36
-        value_x = rect.x + 130
+        row_gap = 42
+        value_x = rect.x + 158
 
         rows: list[tuple[str, str, object]] = []
         if telemetry.steering_control_kind == "torque":
@@ -1459,6 +1503,64 @@ class SteeringFooterRenderer:
             rl.BLACK,
         )
 
+    def _draw_footer_cta(self, rect) -> None:
+        import pyray as rl
+
+        lead_text = UI_ALT_FOOTER_CTA_LINE
+        url = UI_ALT_FOOTER_CTA_URL_DISPLAY
+        font_size = 31
+        panel_fill = rl.Color(255, 255, 255, 8)
+        panel_border = rl.Color(118, 210, 255, 60)
+        lead_color = rl.Color(255, 255, 255, 195)
+        url_color = rl.Color(118, 210, 255, 255)
+        code_fill = rl.Color(255, 255, 255, 18)
+        code_border = rl.Color(255, 255, 255, 45)
+        panel_rect = rl.Rectangle(rect.x, rect.y + UI_ALT_FOOTER_CTA_PAD_Y, rect.width, max(0.0, rect.height - (2 * UI_ALT_FOOTER_CTA_PAD_Y)))
+        cta_runs = parse_inline_text(f"{lead_text} ")
+        cta_runs.append(StyledTextRun(url, StyledTextState(), color=url_color))
+        line_metrics = measure_styled_text_line(
+            fonts=self._styled_fonts,
+            text=cta_runs,
+            font_size=font_size,
+            spacing=0,
+            code_padding_x=12.0,
+            code_padding_y=4.0,
+        )
+        total_width = line_metrics.width
+        target_width = panel_rect.width - 80.0
+        if total_width > target_width and total_width > 0:
+            font_size = max(18, int(font_size * (target_width / total_width)))
+            line_metrics = measure_styled_text_line(
+                fonts=self._styled_fonts,
+                text=cta_runs,
+                font_size=font_size,
+                spacing=0,
+                code_padding_x=10.0,
+                code_padding_y=4.0,
+            )
+        text_height = line_metrics.height
+        line_top_y = float(int(round(panel_rect.y + ((panel_rect.height - text_height) / 2))))
+        total_width = line_metrics.width
+        start_x = float(int(round(panel_rect.x + max(0.0, (panel_rect.width - total_width) / 2))))
+
+        rl.draw_rectangle_rounded(panel_rect, 0.16, 16, panel_fill)
+        rl.draw_rectangle_rounded_lines_ex(panel_rect, 0.16, 16, 2, panel_border)
+        draw_styled_text_line(
+            fonts=self._styled_fonts,
+            text=cta_runs,
+            position=rl.Vector2(start_x, line_top_y),
+            font_size=font_size,
+            spacing=0,
+            paint=StyledTextPaint(
+                color=lead_color,
+                code_text_color=rl.WHITE,
+                code_fill_color=code_fill,
+                code_border_color=code_border,
+            ),
+            code_padding_x=10.0,
+            code_padding_y=4.0,
+        )
+
     def render(self, rect, *, telemetry: FooterTelemetry) -> None:
         import pyray as rl
 
@@ -1486,10 +1588,13 @@ class SteeringFooterRenderer:
             divider,
         )
 
-        wheel_size = min(int(rect.height * 0.68), int(rect.width * 0.14))
+        steering_content_top_y = rect.y + UI_ALT_FOOTER_OUTER_PAD_Y
+        steering_content_bottom_y = rect.y + rect.height - UI_ALT_FOOTER_BOTTOM_SAFE_PAD - 12
+        steering_content_height = max(120.0, steering_content_bottom_y - steering_content_top_y)
+        wheel_size = min(int(steering_content_height * 0.82), int(rect.width * 0.14))
         wheel_size = max(124, wheel_size)
-        wheel_center_x = rect.x + layout.wheel_col_w * 0.76
-        wheel_center_y = rect.y + rect.height / 2 + 14
+        wheel_center_x = rect.x + layout.wheel_col_w * 0.72
+        wheel_center_y = steering_content_top_y + (steering_content_height / 2) + 2
         src_rect = rl.Rectangle(0, 0, self._wheel_texture.width, self._wheel_texture.height)
         dest_rect = rl.Rectangle(wheel_center_x, wheel_center_y, wheel_size, wheel_size)
         origin = (wheel_size / 2, wheel_size / 2)
@@ -1519,9 +1624,9 @@ class SteeringFooterRenderer:
         self._draw_steering_summary(
             rl.Rectangle(
                 rect.x + UI_ALT_FOOTER_OUTER_PAD_X,
-                rect.y + UI_ALT_FOOTER_OUTER_PAD_Y + 28,
-                layout.wheel_col_w - 90,
-                rect.height - (2 * UI_ALT_FOOTER_OUTER_PAD_Y),
+                rect.y + UI_ALT_FOOTER_OUTER_PAD_Y + 18,
+                layout.wheel_col_w - 108,
+                steering_content_height - 18,
             ),
             telemetry=telemetry,
         )
@@ -1529,7 +1634,7 @@ class SteeringFooterRenderer:
             int(rect.x + layout.wheel_col_w),
             int(rect.y + UI_ALT_FOOTER_OUTER_PAD_Y),
             int(rect.x + layout.wheel_col_w),
-            int(rect.y + rect.height - UI_ALT_FOOTER_OUTER_PAD_Y),
+            int(rect.y + rect.height - UI_ALT_FOOTER_BOTTOM_SAFE_PAD),
             divider,
         )
 
@@ -1579,6 +1684,14 @@ class SteeringFooterRenderer:
         self._draw_confidence_rail(
             rl.Rectangle(*layout.confidence_rect),
             telemetry=telemetry,
+        )
+        self._draw_footer_cta(
+            rl.Rectangle(
+                rect.x + UI_ALT_FOOTER_OUTER_PAD_X,
+                rect.y + rect.height - UI_ALT_FOOTER_BOTTOM_SAFE_PAD,
+                rect.width - (2 * UI_ALT_FOOTER_OUTER_PAD_X),
+                UI_ALT_FOOTER_BOTTOM_SAFE_PAD,
+            )
         )
 
 
