@@ -379,7 +379,7 @@ def lateral_accel_ring_endpoint_angle(
 ) -> float:
     normalized = 0.0 if max_accel <= 0 else (float(value) / max_accel)
     clamped = max(-1.0, min(1.0, normalized))
-    return TORQUE_RING_NEUTRAL_DEG - (clamped * max_span_deg)
+    return TORQUE_RING_NEUTRAL_DEG + (clamped * max_span_deg)
 
 
 def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:

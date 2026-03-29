@@ -474,6 +474,16 @@ def test_torque_ring_endpoint_angle_clamps_and_centers_on_neutral() -> None:
     )
 
 
+def test_lateral_accel_ring_endpoint_angle_is_mirrored_relative_to_torque() -> None:
+    assert big_ui_engine.lateral_accel_ring_endpoint_angle(0.0) == pytest.approx(big_ui_engine.TORQUE_RING_NEUTRAL_DEG)
+    assert big_ui_engine.lateral_accel_ring_endpoint_angle(1.5, max_accel=3.0) == pytest.approx(
+        big_ui_engine.TORQUE_RING_NEUTRAL_DEG + (big_ui_engine.TORQUE_RING_MAX_SPAN_DEG * 0.5)
+    )
+    assert big_ui_engine.lateral_accel_ring_endpoint_angle(-1.5, max_accel=3.0) == pytest.approx(
+        big_ui_engine.TORQUE_RING_NEUTRAL_DEG - (big_ui_engine.TORQUE_RING_MAX_SPAN_DEG * 0.5)
+    )
+
+
 def test_extract_footer_telemetry_reads_driver_and_op_inputs() -> None:
     state = {
         "carState": FakeMsg(
