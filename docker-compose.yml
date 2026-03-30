@@ -1,0 +1,32 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./shared:/app/shared
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CLIPPER_IMAGE=op-replay-clipper-render
+      - SHARED_DIR=${PWD}/shared
+
+  render:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: op-replay-clipper-render
+    profiles: ["build-only"]
+    volumes:
+      - ./shared:/src/shared
+    shm_size: "1gb"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_DRIVER_CAPABILITIES=all

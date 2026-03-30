@@ -1,4 +1,4 @@
-.PHONY: build cog-predict cog-predict-360 cog-push cog-runtime-build cog-push-beta-patched clip ui-exact-smoke local-venv test-local replicate-run video-renderer video-renderer-fuw video-renderer-360 video-renderer-360-fuw
+.PHONY: build cog-predict cog-predict-360 cog-push cog-runtime-build cog-push-beta-patched clip ui-exact-smoke local-venv test-local replicate-run video-renderer video-renderer-fuw video-renderer-360 video-renderer-360-fuw docker-build docker-web docker-render-test
 
 REPLICATE_URL ?= https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496
 REPLICATE_RENDER ?= forward
@@ -126,3 +126,17 @@ test-local:
 # make replicate-run REPLICATE_RENDER=ui REPLICATE_OUTPUT=./shared/replicate-run-ui.mp4
 replicate-run:
 	uv run python replicate_run.py --url "$(REPLICATE_URL)" --render-type "$(REPLICATE_RENDER)" --output "$(REPLICATE_OUTPUT)"
+
+# --- Local Docker rendering ---
+
+# Build both the render and web images.
+docker-build:
+	docker compose build
+
+# Start the web UI on http://localhost:7860.
+docker-web:
+	docker compose up web
+
+# Quick smoke test: run a forward demo clip inside the render container.
+docker-render-test:
+	docker compose run --rm render forward --demo

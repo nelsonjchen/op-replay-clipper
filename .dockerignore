@@ -32,3 +32,6 @@ requirements-cog.txt
 # Exclude local shared folder
 shared/
 *.mp4
+
+# Exclude web UI from render image (only needed in Dockerfile.web)
+web/

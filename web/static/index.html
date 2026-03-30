@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OP Replay Clipper</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface-2: #232733;
+    --border: #2e3345;
+    --text: #e1e4ed;
+    --text-muted: #8b90a0;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --accent-glow: rgba(59, 130, 246, 0.15);
+    --green: #22c55e;
+    --green-bg: rgba(34, 197, 94, 0.1);
+    --red: #ef4444;
+    --red-bg: rgba(239, 68, 68, 0.1);
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  .container {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 40px 20px 60px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 32px;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+  .header .badge {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--green);
+    background: var(--green-bg);
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  /* Card */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    margin-bottom: 16px;
+  }
+
+  /* Form fields */
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .field { margin-bottom: 22px; }
+  .field:last-child { margin-bottom: 0; }
+
+  input[type="text"],
+  input[type="number"],
+  input[type="password"],
+  select {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  input:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+  input::placeholder { color: var(--text-muted); opacity: 0.5; }
+
+  /* Inline row */
+  .row { display: flex; gap: 14px; }
+  .row > .field { flex: 1; }
+
+  /* Pill selector */
+  .pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pill {
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .pill:hover { border-color: var(--text-muted); color: var(--text); }
+  .pill.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  /* Submit button */
+  .btn-render {
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn-render:hover:not(:disabled) { background: var(--accent-hover); }
+  .btn-render:active:not(:disabled) { transform: scale(0.99); }
+  .btn-render:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Spinner */
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Log area */
+  .log-section {
+    display: none;
+    animation: fadeIn 0.3s ease;
+  }
+  .log-section.visible { display: block; }
+
+  .log-header {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .log-header .pulse {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1.5s ease infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .log-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    max-height: 300px;
+    overflow-y: auto;
+    font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-muted);
+  }
+  .log-box .line {
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .log-box .line::before {
+    content: "> ";
+    color: var(--border);
+  }
+
+  /* Result area */
+  .result-section {
+    display: none;
+    animation: fadeIn 0.3s ease;
+  }
+  .result-section.visible { display: block; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  .result-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 16px;
+    font-weight: 500;
+    font-size: 14px;
+  }
+  .result-banner.success {
+    background: var(--green-bg);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    color: var(--green);
+  }
+  .result-banner.error {
+    background: var(--red-bg);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: var(--red);
+  }
+
+  .result-banner .icon { font-size: 18px; }
+
+  /* Video player */
+  .video-wrapper {
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    margin-bottom: 14px;
+    background: #000;
+  }
+  .video-wrapper video {
+    width: 100%;
+    display: block;
+  }
+
+  /* Download button */
+  .btn-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .btn-download:hover {
+    background: var(--border);
+    border-color: var(--text-muted);
+  }
+
+  /* Conditional visibility */
+  .smear-field { display: none; }
+  .smear-field.visible { display: block; }
+
+  /* Scrollbar */
+  .log-box::-webkit-scrollbar { width: 6px; }
+  .log-box::-webkit-scrollbar-track { background: transparent; }
+  .log-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>OP Replay Clipper</h1>
+    <span class="badge">Local</span>
+  </div>
+
+  <div class="card">
+    <div class="field">
+      <label for="route">Route URL</label>
+      <input type="text" id="route" placeholder="https://connect.comma.ai/..." autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="field">
+      <label>Render Type</label>
+      <div class="pills" id="renderTypePills">
+        <button class="pill active" data-value="ui">UI</button>
+        <button class="pill" data-value="ui-alt">UI Alt</button>
+        <button class="pill" data-value="driver-debug">Driver Debug</button>
+        <button class="pill" data-value="forward">Forward</button>
+        <button class="pill" data-value="wide">Wide</button>
+        <button class="pill" data-value="driver">Driver</button>
+        <button class="pill" data-value="360">360</button>
+        <button class="pill" data-value="forward_upon_wide">Fwd/Wide</button>
+        <button class="pill" data-value="360_forward_upon_wide">360 Fwd/Wide</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="fileSize">File Size (MB)</label>
+        <input type="number" id="fileSize" value="9" min="1" max="200">
+      </div>
+      <div class="field">
+        <label for="fileFormat">File Format</label>
+        <select id="fileFormat">
+          <option value="auto" selected>Auto</option>
+          <option value="h264">H.264</option>
+          <option value="hevc">HEVC</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field smear-field visible" id="smearField">
+      <label for="smearSeconds">Smear Preroll (seconds)</label>
+      <input type="number" id="smearSeconds" value="3" min="3" max="40">
+    </div>
+
+    <div class="field">
+      <label for="jwtToken">JWT Token (optional)</label>
+      <input type="password" id="jwtToken" placeholder="For private routes" autocomplete="off">
+    </div>
+  </div>
+
+  <button class="btn-render" id="btnRender" onclick="startRender()">
+    <span class="spinner" id="spinner"></span>
+    <span id="btnText">Start Render</span>
+  </button>
+
+  <div class="log-section" id="logSection">
+    <div class="card" style="margin-top: 16px;">
+      <div class="log-header">
+        <div class="pulse" id="logPulse"></div>
+        <span>Progress</span>
+      </div>
+      <div class="log-box" id="logBox"></div>
+    </div>
+  </div>
+
+  <div class="result-section" id="resultSection">
+    <div class="card" style="margin-top: 0;">
+      <div class="result-banner success" id="successBanner" style="display:none;">
+        <span class="icon">&#10003;</span>
+        <span>Render Complete</span>
+      </div>
+      <div class="result-banner error" id="errorBanner" style="display:none;">
+        <span class="icon">&#10007;</span>
+        <span id="errorText">Render Failed</span>
+      </div>
+      <div id="videoWrapper" class="video-wrapper" style="display:none;">
+        <video id="videoPlayer" controls></video>
+      </div>
+      <a class="btn-download" id="downloadLink" href="#" style="display:none;">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+        </svg>
+        Download MP4
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SMEAR_TYPES = new Set(["ui", "ui-alt", "driver-debug"]);
+  let currentRenderType = "ui";
+  let currentJobId = null;
+  let eventSource = null;
+
+  // Pill selection
+  document.getElementById("renderTypePills").addEventListener("click", (e) => {
+    const pill = e.target.closest(".pill");
+    if (!pill) return;
+    document.querySelectorAll("#renderTypePills .pill").forEach(p => p.classList.remove("active"));
+    pill.classList.add("active");
+    currentRenderType = pill.dataset.value;
+    // Toggle smear visibility
+    const smearField = document.getElementById("smearField");
+    if (SMEAR_TYPES.has(currentRenderType)) {
+      smearField.classList.add("visible");
+    } else {
+      smearField.classList.remove("visible");
+    }
+  });
+
+  function setRendering(active) {
+    const btn = document.getElementById("btnRender");
+    const spinner = document.getElementById("spinner");
+    const btnText = document.getElementById("btnText");
+    btn.disabled = active;
+    spinner.style.display = active ? "block" : "none";
+    btnText.textContent = active ? "Rendering..." : "Start Render";
+  }
+
+  function resetUI() {
+    document.getElementById("logSection").classList.remove("visible");
+    document.getElementById("resultSection").classList.remove("visible");
+    document.getElementById("successBanner").style.display = "none";
+    document.getElementById("errorBanner").style.display = "none";
+    document.getElementById("videoWrapper").style.display = "none";
+    document.getElementById("downloadLink").style.display = "none";
+    document.getElementById("logBox").innerHTML = "";
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+  }
+
+  function appendLog(text) {
+    const box = document.getElementById("logBox");
+    const line = document.createElement("div");
+    line.className = "line";
+    line.textContent = text;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function startRender() {
+    const route = document.getElementById("route").value.trim();
+    if (!route) {
+      document.getElementById("route").focus();
+      return;
+    }
+
+    resetUI();
+    setRendering(true);
+    document.getElementById("logSection").classList.add("visible");
+
+    const body = {
+      route: route,
+      render_type: currentRenderType,
+      file_size_mb: parseInt(document.getElementById("fileSize").value) || 9,
+      file_format: document.getElementById("fileFormat").value,
+      smear_seconds: parseInt(document.getElementById("smearSeconds").value) || 3,
+      jwt_token: document.getElementById("jwtToken").value.trim(),
+    };
+
+    try {
+      const res = await fetch("/api/clip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Failed to start render");
+      }
+      const data = await res.json();
+      currentJobId = data.job_id;
+      appendLog("Job started: " + currentJobId);
+      streamLogs(currentJobId);
+    } catch (err) {
+      appendLog("ERROR: " + err.message);
+      showError(err.message);
+      setRendering(false);
+    }
+  }
+
+  function streamLogs(jobId) {
+    eventSource = new EventSource("/api/clip/" + jobId + "/status");
+
+    eventSource.onmessage = (e) => {
+      appendLog(e.data);
+    };
+
+    eventSource.addEventListener("state", (e) => {
+      eventSource.close();
+      eventSource = null;
+      document.getElementById("logPulse").style.display = "none";
+
+      if (e.data === "done") {
+        showSuccess(jobId);
+      } else {
+        showError("Render failed");
+      }
+      setRendering(false);
+    });
+
+    eventSource.onerror = () => {
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      // Poll for final state in case SSE dropped
+      setTimeout(() => pollFinalState(jobId), 1000);
+    };
+  }
+
+  async function pollFinalState(jobId) {
+    try {
+      const res = await fetch("/api/clip/" + jobId);
+      const data = await res.json();
+      if (data.state === "done") {
+        showSuccess(jobId);
+      } else if (data.state === "failed") {
+        showError(data.error || "Render failed");
+      } else {
+        // Still running, keep polling
+        setTimeout(() => pollFinalState(jobId), 2000);
+        return;
+      }
+    } catch {
+      showError("Lost connection to server");
+    }
+    setRendering(false);
+  }
+
+  function showSuccess(jobId) {
+    const section = document.getElementById("resultSection");
+    section.classList.add("visible");
+    document.getElementById("successBanner").style.display = "flex";
+
+    const videoUrl = "/api/clip/" + jobId + "/download";
+    const video = document.getElementById("videoPlayer");
+    video.src = videoUrl;
+    document.getElementById("videoWrapper").style.display = "block";
+
+    const dl = document.getElementById("downloadLink");
+    dl.href = videoUrl;
+    dl.download = "clip-" + jobId + ".mp4";
+    dl.style.display = "inline-flex";
+  }
+
+  function showError(message) {
+    const section = document.getElementById("resultSection");
+    section.classList.add("visible");
+    document.getElementById("errorBanner").style.display = "flex";
+    document.getElementById("errorText").textContent = message || "Render Failed";
+  }
+</script>
+
+</body>
+</html>
