@@ -1,0 +1,2 @@
+# Render container does not need the web UI files.
+web/
