@@ -1,4 +1,4 @@
-.PHONY: build cog-predict cog-predict-360 cog-push cog-runtime-build cog-push-beta-patched clip ui-exact-smoke local-venv test-local replicate-run video-renderer video-renderer-fuw video-renderer-360 video-renderer-360-fuw docker-build docker-web docker-render-test
+.PHONY: build cog-predict cog-predict-360 cog-push cog-runtime-build cog-push-beta-patched clip ui-exact-smoke local-venv test-local replicate-run video-renderer video-renderer-fuw video-renderer-360 video-renderer-360-fuw docker-build docker-web docker-render-test docker-logs docker-clean docker-check
 
 REPLICATE_URL ?= https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496
 REPLICATE_RENDER ?= forward
@@ -140,3 +140,21 @@ docker-web:
 # Quick smoke test: run a forward demo clip inside the render container.
 docker-render-test:
 	docker compose run --rm render forward --demo
+
+# Tail logs from the web container.
+docker-logs:
+	docker compose logs -f --tail=100 web
+
+# Remove built images and stopped containers for this project.
+docker-clean:
+	docker compose down --rmi local --volumes --remove-orphans
+
+# One-shot prerequisite check: Docker, GPU, render image.
+CLIPPER_IMAGE ?= op-replay-clipper-render
+docker-check:
+	@echo "--- Docker ---" && docker --version
+	@echo "--- Docker Compose ---" && docker compose version
+	@echo "--- NVIDIA Container Toolkit ---" && (nvidia-ctk --version 2>/dev/null || echo "NOT FOUND - install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html")
+	@echo "--- GPU ---" && (nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo "No NVIDIA GPU detected")
+	@echo "--- Docker GPU Access ---" && (docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi 2>/dev/null | head -4 || echo "FAILED - check NVIDIA Container Toolkit")
+	@echo "--- Render Image ---" && (docker image inspect $(CLIPPER_IMAGE) > /dev/null 2>&1 && echo "OK: $(CLIPPER_IMAGE)" || echo "NOT FOUND - run: make docker-build")

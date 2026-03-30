@@ -249,6 +249,64 @@ Notes:
 * `./cog/render_artifacts.sh` exports `requirements-cog.txt` from `uv.lock` for Cog, so the local and Cog dependency sets stay aligned
 * `cog.yaml` and `requirements-cog.txt` are generated artifacts and are intentionally not committed
 
+### Local Docker rendering (Web UI)
+
+Run the clipper entirely on your own machine via a local web UI at `http://localhost:7860`. No Replicate account needed.
+
+#### Prerequisites
+
+- Linux with an **NVIDIA GPU** and drivers installed (`nvidia-smi` should work)
+- **Docker Engine** with Compose V2 (`docker compose`): https://docs.docker.com/engine/install/
+- **NVIDIA Container Toolkit**: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+- Your user must be in the `docker` group, or run commands with `sudo`:
+  ```bash
+  sudo usermod -aG docker $USER   # then log out and back in
+  ```
+
+#### Quick start
+
+```bash
+# One-command setup: checks prerequisites, builds Docker images, creates launcher
+./install.sh
+
+# Start the web UI (auto-opens browser)
+./start.sh
+```
+
+Or step by step:
+
+```bash
+make docker-build          # Build render + web images (~15-30 min first time)
+make docker-web            # Start web UI at http://localhost:7860
+```
+
+#### Verifying GPU access
+
+```bash
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+```
+
+#### Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `permission denied` on `/var/run/docker.sock` | Add yourself to the `docker` group (see above) or use `sudo` |
+| `could not select device driver "nvidia"` | Install NVIDIA Container Toolkit and restart Docker |
+| Build fails downloading openpilot | Check internet connection; the render image clones openpilot during build |
+| "Render image not found" in web UI | Run `./install.sh` or `make docker-build` first |
+| Render exits with error | Run `make docker-logs` to see the full container output |
+
+#### Makefile targets
+
+| Target | Description |
+|--------|-------------|
+| `make docker-build` | Build render and web images |
+| `make docker-web` | Start web UI at localhost:7860 |
+| `make docker-render-test` | Quick smoke test (forward --demo) |
+| `make docker-logs` | Tail recent web container logs |
+| `make docker-clean` | Remove built images and stopped containers |
+| `make docker-check` | Print Docker/GPU/image status |
+
 ### Hosted Replicate runs with uv
 
 You can also run the hosted Replicate model from this repo with the Python client and a local `.env`.

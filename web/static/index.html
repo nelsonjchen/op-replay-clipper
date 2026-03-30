@@ -19,6 +19,8 @@
     --green-bg: rgba(34, 197, 94, 0.1);
     --red: #ef4444;
     --red-bg: rgba(239, 68, 68, 0.1);
+    --yellow: #eab308;
+    --yellow-bg: rgba(234, 179, 8, 0.1);
     --radius: 10px;
     --radius-sm: 6px;
   }
@@ -63,6 +65,24 @@
     border: 1px solid rgba(34, 197, 94, 0.2);
   }
 
+  /* Warning banner */
+  .warning-banner {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    border-radius: var(--radius-sm);
+    background: var(--yellow-bg);
+    border: 1px solid rgba(234, 179, 8, 0.25);
+    color: var(--yellow);
+    font-size: 13px;
+    font-weight: 500;
+    animation: fadeIn 0.3s ease;
+  }
+  .warning-banner.visible { display: flex; }
+  .warning-banner .icon { font-size: 16px; flex-shrink: 0; }
+
   /* Card */
   .card {
     background: var(--surface);
@@ -85,6 +105,13 @@
 
   .field { margin-bottom: 22px; }
   .field:last-child { margin-bottom: 0; }
+
+  .hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    opacity: 0.7;
+  }
 
   input[type="text"],
   input[type="number"],
@@ -135,6 +162,15 @@
     background: var(--accent);
     border-color: var(--accent);
     color: #fff;
+  }
+
+  /* Render type description */
+  .render-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+    min-height: 18px;
+    transition: opacity 0.15s;
   }
 
   /* Submit button */
@@ -304,50 +340,61 @@
     <span class="badge">Local</span>
   </div>
 
+  <div class="warning-banner" id="warningBanner">
+    <span class="icon">&#9888;</span>
+    <span id="warningText"></span>
+  </div>
+
   <div class="card">
     <div class="field">
       <label for="route">Route URL</label>
-      <input type="text" id="route" placeholder="https://connect.comma.ai/..." autocomplete="off" spellcheck="false">
+      <input type="text" id="route" placeholder="https://connect.comma.ai/dongle/route/start/end" autocomplete="off" spellcheck="false">
+      <div class="hint">Paste a connect.comma.ai URL with start/end times, or a pipe-delimited route ID.</div>
     </div>
 
     <div class="field">
       <label>Render Type</label>
       <div class="pills" id="renderTypePills">
-        <button class="pill active" data-value="ui">UI</button>
-        <button class="pill" data-value="ui-alt">UI Alt</button>
-        <button class="pill" data-value="driver-debug">Driver Debug</button>
-        <button class="pill" data-value="forward">Forward</button>
-        <button class="pill" data-value="wide">Wide</button>
-        <button class="pill" data-value="driver">Driver</button>
-        <button class="pill" data-value="360">360</button>
-        <button class="pill" data-value="forward_upon_wide">Fwd/Wide</button>
-        <button class="pill" data-value="360_forward_upon_wide">360 Fwd/Wide</button>
+        <button class="pill active" data-value="ui" title="openpilot UI replay with path, lanes, and metadata overlay">UI</button>
+        <button class="pill" data-value="ui-alt" title="UI variant with steering wheel and confidence rail in footer">UI Alt</button>
+        <button class="pill" data-value="driver-debug" title="Driver camera with DM state, awareness, and pose telemetry">Driver Debug</button>
+        <button class="pill" data-value="forward" title="Forward camera only, no UI overlay. Fast render.">Forward</button>
+        <button class="pill" data-value="wide" title="Wide camera only, no UI overlay. Fast render.">Wide</button>
+        <button class="pill" data-value="driver" title="Driver camera only, no UI overlay. Fast render.">Driver</button>
+        <button class="pill" data-value="360" title="360 video from wide + driver cameras. View in VLC or YouTube.">360</button>
+        <button class="pill" data-value="forward_upon_wide" title="Forward projected onto wide using camera calibration">Fwd/Wide</button>
+        <button class="pill" data-value="360_forward_upon_wide" title="8K 360 with forward projected onto wide. Large output.">360 Fwd/Wide</button>
       </div>
+      <div class="render-desc" id="renderTypeDesc">openpilot UI replay with path, lanes, and metadata overlay. Uses smear preroll.</div>
     </div>
 
     <div class="row">
       <div class="field">
         <label for="fileSize">File Size (MB)</label>
         <input type="number" id="fileSize" value="9" min="1" max="200">
+        <div class="hint">Target output size. Actual may vary.</div>
       </div>
       <div class="field">
         <label for="fileFormat">File Format</label>
         <select id="fileFormat">
           <option value="auto" selected>Auto</option>
-          <option value="h264">H.264</option>
-          <option value="hevc">HEVC</option>
+          <option value="h264">H.264 (compatible)</option>
+          <option value="hevc">HEVC (smaller)</option>
         </select>
+        <div class="hint">Auto uses HEVC for 360, H.264 otherwise.</div>
       </div>
     </div>
 
     <div class="field smear-field visible" id="smearField">
       <label for="smearSeconds">Smear Preroll (seconds)</label>
       <input type="number" id="smearSeconds" value="3" min="3" max="40">
+      <div class="hint">Hidden preroll to initialize UI state before the clip starts.</div>
     </div>
 
     <div class="field">
       <label for="jwtToken">JWT Token (optional)</label>
-      <input type="password" id="jwtToken" placeholder="For private routes" autocomplete="off">
+      <input type="password" id="jwtToken" placeholder="For private routes without Public Access" autocomplete="off">
+      <div class="hint">Get one from jwt.comma.ai. Not needed if Public Access is enabled.</div>
     </div>
   </div>
 
@@ -391,9 +438,40 @@
 
 <script>
   const SMEAR_TYPES = new Set(["ui", "ui-alt", "driver-debug"]);
+  const RENDER_DESCS = {
+    "ui": "openpilot UI replay with path, lanes, and metadata overlay. Uses smear preroll.",
+    "ui-alt": "UI variant with steering wheel and confidence rail in footer. Uses smear preroll.",
+    "driver-debug": "Driver camera with DM state, awareness, distraction, and pose telemetry. Uses smear preroll.",
+    "forward": "Forward camera only, no UI. Fast ffmpeg transcode.",
+    "wide": "Wide camera only, no UI. Fast ffmpeg transcode.",
+    "driver": "Driver camera only, no UI. Fast ffmpeg transcode.",
+    "360": "360 video stitched from wide + driver cameras. View in VLC or YouTube.",
+    "forward_upon_wide": "Forward projected onto wide using camera calibration.",
+    "360_forward_upon_wide": "8K 360 with forward projected onto wide. Large output for reframing.",
+  };
   let currentRenderType = "ui";
   let currentJobId = null;
   let eventSource = null;
+
+  // Health check on page load
+  async function checkHealth() {
+    try {
+      const res = await fetch("/api/health");
+      const h = await res.json();
+      if (!h.docker) {
+        showWarning("Docker CLI not available. The web server cannot spawn render containers.");
+      } else if (!h.image) {
+        showWarning("Render image '" + h.image_name + "' not found. Run: ./install.sh or make docker-build");
+      }
+    } catch { /* server is up, that's enough */ }
+  }
+  window.addEventListener("DOMContentLoaded", checkHealth);
+
+  function showWarning(message) {
+    const banner = document.getElementById("warningBanner");
+    document.getElementById("warningText").textContent = message;
+    banner.classList.add("visible");
+  }
 
   // Pill selection
   document.getElementById("renderTypePills").addEventListener("click", (e) => {
@@ -402,6 +480,8 @@
     document.querySelectorAll("#renderTypePills .pill").forEach(p => p.classList.remove("active"));
     pill.classList.add("active");
     currentRenderType = pill.dataset.value;
+    // Update description
+    document.getElementById("renderTypeDesc").textContent = RENDER_DESCS[currentRenderType] || "";
     // Toggle smear visibility
     const smearField = document.getElementById("smearField");
     if (SMEAR_TYPES.has(currentRenderType)) {
@@ -445,7 +525,15 @@
 
   async function startRender() {
     const route = document.getElementById("route").value.trim();
+
+    // Client-side validation
     if (!route) {
+      showError("Please enter a route URL.");
+      document.getElementById("route").focus();
+      return;
+    }
+    if (!route.startsWith("https://connect.comma.ai/") && !route.includes("|")) {
+      showError("Route should be a connect.comma.ai URL or a pipe-delimited route ID (e.g. dongle|route).");
       document.getElementById("route").focus();
       return;
     }
@@ -499,7 +587,7 @@
       if (e.data === "done") {
         showSuccess(jobId);
       } else {
-        showError("Render failed");
+        showError("Render failed. Check the logs above for details.");
       }
       setRendering(false);
     });
@@ -509,7 +597,6 @@
         eventSource.close();
         eventSource = null;
       }
-      // Poll for final state in case SSE dropped
       setTimeout(() => pollFinalState(jobId), 1000);
     };
   }
@@ -523,7 +610,6 @@
       } else if (data.state === "failed") {
         showError(data.error || "Render failed");
       } else {
-        // Still running, keep polling
         setTimeout(() => pollFinalState(jobId), 2000);
         return;
       }
@@ -553,7 +639,14 @@
     const section = document.getElementById("resultSection");
     section.classList.add("visible");
     document.getElementById("errorBanner").style.display = "flex";
-    document.getElementById("errorText").textContent = message || "Render Failed";
+
+    let hint = "";
+    if (message.includes("not found") && message.includes("image")) {
+      hint = " Run './install.sh' or 'make docker-build' to build it.";
+    } else if (message.includes("exited with code")) {
+      hint = " Check the logs above for details.";
+    }
+    document.getElementById("errorText").textContent = (message || "Render Failed") + hint;
   }
 </script>
 

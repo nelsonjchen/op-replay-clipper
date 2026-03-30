@@ -1,3 +1,8 @@
+# NVIDIA GPU required for rendering. Prerequisites:
+#   1. NVIDIA drivers installed (nvidia-smi should work)
+#   2. NVIDIA Container Toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+#   3. Test GPU access: docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+
 services:
   web:
     build:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
@@ -21,6 +22,12 @@ CLIPPER_IMAGE = os.environ.get("CLIPPER_IMAGE", "op-replay-clipper-render")
 SHARED_HOST_DIR = os.environ.get("SHARED_HOST_DIR", os.environ.get("SHARED_DIR", "/app/shared"))
 # Local path inside the web container where the same volume is mounted.
 SHARED_LOCAL_DIR = Path(os.environ.get("SHARED_LOCAL_DIR", "/app/shared"))
+
+VALID_RENDER_TYPES = {
+    "ui", "ui-alt", "driver-debug", "forward", "wide",
+    "driver", "360", "forward_upon_wide", "360_forward_upon_wide",
+}
+SMEAR_RENDER_TYPES = {"ui", "ui-alt", "driver-debug"}
 
 
 # ---------------------------------------------------------------------------
@@ -50,9 +57,6 @@ JOBS: dict[str, Job] = {}
 # Request / Response models
 # ---------------------------------------------------------------------------
 
-SMEAR_RENDER_TYPES = {"ui", "ui-alt", "driver-debug"}
-
-
 class ClipRequestBody(BaseModel):
     route: str
     render_type: str = "ui"
@@ -67,16 +71,22 @@ class JobResponse(BaseModel):
     state: str
 
 
-class JobStatusResponse(BaseModel):
-    job_id: str
-    state: str
-    error: str = ""
-    has_output: bool = False
-
-
 # ---------------------------------------------------------------------------
-# Docker container management
+# Docker helpers
 # ---------------------------------------------------------------------------
+
+async def _docker_image_exists(image: str) -> bool:
+    """Return True if the render Docker image is available locally."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "image", "inspect", image,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        return (await proc.wait()) == 0
+    except FileNotFoundError:
+        return False
+
 
 def _build_docker_cmd(job: Job, req: ClipRequestBody) -> list[str]:
     """Build the ``docker run`` command to execute clip.py inside the render container."""
@@ -111,31 +121,40 @@ def _build_docker_cmd(job: Job, req: ClipRequestBody) -> list[str]:
 
 async def _run_container(job: Job, req: ClipRequestBody) -> None:
     """Run the render container and stream its output into the job log."""
-    cmd = _build_docker_cmd(job, req)
-    job.state = JobState.running
-    job.logs.append(f"$ {' '.join(cmd[:6])} ... {cmd[-1]}")
+    try:
+        cmd = _build_docker_cmd(job, req)
+        job.state = JobState.running
+        job.logs.append(f"$ {' '.join(cmd[:6])} ... {cmd[-1]}")
 
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-    )
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
 
-    assert proc.stdout is not None
-    async for raw_line in proc.stdout:
-        line = raw_line.decode("utf-8", errors="replace").rstrip("\n")
-        job.logs.append(line)
+        assert proc.stdout is not None
+        async for raw_line in proc.stdout:
+            line = raw_line.decode("utf-8", errors="replace").rstrip("\n")
+            job.logs.append(line)
 
-    exit_code = await proc.wait()
+        exit_code = await proc.wait()
 
-    output_path = SHARED_LOCAL_DIR / job.job_id / "output.mp4"
-    if exit_code == 0 and output_path.exists():
-        job.state = JobState.done
-        job.output_path = str(output_path)
-        job.logs.append("Render complete.")
-    else:
+        output_path = SHARED_LOCAL_DIR / job.job_id / "output.mp4"
+        if exit_code == 0 and output_path.exists():
+            job.state = JobState.done
+            job.output_path = str(output_path)
+            job.logs.append("Render complete.")
+        else:
+            job.state = JobState.failed
+            job.error = f"Container exited with code {exit_code}"
+            job.logs.append(f"ERROR: {job.error}")
+    except FileNotFoundError:
         job.state = JobState.failed
-        job.error = f"Container exited with code {exit_code}"
+        job.error = "Docker CLI not found. Is Docker installed?"
+        job.logs.append(f"ERROR: {job.error}")
+    except Exception as exc:
+        job.state = JobState.failed
+        job.error = str(exc)
         job.logs.append(f"ERROR: {job.error}")
 
 
@@ -149,8 +168,45 @@ async def index() -> HTMLResponse:
     return HTMLResponse(content=html_path.read_text())
 
 
+@app.get("/api/health")
+async def health() -> dict[str, Any]:
+    docker_ok = shutil.which("docker") is not None
+    image_ok = await _docker_image_exists(CLIPPER_IMAGE) if docker_ok else False
+    return {
+        "docker": docker_ok,
+        "image": image_ok,
+        "image_name": CLIPPER_IMAGE,
+    }
+
+
 @app.post("/api/clip", response_model=JobResponse)
 async def create_clip(body: ClipRequestBody) -> dict[str, Any]:
+    # Validate inputs
+    if body.render_type not in VALID_RENDER_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown render type '{body.render_type}'. Valid: {', '.join(sorted(VALID_RENDER_TYPES))}",
+        )
+
+    route = body.route.strip()
+    if not route:
+        raise HTTPException(status_code=422, detail="Route URL is required.")
+
+    if not (route.startswith("https://connect.comma.ai/") or "|" in route):
+        raise HTTPException(
+            status_code=422,
+            detail="Route must be a connect.comma.ai URL or a pipe-delimited route ID (e.g. dongle|route).",
+        )
+
+    if not 1 <= body.file_size_mb <= 200:
+        raise HTTPException(status_code=422, detail="File size must be between 1 and 200 MB.")
+
+    if not await _docker_image_exists(CLIPPER_IMAGE):
+        raise HTTPException(
+            status_code=503,
+            detail=f"Render image '{CLIPPER_IMAGE}' not found. Run './install.sh' or 'make docker-build' first.",
+        )
+
     job_id = uuid.uuid4().hex[:12]
     job = Job(job_id=job_id)
     JOBS[job_id] = job
@@ -183,13 +239,11 @@ async def stream_status(job_id: str) -> StreamingResponse:
     async def event_stream():
         sent = 0
         while True:
-            # Send any new log lines
             while sent < len(job.logs):
                 line = job.logs[sent]
                 yield f"data: {line}\n\n"
                 sent += 1
 
-            # If job is terminal, send final state event and stop
             if job.state in (JobState.done, JobState.failed):
                 yield f"event: state\ndata: {job.state.value}\n\n"
                 break
