@@ -15,7 +15,7 @@ RUN apt-get update -y && \
 # Copy and run the shared bootstrap script (installs system packages, clones
 # openpilot, builds native deps, installs patched pyray, generates fonts).
 COPY common/bootstrap_image_env.sh /tmp/bootstrap_image_env.sh
-RUN bash /tmp/bootstrap_image_env.sh && rm /tmp/bootstrap_image_env.sh
+RUN bash /tmp/bootstrap_image_env.sh
 
 # Install uv and project Python dependencies
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
