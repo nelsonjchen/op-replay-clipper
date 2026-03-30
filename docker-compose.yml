@@ -10,7 +10,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - CLIPPER_IMAGE=op-replay-clipper-render
-      - SHARED_DIR=${PWD}/shared
+      - SHARED_HOST_DIR=${PWD}/shared
+      - SHARED_LOCAL_DIR=/app/shared
 
   render:
     build:

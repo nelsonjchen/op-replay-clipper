@@ -17,7 +17,10 @@ from pydantic import BaseModel
 app = FastAPI(title="OP Replay Clipper")
 
 CLIPPER_IMAGE = os.environ.get("CLIPPER_IMAGE", "op-replay-clipper-render")
-SHARED_DIR = Path(os.environ.get("SHARED_DIR", "/app/shared"))
+# Host path used for `docker run -v` mounts (must be a real host filesystem path).
+SHARED_HOST_DIR = os.environ.get("SHARED_HOST_DIR", os.environ.get("SHARED_DIR", "/app/shared"))
+# Local path inside the web container where the same volume is mounted.
+SHARED_LOCAL_DIR = Path(os.environ.get("SHARED_LOCAL_DIR", "/app/shared"))
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +80,7 @@ class JobStatusResponse(BaseModel):
 
 def _build_docker_cmd(job: Job, req: ClipRequestBody) -> list[str]:
     """Build the ``docker run`` command to execute clip.py inside the render container."""
-    job_dir = SHARED_DIR / job.job_id
+    job_dir = SHARED_LOCAL_DIR / job.job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
     output_inside = f"/src/shared/{job.job_id}/output.mp4"
@@ -86,7 +89,7 @@ def _build_docker_cmd(job: Job, req: ClipRequestBody) -> list[str]:
         "docker", "run", "--rm",
         "--shm-size=1g",
         "--gpus", "all",
-        "-v", f"{SHARED_DIR}:/src/shared",
+        "-v", f"{SHARED_HOST_DIR}:/src/shared",
         "-e", "NVIDIA_DRIVER_CAPABILITIES=all",
         CLIPPER_IMAGE,
         # clip.py args (entrypoint already includes --skip-openpilot-update --skip-openpilot-bootstrap)
@@ -125,7 +128,7 @@ async def _run_container(job: Job, req: ClipRequestBody) -> None:
 
     exit_code = await proc.wait()
 
-    output_path = SHARED_DIR / job.job_id / "output.mp4"
+    output_path = SHARED_LOCAL_DIR / job.job_id / "output.mp4"
     if exit_code == 0 and output_path.exists():
         job.state = JobState.done
         job.output_path = str(output_path)
