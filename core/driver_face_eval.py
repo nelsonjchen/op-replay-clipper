@@ -632,6 +632,7 @@ def materialize_eval_sample(
         driver_debug_renderer.render_driver_debug_clip(
             driver_debug_renderer.DriverDebugRenderOptions(
                 route=parsed.route,
+                route_or_url=seed.route_or_url,
                 start_seconds=parsed.start_seconds,
                 length_seconds=parsed.length_seconds,
                 smear_seconds=0,
@@ -641,6 +642,7 @@ def materialize_eval_sample(
                 data_dir=str(data_dir),
                 openpilot_dir=str(openpilot_path),
                 headless=True,
+                acceleration=acceleration,
             )
         )
 

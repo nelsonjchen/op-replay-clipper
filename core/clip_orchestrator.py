@@ -5,6 +5,18 @@ from pathlib import Path
 from typing import Literal
 
 from core import route_downloader, route_inputs
+from core.driver_face_swap import (
+    DriverFaceAnonymizationMode,
+    DriverFaceSelectionMode,
+    DriverFaceSwapOptions,
+    DriverFaceSwapPreset,
+    default_driver_face_donor_bank_dir,
+    default_driver_face_source_image,
+    default_facefusion_model,
+    default_facefusion_root,
+    has_driver_face_anonymization,
+    render_anonymized_driver_backing_video,
+)
 from core.forward_upon_wide import ForwardUponWideHInput, is_auto_forward_upon_wide
 from core.openpilot_config import default_image_openpilot_root
 from renderers import driver_debug_renderer, ui_renderer, video_renderer
@@ -61,6 +73,13 @@ class ClipRequest:
     qcam: bool = False
     headless: bool = True
     skip_download: bool = False
+    driver_face_anonymization: DriverFaceAnonymizationMode = "none"
+    driver_face_source_image: str = field(default_factory=default_driver_face_source_image)
+    driver_face_preset: DriverFaceSwapPreset = "fast"
+    facefusion_root: str = field(default_factory=default_facefusion_root)
+    facefusion_model: str = field(default_factory=default_facefusion_model)
+    driver_face_selection: DriverFaceSelectionMode = "manual"
+    driver_face_donor_bank_dir: str = field(default_factory=default_driver_face_donor_bank_dir)
 
 
 @dataclass(frozen=True)
@@ -82,6 +101,7 @@ class ClipPlan:
     openpilot_dir: str
     headless: bool
     qcam: bool
+    driver_face_swap: DriverFaceSwapOptions
 
 
 @dataclass(frozen=True)
@@ -125,10 +145,13 @@ def select_download_file_types(
     *,
     qcam: bool,
     forward_upon_wide_h: ForwardUponWideHInput = 2.2,
+    driver_face_anonymization: DriverFaceAnonymizationMode = "none",
 ) -> tuple[str, ...]:
     if is_ui_render_type(render_type) and qcam:
         return ("qcameras", "logs")
     file_types = RENDER_TYPE_FILE_TYPES[render_type]
+    if render_type == "driver" and driver_face_anonymization != "none" and "logs" not in file_types:
+        file_types = (*file_types, "logs")
     if render_type in ("forward_upon_wide", "360_forward_upon_wide") and is_auto_forward_upon_wide(forward_upon_wide_h):
         return (*file_types, "qlogs", "logs")
     return file_types
@@ -157,6 +180,18 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
             f"Length must be at most {request.maximum_length_seconds} seconds. Got {parsed.length_seconds} seconds."
         )
 
+    driver_face_swap = DriverFaceSwapOptions(
+        mode=request.driver_face_anonymization,
+        source_image=request.driver_face_source_image,
+        facefusion_root=request.facefusion_root,
+        facefusion_model=request.facefusion_model,
+        preset=request.driver_face_preset,
+        selection_mode=request.driver_face_selection,
+        donor_bank_dir=request.driver_face_donor_bank_dir,
+    )
+    if has_driver_face_anonymization(driver_face_swap) and request.render_type not in ("driver", "driver-debug"):
+        raise ValueError("Driver face anonymization is only supported for `driver` and `driver-debug` renders.")
+
     return ClipPlan(
         render_type=request.render_type,
         route=parsed.route,
@@ -170,6 +205,7 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
             request.render_type,
             qcam=request.qcam,
             forward_upon_wide_h=request.forward_upon_wide_h,
+            driver_face_anonymization=request.driver_face_anonymization,
         ),
         decompress_logs=not is_openpilot_render_type(request.render_type),
         smear_seconds=max(0, request.smear_seconds),
@@ -179,6 +215,7 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
         openpilot_dir=request.openpilot_dir,
         headless=request.headless,
         qcam=request.qcam,
+        driver_face_swap=driver_face_swap,
     )
 
 
@@ -241,7 +278,9 @@ def run_clip(request: ClipRequest) -> ClipResult:
                 jwt_token=plan.jwt_token,
                 openpilot_dir=plan.openpilot_dir,
                 headless=plan.headless,
+                route_or_url=request.route_or_url,
                 acceleration=plan.local_acceleration,
+                driver_face_swap=plan.driver_face_swap,
             )
         )
         return ClipResult(
@@ -250,6 +289,27 @@ def run_clip(request: ClipRequest) -> ClipResult:
             render_type=plan.render_type,
             data_dir=plan.data_dir,
             file_format=plan.file_format,
+        )
+
+    if plan.render_type == "driver" and has_driver_face_anonymization(plan.driver_face_swap):
+        output_path = render_anonymized_driver_backing_video(
+            route=plan.route,
+            route_or_url=request.route_or_url,
+            start_seconds=plan.start_seconds,
+            length_seconds=plan.length_seconds,
+            data_dir=str(plan.data_dir),
+            openpilot_dir=plan.openpilot_dir,
+            acceleration=plan.local_acceleration,
+            output_path=str(plan.output_path),
+            options=plan.driver_face_swap,
+        )
+        return ClipResult(
+            output_path=output_path,
+            route=plan.route,
+            render_type=plan.render_type,
+            data_dir=plan.data_dir,
+            file_format="h264",
+            acceleration="facefusion",
         )
 
     video_result = video_renderer.render_video_clip(

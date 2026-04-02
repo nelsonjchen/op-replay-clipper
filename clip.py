@@ -13,6 +13,12 @@ from core.clip_orchestrator import (
     is_smear_render_type,
     run_clip,
 )
+from core.driver_face_swap import (
+    default_driver_face_donor_bank_dir,
+    default_driver_face_source_image,
+    default_facefusion_model,
+    default_facefusion_root,
+)
 from core.forward_upon_wide import parse_forward_upon_wide_h
 from core.openpilot_bootstrap import bootstrap_openpilot, ensure_openpilot_checkout
 from core.openpilot_config import default_local_openpilot_root, default_openpilot_branch, default_openpilot_repo_url
@@ -60,6 +66,44 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-dir", default="", help="Explicit data dir. If unset, uses --data-root/<dongle-id>.")
     parser.add_argument("--skip-download", action="store_true", help="Reuse already-downloaded route data.")
     parser.add_argument("--accel", choices=["auto", "cpu", "videotoolbox", "nvidia"], default="auto")
+    parser.add_argument(
+        "--driver-face-anonymization",
+        choices=["none", "facefusion"],
+        default="none",
+        help="Optionally replace the face in the backing driver video before rendering `driver` or `driver-debug`.",
+    )
+    parser.add_argument(
+        "--driver-face-source-image",
+        default=default_driver_face_source_image(),
+        help="Donor/source portrait for driver face anonymization.",
+    )
+    parser.add_argument(
+        "--driver-face-selection",
+        choices=["manual", "auto_best_match"],
+        default="manual",
+        help="Choose a specific donor image manually or auto-pick the best same-tone donor from the donor bank.",
+    )
+    parser.add_argument(
+        "--driver-face-donor-bank-dir",
+        default=default_driver_face_donor_bank_dir(),
+        help="Directory of donor portraits used when --driver-face-selection auto_best_match is enabled.",
+    )
+    parser.add_argument(
+        "--driver-face-preset",
+        choices=["fast", "quality"],
+        default="fast",
+        help="FaceFusion preset for driver face anonymization.",
+    )
+    parser.add_argument(
+        "--facefusion-root",
+        default=default_facefusion_root(),
+        help="Path to the local FaceFusion checkout used for driver face anonymization.",
+    )
+    parser.add_argument(
+        "--facefusion-model",
+        default=default_facefusion_model(),
+        help="FaceFusion model name used for driver face anonymization.",
+    )
     return parser
 
 
@@ -78,7 +122,10 @@ def _resolve_route_and_timing(args: argparse.Namespace) -> tuple[str, int, int]:
 def _prepare_openpilot_if_needed(args: argparse.Namespace) -> str:
     openpilot_path = Path(args.openpilot_dir).expanduser().resolve()
     openpilot_dir = str(openpilot_path)
-    if not is_openpilot_render_type(args.render_type):
+    needs_openpilot = is_openpilot_render_type(args.render_type) or (
+        args.render_type == "driver" and args.driver_face_anonymization != "none"
+    )
+    if not needs_openpilot:
         return openpilot_dir
     if args.skip_openpilot_update and not openpilot_path.exists():
         raise SystemExit(
@@ -129,6 +176,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 qcam=args.qcam,
                 headless=not args.windowed,
                 skip_download=args.skip_download,
+                driver_face_anonymization=args.driver_face_anonymization,
+                driver_face_source_image=args.driver_face_source_image,
+                driver_face_preset=args.driver_face_preset,
+                facefusion_root=args.facefusion_root,
+                facefusion_model=args.facefusion_model,
+                driver_face_selection=args.driver_face_selection,
+                driver_face_donor_bank_dir=args.driver_face_donor_bank_dir,
             )
         )
     except ModuleNotFoundError as error:

@@ -210,6 +210,29 @@ uv run python clip.py driver-debug "https://connect.comma.ai/<dongle>/<route>/<s
 uv run python clip.py forward "a2a0ccea32023010|2023-07-27--13-01-19" --demo
 ```
 
+Driver backing-video face anonymization:
+
+```bash
+uv run python clip.py driver --demo --length-seconds 20 \
+  --driver-face-anonymization facefusion \
+  --driver-face-source-image ./shared/driver-face-eval/generic-donor.jpg \
+  --driver-face-preset fast \
+  --output ./shared/driver-facefusion.mp4
+
+uv run python clip.py driver --demo --length-seconds 20 \
+  --driver-face-anonymization facefusion \
+  --driver-face-selection auto_best_match \
+  --driver-face-donor-bank-dir ./shared/driver-face-eval/donors \
+  --driver-face-preset fast \
+  --output ./shared/driver-facefusion-auto.mp4
+
+uv run python clip.py driver-debug --demo --length-seconds 20 \
+  --driver-face-anonymization facefusion \
+  --driver-face-source-image ./shared/driver-face-eval/generic-donor.jpg \
+  --driver-face-preset fast \
+  --output ./shared/driver-debug-facefusion.mp4
+```
+
 BIG UI smoke test:
 
 ```bash
@@ -234,6 +257,12 @@ Notes:
 
 * `clip.py` is the primary local CLI for UI and non-UI renders
 * `driver-debug` is an openpilot-backed render type like `ui` and `ui-alt`, but it only needs `dcameras` and `logs`
+* `driver` and `driver-debug` can optionally anonymize the backing driver video with `--driver-face-anonymization facefusion`
+* That anonymization path reuses the repo-owned DM face track, swaps the prepared face crop with FaceFusion, then composites the swapped crop back into the full driver backing video before the final render
+* Every anonymized output now burns a bright `DRIVER FACE ANONYMIZED` banner into the driver video so the downstream clip is clearly marked
+* `--driver-face-preset fast` is the practical default for short clips, while `quality` trades more time for cleaner masking and higher-resolution swapping
+* `--driver-face-selection auto_best_match` runs a short same-tone donor search against the donor bank, writes a `<output>.driver-face-selection.json` sidecar report, then uses the selected donor for the final swap
+* `driver` anonymization also needs `logs`, because the face crop is driven by driver-monitoring telemetry rather than a fresh detector pass
 * `driver-debug` uses the same hidden preroll/cut behavior as the UI renderers so the visible clip starts after the DM state has initialized
 * BIG UI renders now use a repo-owned exact-frame runner instead of the old coarse 20 Hz chunk mapping, so lane lines and path overlays stay aligned to the logged road camera frames
 * The BIG UI renderer also does a hidden 1-second warmup before recording so the visible clip starts with initialized video/UI state instead of a blank opening

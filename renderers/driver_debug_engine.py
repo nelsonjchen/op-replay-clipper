@@ -72,7 +72,9 @@ class DriverDebugTelemetry:
     is_rhd: bool = False
     wheel_on_right_prob: float | None = None
     selected_side: str = "left"
+    other_side: str = "right"
     face_prob: float | None = None
+    other_face_prob: float | None = None
     left_eye_prob: float | None = None
     right_eye_prob: float | None = None
     left_blink_prob: float | None = None
@@ -104,6 +106,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-e", "--end", type=int, required=True, help="End time in seconds")
     parser.add_argument("-o", "--output", required=True, help="Output file path")
     parser.add_argument("-d", "--data-dir", help="Local directory with route data")
+    parser.add_argument("--backing-video", help="Optional pre-rendered driver backing video to feed into the driver camera view")
     parser.add_argument("-t", "--title", help="Title overlay text")
     parser.add_argument("-f", "--file-size", type=float, default=9.0, help="Target file size in MB")
     parser.add_argument("--windowed", action="store_true", help="Show window")
@@ -122,7 +125,59 @@ def _normalize_cli_paths(args: argparse.Namespace, *, cwd: Path) -> argparse.Nam
     if normalized.data_dir:
         data_dir_path = Path(normalized.data_dir)
         normalized.data_dir = str((cwd / data_dir_path).resolve()) if not data_dir_path.is_absolute() else str(data_dir_path.resolve())
+    if getattr(normalized, "backing_video", None):
+        backing_video_path = Path(normalized.backing_video)
+        normalized.backing_video = (
+            str((cwd / backing_video_path).resolve()) if not backing_video_path.is_absolute() else str(backing_video_path.resolve())
+        )
     return normalized
+
+
+def _bgr_frame_to_nv12_bytes(frame) -> bytes:
+    import cv2
+    import numpy as np
+
+    frame_height, frame_width = frame.shape[:2]
+    if frame_width % 2 or frame_height % 2:
+        raise ValueError(f"Backing video frame must be even-sized for NV12 conversion. Got {frame_width}x{frame_height}")
+    yuv_i420 = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV_I420).reshape(-1)
+    y_plane_size = frame_width * frame_height
+    uv_plane_size = y_plane_size // 4
+    y_plane = yuv_i420[:y_plane_size]
+    u_plane = yuv_i420[y_plane_size:y_plane_size + uv_plane_size].reshape(frame_height // 2, frame_width // 2)
+    v_plane = yuv_i420[y_plane_size + uv_plane_size:y_plane_size + (uv_plane_size * 2)].reshape(
+        frame_height // 2, frame_width // 2
+    )
+    uv_plane = np.empty((frame_height // 2, frame_width), dtype=np.uint8)
+    uv_plane[:, 0::2] = u_plane
+    uv_plane[:, 1::2] = v_plane
+    return y_plane.tobytes() + uv_plane.tobytes()
+
+
+class DecodedBackingVideoFrameSource:
+    def __init__(self, video_path: Path) -> None:
+        import cv2
+
+        self.video_path = video_path
+        self._capture = cv2.VideoCapture(str(video_path))
+        if not self._capture.isOpened():
+            raise RuntimeError(f"Failed to open backing video: {video_path}")
+        self.frame_w = int(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        self.frame_h = int(self._capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        self._frame_count = int(self._capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+
+    @property
+    def frame_count(self) -> int:
+        return self._frame_count
+
+    def get(self, camera_ref: CameraFrameRef) -> tuple[CameraFrameRef, bytes]:
+        ok, frame = self._capture.read()
+        if not ok or frame is None:
+            raise RuntimeError(f"Backing video ended before render completed: {self.video_path}")
+        return camera_ref, _bgr_frame_to_nv12_bytes(frame)
+
+    def stop(self) -> None:
+        self._capture.release()
 
 
 def _match_driver_camera_ref(
@@ -195,6 +250,37 @@ def _as_tuple(value: object, *, length: int) -> tuple[float | None, ...]:
     return tuple(padded)
 
 
+def _select_driver_sides(
+    *,
+    dm_state,
+    driver_state,
+) -> tuple[object | None, object | None, bool, float | None, str, str]:
+    is_rhd = bool(getattr(dm_state, "isRHD", False))
+    wheel_on_right_prob = getattr(driver_state, "wheelOnRightProb", None)
+    if dm_state is None and wheel_on_right_prob is not None:
+        is_rhd = float(wheel_on_right_prob) > 0.5
+
+    left_driver = getattr(driver_state, "leftDriverData", None) if driver_state is not None else None
+    right_driver = getattr(driver_state, "rightDriverData", None) if driver_state is not None else None
+    if is_rhd:
+        return (
+            right_driver,
+            left_driver,
+            is_rhd,
+            float(wheel_on_right_prob) if wheel_on_right_prob is not None else None,
+            "right",
+            "left",
+        )
+    return (
+        left_driver,
+        right_driver,
+        is_rhd,
+        float(wheel_on_right_prob) if wheel_on_right_prob is not None else None,
+        "left",
+        "right",
+    )
+
+
 def extract_driver_debug_telemetry(state: dict[str, object]) -> DriverDebugTelemetry:
     dm_state_msg = state.get("driverMonitoringState")
     driver_state_msg = state.get("driverStateV2")
@@ -206,14 +292,10 @@ def extract_driver_debug_telemetry(state: dict[str, object]) -> DriverDebugTelem
     car_state = getattr(car_state_msg, "carState", None) if car_state_msg is not None else None
     selfdrive_state = getattr(selfdrive_state_msg, "selfdriveState", None) if selfdrive_state_msg is not None else None
 
-    is_rhd = bool(getattr(dm_state, "isRHD", False))
-    wheel_on_right_prob = getattr(driver_state, "wheelOnRightProb", None)
-    if dm_state is None and wheel_on_right_prob is not None:
-        is_rhd = float(wheel_on_right_prob) > 0.5
-
-    driver_data = None
-    if driver_state is not None:
-        driver_data = getattr(driver_state, "rightDriverData", None) if is_rhd else getattr(driver_state, "leftDriverData", None)
+    driver_data, other_driver_data, is_rhd, wheel_on_right_prob, selected_side, other_side = _select_driver_sides(
+        dm_state=dm_state,
+        driver_state=driver_state,
+    )
 
     events = list(getattr(dm_state, "events", []) or [])
     alert_name = None
@@ -234,9 +316,11 @@ def extract_driver_debug_telemetry(state: dict[str, object]) -> DriverDebugTelem
         is_low_std=bool(getattr(dm_state, "isLowStd", False)),
         is_active_mode=bool(getattr(dm_state, "isActiveMode", False)),
         is_rhd=is_rhd,
-        wheel_on_right_prob=float(wheel_on_right_prob) if wheel_on_right_prob is not None else None,
-        selected_side="right" if is_rhd else "left",
+        wheel_on_right_prob=wheel_on_right_prob,
+        selected_side=selected_side,
+        other_side=other_side,
         face_prob=float(getattr(driver_data, "faceProb", 0.0)) if driver_data is not None else None,
+        other_face_prob=float(getattr(other_driver_data, "faceProb", 0.0)) if other_driver_data is not None else None,
         left_eye_prob=float(getattr(driver_data, "leftEyeProb", 0.0)) if driver_data is not None else None,
         right_eye_prob=float(getattr(driver_data, "rightEyeProb", 0.0)) if driver_data is not None else None,
         left_blink_prob=float(getattr(driver_data, "leftBlinkProb", 0.0)) if driver_data is not None else None,
@@ -436,13 +520,32 @@ def compute_driver_face_box_rect(
     return box_x, box_y, width, height
 
 
-def _draw_driver_debug_face_box(rect, *, driver_data, device_type: str) -> None:
+def _driver_box_style(*, role: str):
+    import pyray as rl
+
+    if role == "other":
+        return {
+            "outline": rl.Color(255, 188, 92, 255),
+            "fill": rl.Color(255, 188, 92, 22),
+            "shadow": rl.Color(0, 0, 0, 165),
+            "label": "OTHER SEAT",
+        }
+    return {
+        "outline": rl.Color(94, 214, 135, 255),
+        "fill": rl.Color(94, 214, 135, 22),
+        "shadow": rl.Color(0, 0, 0, 190),
+        "label": "DRIVER SEAT",
+    }
+
+
+def _draw_driver_debug_face_box(rect, *, driver_data, device_type: str, role: str):
     import pyray as rl
 
     box_values = compute_driver_face_box_rect(rect, driver_data=driver_data, device_type=device_type)
     if box_values is None:
-        return
+        return None
     box = rl.Rectangle(*box_values)
+    style = _driver_box_style(role=role)
 
     face_orientation_std = list(getattr(driver_data, "faceOrientationStd", []) or [])
     face_prob = float(getattr(driver_data, "faceProb", 0.0) or 0.0)
@@ -451,13 +554,14 @@ def _draw_driver_debug_face_box(rect, *, driver_data, device_type: str) -> None:
     if face_std > 0.15:
         alpha *= max(0.45, 1.0 - ((face_std - 0.15) * 1.6))
 
-    outline = rl.Color(255, 255, 255, int(255 * alpha))
-    shadow = rl.Color(0, 0, 0, int(190 * alpha))
-    fill = rl.Color(255, 255, 255, int(16 * alpha))
+    outline = rl.Color(style["outline"].r, style["outline"].g, style["outline"].b, int(255 * alpha))
+    shadow = rl.Color(style["shadow"].r, style["shadow"].g, style["shadow"].b, int(style["shadow"].a * alpha))
+    fill = rl.Color(style["fill"].r, style["fill"].g, style["fill"].b, int(style["fill"].a * alpha))
 
     rl.draw_rectangle_rounded(box, 0.12, 12, fill)
     rl.draw_rectangle_rounded_lines_ex(rl.Rectangle(box.x + 2, box.y + 2, box.width, box.height), 0.12, 12, 6, shadow)
     rl.draw_rectangle_rounded_lines_ex(box, 0.12, 12, 3, outline)
+    return style["outline"]
 
 
 class DriverDebugOverlayRenderer:
@@ -536,6 +640,23 @@ class DriverDebugOverlayRenderer:
         import pyray as rl
 
         rl.draw_text_ex(self._label_font, title, rl.Vector2(x, y), 21, 0, rl.Color(255, 255, 255, 145))
+
+    def _draw_box_legend(self, x: float, y: float, items: list[tuple[str, object]]) -> None:
+        import pyray as rl
+
+        if not items:
+            return
+
+        line_height = 24
+        panel_width = 184
+        panel_height = 14 + (line_height * len(items))
+        panel = rl.Rectangle(x, y, panel_width, panel_height)
+        rl.draw_rectangle_rounded(panel, 0.28, 10, rl.Color(3, 10, 14, 150))
+        rl.draw_rectangle_rounded_lines_ex(panel, 0.28, 10, 2, rl.Color(255, 255, 255, 34))
+        for idx, (label, color) in enumerate(items):
+            row_y = y + 8 + (idx * line_height)
+            rl.draw_rectangle_rounded(rl.Rectangle(x + 12, row_y + 5, 18, 12), 0.4, 8, color)
+            rl.draw_text_ex(self._label_font, label, rl.Vector2(x + 40, row_y), 17, 0, rl.Color(255, 255, 255, 228))
 
     def _draw_card(self, rect, *, accent) -> None:
         import pyray as rl
@@ -777,7 +898,11 @@ class DriverDebugOverlayRenderer:
         mid_value_x = mid_x + 250
         self._draw_section_title(mid_x, mid_y, "MODEL")
         middle_rows = [
-            ("face / RHD prob", f"{_fmt_percent(telemetry.face_prob)} / {_fmt_percent(telemetry.wheel_on_right_prob)}", white),
+            (
+                "sel / other / RHD",
+                f"{_fmt_percent(telemetry.face_prob)} / {_fmt_percent(telemetry.other_face_prob)} / {_fmt_percent(telemetry.wheel_on_right_prob)}",
+                white,
+            ),
             ("eyes L / R", f"{_fmt_percent(telemetry.left_eye_prob)} / {_fmt_percent(telemetry.right_eye_prob)}", white),
             ("blink L / R", f"{_fmt_percent(telemetry.left_blink_prob)} / {_fmt_percent(telemetry.right_blink_prob)}", orange),
             ("sunglasses / phone", f"{_fmt_percent(telemetry.sunglasses_prob)} / {_fmt_percent(telemetry.phone_prob)}", white),
@@ -876,13 +1001,11 @@ def _install_driver_debug_face_box(driver_view, *, device_type: str) -> None:
 
         dm_state = ui_state.sm["driverMonitoringState"]
         driver_state = ui_state.sm["driverStateV2"]
-        is_rhd = bool(getattr(dm_state, "isRHD", False))
-        driver_data = getattr(driver_state, "rightDriverData", None) if is_rhd else getattr(driver_state, "leftDriverData", None)
-        if driver_data is None:
-            return None
-
-        face_prob = float(getattr(driver_data, "faceProb", 0.0) or 0.0)
-        if face_prob < 0.5 and not bool(getattr(dm_state, "faceDetected", False)):
+        driver_data, other_driver_data, _is_rhd, _wheel_on_right_prob, _selected_side, _other_side = _select_driver_sides(
+            dm_state=dm_state,
+            driver_state=driver_state,
+        )
+        if driver_data is None and other_driver_data is None:
             return None
 
         camera_view = getattr(self, "_camera_view", self)
@@ -894,7 +1017,31 @@ def _install_driver_debug_face_box(driver_view, *, device_type: str) -> None:
                 frame_width=float(getattr(frame, "width", 0.0) or 0.0),
                 frame_height=float(getattr(frame, "height", 0.0) or 0.0),
             )
-        _draw_driver_debug_face_box(content_rect, driver_data=driver_data, device_type=device_type)
+        legend_items: list[tuple[str, object]] = []
+
+        selected_face_prob = float(getattr(driver_data, "faceProb", 0.0) or 0.0) if driver_data is not None else 0.0
+        other_face_prob = float(getattr(other_driver_data, "faceProb", 0.0) or 0.0) if other_driver_data is not None else 0.0
+
+        if driver_data is not None and (selected_face_prob >= 0.5 or bool(getattr(dm_state, "faceDetected", False))):
+            selected_color = _draw_driver_debug_face_box(
+                content_rect,
+                driver_data=driver_data,
+                device_type=device_type,
+                role="selected",
+            )
+            if selected_color is not None:
+                legend_items.append(("driver seat", selected_color))
+        if other_driver_data is not None and other_face_prob >= 0.35:
+            other_color = _draw_driver_debug_face_box(
+                content_rect,
+                driver_data=other_driver_data,
+                device_type=device_type,
+                role="other",
+            )
+            if other_color is not None:
+                legend_items.append(("other seat", other_color))
+        if legend_items and hasattr(self, "_overlay_renderer") and self._overlay_renderer is not None:
+            self._overlay_renderer._draw_box_legend(content_rect.x + 18, content_rect.y + 18, legend_items)
         return driver_data
 
     driver_view._draw_face_detection = types.MethodType(_draw_face_detection_override, driver_view)
@@ -991,6 +1138,7 @@ def clip(
     title: str | None,
     show_metadata: bool,
     show_time: bool,
+    backing_video: str | None,
 ) -> None:
     import pyray as rl
     import tqdm
@@ -1017,11 +1165,18 @@ def clip(
         route_metadata = load_route_metadata(route)
         metadata = route_metadata if show_metadata else None
         driver_paths = route.dcamera_paths()
-        driver_frame_queue = IndexedFrameQueue(
-            driver_paths[seg_start:seg_end],
-            [step.camera_ref for step in render_steps],
-            use_qcam=False,
-        )
+        if backing_video:
+            driver_frame_queue = DecodedBackingVideoFrameSource(Path(backing_video).resolve())
+            if driver_frame_queue.frame_count and driver_frame_queue.frame_count < len(render_steps):
+                raise RuntimeError(
+                    f"Backing video has only {driver_frame_queue.frame_count} frames but render needs {len(render_steps)}."
+                )
+        else:
+            driver_frame_queue = IndexedFrameQueue(
+                driver_paths[seg_start:seg_end],
+                [step.camera_ref for step in render_steps],
+                use_qcam=False,
+            )
 
         vipc = VisionIpcServer("camerad")
         vipc.create_buffers(
@@ -1059,9 +1214,14 @@ def clip(
                     break
 
                 step = render_steps[frame_idx]
-                camera_ref, frame_bytes = driver_frame_queue.get()
-                if camera_ref != step.camera_ref:
-                    raise RuntimeError(f"Driver camera frame order mismatch: expected {step.camera_ref}, got {camera_ref}")
+                if backing_video:
+                    camera_ref, frame_bytes = driver_frame_queue.get(step.camera_ref)
+                else:
+                    camera_ref, frame_bytes = driver_frame_queue.get()
+                    if camera_ref != step.camera_ref:
+                        raise RuntimeError(
+                            f"Driver camera frame order mismatch: expected {step.camera_ref}, got {camera_ref}"
+                        )
                 vipc.send(
                     VisionStreamType.VISION_STREAM_DRIVER,
                     frame_bytes,
@@ -1138,6 +1298,7 @@ def main() -> int:
         title=args.title,
         show_metadata=not args.no_metadata,
         show_time=not args.no_time_overlay,
+        backing_video=args.backing_video,
     )
     return 0
 

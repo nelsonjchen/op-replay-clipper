@@ -5,6 +5,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from core.driver_face_swap import DriverFaceSwapOptions, has_driver_face_anonymization, render_anonymized_driver_backing_video
 from core.openpilot_config import default_image_openpilot_root
 from core.openpilot_integration import (
     apply_openpilot_runtime_patches,
@@ -26,6 +27,7 @@ from renderers.ui_renderer import (
 @dataclass(frozen=True)
 class DriverDebugRenderOptions:
     route: str
+    route_or_url: str
     start_seconds: int
     length_seconds: int
     smear_seconds: int
@@ -37,6 +39,7 @@ class DriverDebugRenderOptions:
     openpilot_dir: str = field(default_factory=default_image_openpilot_root)
     headless: bool = True
     acceleration: UIRecordingAcceleration = "auto"
+    driver_face_swap: DriverFaceSwapOptions = field(default_factory=DriverFaceSwapOptions)
 
 
 @dataclass(frozen=True)
@@ -75,30 +78,50 @@ def render_driver_debug_clip(opts: DriverDebugRenderOptions) -> DriverDebugRende
     if recording_skip_seconds > 0:
         env["RECORD_SKIP_FRAMES"] = str(recording_skip_seconds * UI_FRAMERATE)
 
-    clip_cmd = [
-        *_openpilot_python_cmd(openpilot_dir),
-        str((Path(__file__).resolve().parent / "driver_debug_engine.py").resolve()),
-        opts.route.replace("|", "/"),
-        "--openpilot-dir",
-        str(openpilot_dir),
-        "-s",
-        str(render_start),
-        "-e",
-        str(render_end),
-        "-o",
-        str(Path(opts.output_path).resolve()),
-        "-f",
-        str(opts.target_mb),
-    ]
-    if opts.data_dir:
-        compat_root = build_openpilot_compatible_data_dir(opts.route, Path(opts.data_dir))
-        clip_cmd += ["-d", str(compat_root)]
-    if not opts.headless:
-        clip_cmd.append("--windowed")
-
     use_headless_display = opts.headless and os.name != "nt" and "DISPLAY" not in env
-    with tempfile.TemporaryDirectory(prefix="driver-debug-params-") as params_root:
+    with tempfile.TemporaryDirectory(prefix="driver-debug-params-") as params_root, tempfile.TemporaryDirectory(
+        prefix="driver-debug-backing-"
+    ) as backing_root:
         env["PARAMS_ROOT"] = params_root
+        backing_video_path: Path | None = None
+        if has_driver_face_anonymization(opts.driver_face_swap):
+            if not opts.data_dir:
+                raise ValueError("Driver face anonymization for driver-debug requires a local data_dir.")
+            backing_video_path = render_anonymized_driver_backing_video(
+                route=opts.route,
+                route_or_url=opts.route_or_url,
+                start_seconds=render_start,
+                length_seconds=render_end - render_start,
+                data_dir=opts.data_dir,
+                openpilot_dir=str(openpilot_dir),
+                acceleration=opts.acceleration,
+                output_path=str(Path(backing_root) / "driver-debug-backing.mp4"),
+                options=opts.driver_face_swap,
+            )
+
+        clip_cmd = [
+            *_openpilot_python_cmd(openpilot_dir),
+            str((Path(__file__).resolve().parent / "driver_debug_engine.py").resolve()),
+            opts.route.replace("|", "/"),
+            "--openpilot-dir",
+            str(openpilot_dir),
+            "-s",
+            str(render_start),
+            "-e",
+            str(render_end),
+            "-o",
+            str(Path(opts.output_path).resolve()),
+            "-f",
+            str(opts.target_mb),
+        ]
+        if opts.data_dir:
+            compat_root = build_openpilot_compatible_data_dir(opts.route, Path(opts.data_dir))
+            clip_cmd += ["-d", str(compat_root)]
+        if backing_video_path is not None:
+            clip_cmd += ["--backing-video", str(backing_video_path)]
+        if not opts.headless:
+            clip_cmd.append("--windowed")
+
         with temporary_headless_display(env, enabled=use_headless_display) as render_env:
             _run(clip_cmd, cwd=openpilot_dir, env=render_env)
 
