@@ -98,8 +98,8 @@ class EmbeddingResult:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Generate and score donor variants against a driver-camera face crop.")
     parser.add_argument("--sample-dir", default="./shared/driver-face-eval/tici-baseline")
-    parser.add_argument("--base-donor", default="./shared/driver-face-eval/generic-donor.jpg")
-    parser.add_argument("--donors-dir", default="./shared/driver-face-eval/donors")
+    parser.add_argument("--base-donor", default="./assets/driver-face-donors/generic-donor-clean-shaven.jpg")
+    parser.add_argument("--donors-dir", default="./assets/driver-face-donors")
     parser.add_argument("--facefusion-root", default="./.cache/facefusion")
     parser.add_argument("--runware-python", default="./.cache/flux-kontext/bin/python")
     parser.add_argument("--frame-number", type=int, default=20)

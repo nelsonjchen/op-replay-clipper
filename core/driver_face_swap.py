@@ -5,6 +5,7 @@ import json
 import bz2
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -17,9 +18,9 @@ DriverFaceSwapPreset = Literal["fast", "quality"]
 DriverFaceSelectionMode = Literal["manual", "auto_best_match"]
 
 DEFAULT_FACEFUSION_ROOT = "./.cache/facefusion"
-DEFAULT_DRIVER_FACE_SOURCE_IMAGE = "./shared/driver-face-eval/generic-donor.jpg"
+DEFAULT_DRIVER_FACE_SOURCE_IMAGE = "./assets/driver-face-donors/generic-donor-clean-shaven.jpg"
 DEFAULT_FACEFUSION_MODEL = "hyperswap_1b_256"
-DEFAULT_DRIVER_FACE_DONOR_BANK_DIR = "./shared/driver-face-eval/donors"
+DEFAULT_DRIVER_FACE_DONOR_BANK_DIR = "./assets/driver-face-donors"
 
 
 @dataclass(frozen=True)
@@ -249,30 +250,29 @@ def _auto_select_source_image(
     if not facefusion_python.exists():
         raise FileNotFoundError(f"FaceFusion interpreter not found at {facefusion_python}")
 
-    selection_clip, frame_number = _build_selection_clip(
-        source_clip=sample_dir / "face-crop.mp4",
-        manifest_path=sample_dir / "face-track.json",
-        output_path=sample_dir / "face-crop-selection.mp4",
-    )
     selection_dir = sample_dir / "auto-select"
     selection_dir.mkdir(parents=True, exist_ok=True)
     command = [
         str(facefusion_python),
         str((Path(__file__).resolve().parent / "driver_face_auto_select.py").resolve()),
         "--target-video",
-        str(selection_clip),
+        str(sample_dir / "face-crop.mp4"),
+        "--track-metadata",
+        str(sample_dir / "face-track.json"),
         "--donor-bank-dir",
         str(Path(options.donor_bank_dir).expanduser().resolve()),
         "--facefusion-root",
         str(facefusion_root),
         "--output-dir",
         str(selection_dir),
-        "--frame-number",
-        str(frame_number),
+        "--facefusion-model",
+        str(options.facefusion_model),
         "--top-k",
-        "4",
+        "3",
         "--tone-margin-lab",
         "12.0",
+        "--representative-frames",
+        "3",
     ]
     proc = subprocess.run(command, check=True, capture_output=True, text=True)
     payload = json.loads((proc.stdout or "").strip().splitlines()[-1])
@@ -396,6 +396,7 @@ def render_anonymized_driver_backing_video(
     backing_target_mb = max(12, length_seconds)
 
     with tempfile.TemporaryDirectory(prefix="driver-face-swap-") as temp_dir:
+        overall_started = time.perf_counter()
         sample_dir = Path(temp_dir).resolve()
         _prepare_face_crop_artifacts(
             sample_dir=sample_dir,
@@ -410,15 +411,21 @@ def render_anonymized_driver_backing_video(
         )
         selected_source_image = Path(options.source_image).expanduser().resolve()
         selection_report_path = output.with_name(f"{output.stem}.driver-face-selection.json")
+        selection_report: dict[str, object] | None = None
         if options.selection_mode == "auto_best_match":
+            selection_started = time.perf_counter()
             selected_source_image, _selection_report = _auto_select_source_image(
                 sample_dir=sample_dir,
                 options=options,
                 output_path=selection_report_path,
             )
+            selection_report = json.loads(selection_report_path.read_text())
+            selection_report.setdefault("timings", {})
+            selection_report["timings"]["selection_handoff_seconds"] = time.perf_counter() - selection_started
         elif selection_report_path.exists():
             selection_report_path.unlink()
 
+        swap_started = time.perf_counter()
         swapped_crop = _run_facefusion_swap(
             sample_dir=sample_dir,
             output_path=sample_dir / f"facefusion-{options.preset}.mp4",
@@ -432,9 +439,11 @@ def render_anonymized_driver_backing_video(
                 donor_bank_dir=options.donor_bank_dir,
             ),
         )
+        swap_seconds = time.perf_counter() - swap_started
         facefusion_python = Path(options.facefusion_root).expanduser().resolve() / ".venv/bin/python"
         if not facefusion_python.exists():
             raise FileNotFoundError(f"FaceFusion interpreter not found at {facefusion_python}")
+        reintegrate_started = time.perf_counter()
         reintegrate_cmd = [
             str(facefusion_python),
             str((Path(__file__).resolve().parent / "driver_face_reintegrate.py").resolve()),
@@ -454,4 +463,22 @@ def render_anonymized_driver_backing_video(
             "DRIVER FACE ANONYMIZED",
         ]
         subprocess.run(reintegrate_cmd, check=True)
+        reintegrate_seconds = time.perf_counter() - reintegrate_started
+        total_seconds = time.perf_counter() - overall_started
+        if selection_report is not None:
+            timings = selection_report.setdefault("timings", {})
+            assert isinstance(timings, dict)
+            timings["final_video_swap_seconds"] = swap_seconds
+            timings["reintegrate_seconds"] = reintegrate_seconds
+            timings["total_request_seconds"] = total_seconds
+            selection_report["selected_donor_image"] = str(selected_source_image)
+            selection_report["output_video"] = str(output)
+            selection_report_path.write_text(json.dumps(selection_report, indent=2, sort_keys=True) + "\n")
+            print(
+                "Driver face anonymization timings: "
+                f"selection={timings.get('total_selection_seconds', 0.0):.2f}s, "
+                f"swap={swap_seconds:.2f}s, "
+                f"reintegrate={reintegrate_seconds:.2f}s, "
+                f"total={total_seconds:.2f}s"
+            )
     return output

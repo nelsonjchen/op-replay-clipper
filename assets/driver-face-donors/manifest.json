@@ -1,0 +1,49 @@
+{
+  "donors": [
+    {
+      "facial_hair": "none",
+      "glasses": "no",
+      "id": "generic-donor-clean-shaven",
+      "image": "generic-donor-clean-shaven.jpg",
+      "label": "Clean Shaven",
+      "presentation": "masc",
+      "tone_lab": [146.18, 135.36, 138.01]
+    },
+    {
+      "facial_hair": "stubble",
+      "glasses": "no",
+      "id": "generic-donor-stubble",
+      "image": "generic-donor-stubble.png",
+      "label": "Stubble",
+      "presentation": "masc",
+      "tone_lab": [142.30, 134.34, 135.94]
+    },
+    {
+      "facial_hair": "short_beard",
+      "glasses": "no",
+      "id": "generic-donor-short-beard",
+      "image": "generic-donor-short-beard.png",
+      "label": "Short Beard",
+      "presentation": "masc",
+      "tone_lab": [145.21, 133.14, 137.43]
+    },
+    {
+      "facial_hair": "full_beard",
+      "glasses": "no",
+      "id": "generic-donor-fuller-beard",
+      "image": "generic-donor-fuller-beard.png",
+      "label": "Fuller Beard",
+      "presentation": "masc",
+      "tone_lab": [141.42, 133.36, 135.63]
+    },
+    {
+      "facial_hair": "none",
+      "glasses": "yes",
+      "id": "generic-donor-glasses",
+      "image": "generic-donor-glasses.png",
+      "label": "Glasses",
+      "presentation": "masc",
+      "tone_lab": [143.75, 134.32, 138.87]
+    }
+  ]
+}

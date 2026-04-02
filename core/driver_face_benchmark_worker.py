@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--facefusion-root")
     parser.add_argument("--facefusion-source-image")
     parser.add_argument("--facefusion-model", default="hyperswap_1b_256")
-    parser.add_argument("--driver-face-donor-bank-dir", default="./shared/driver-face-eval/donors")
+    parser.add_argument("--driver-face-donor-bank-dir", default="./assets/driver-face-donors")
     return parser.parse_args()
 
 
@@ -377,7 +377,12 @@ def main() -> int:
                 ),
                 output_path=selection_report_path,
             )
-            extra_report_fields = {"selection_report": str(selection_report_path)}
+            selection_report = json.loads(selection_report_path.read_text())
+            extra_report_fields = {
+                "selection_report": str(selection_report_path),
+                "selection_timings": selection_report.get("timings", {}),
+                "selected_donor_image": selection_report.get("selected_donor_image"),
+            }
             preset = "fast"
         else:
             source_image = Path(args.facefusion_source_image).resolve()

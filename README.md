@@ -215,20 +215,20 @@ Driver backing-video face anonymization:
 ```bash
 uv run python clip.py driver --demo --length-seconds 20 \
   --driver-face-anonymization facefusion \
-  --driver-face-source-image ./shared/driver-face-eval/generic-donor.jpg \
+  --driver-face-source-image ./assets/driver-face-donors/generic-donor-clean-shaven.jpg \
   --driver-face-preset fast \
   --output ./shared/driver-facefusion.mp4
 
 uv run python clip.py driver --demo --length-seconds 20 \
   --driver-face-anonymization facefusion \
   --driver-face-selection auto_best_match \
-  --driver-face-donor-bank-dir ./shared/driver-face-eval/donors \
+  --driver-face-donor-bank-dir ./assets/driver-face-donors \
   --driver-face-preset fast \
   --output ./shared/driver-facefusion-auto.mp4
 
 uv run python clip.py driver-debug --demo --length-seconds 20 \
   --driver-face-anonymization facefusion \
-  --driver-face-source-image ./shared/driver-face-eval/generic-donor.jpg \
+  --driver-face-source-image ./assets/driver-face-donors/generic-donor-clean-shaven.jpg \
   --driver-face-preset fast \
   --output ./shared/driver-debug-facefusion.mp4
 ```

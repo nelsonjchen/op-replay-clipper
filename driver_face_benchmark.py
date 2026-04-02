@@ -17,9 +17,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidate-id", default="dm-box-pixelize")
     parser.add_argument("--pixel-block-size", type=int, default=18)
     parser.add_argument("--facefusion-root", default="./.cache/facefusion")
-    parser.add_argument("--facefusion-source-image", default="./shared/driver-face-eval/generic-donor.jpg")
+    parser.add_argument("--facefusion-source-image", default="./assets/driver-face-donors/generic-donor-clean-shaven.jpg")
     parser.add_argument("--facefusion-model", default="hyperswap_1b_256")
-    parser.add_argument("--driver-face-donor-bank-dir", default="./shared/driver-face-eval/donors")
+    parser.add_argument("--driver-face-donor-bank-dir", default="./assets/driver-face-donors")
     parser.add_argument("samples", nargs="*", help="Optional sample ids. Defaults to all samples under the eval root.")
     return parser
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -84,9 +85,11 @@ def render_driver_debug_clip(opts: DriverDebugRenderOptions) -> DriverDebugRende
     ) as backing_root:
         env["PARAMS_ROOT"] = params_root
         backing_video_path: Path | None = None
+        backing_selection_report_path: Path | None = None
         if has_driver_face_anonymization(opts.driver_face_swap):
             if not opts.data_dir:
                 raise ValueError("Driver face anonymization for driver-debug requires a local data_dir.")
+            backing_output_path = Path(backing_root) / "driver-debug-backing.mp4"
             backing_video_path = render_anonymized_driver_backing_video(
                 route=opts.route,
                 route_or_url=opts.route_or_url,
@@ -95,9 +98,14 @@ def render_driver_debug_clip(opts: DriverDebugRenderOptions) -> DriverDebugRende
                 data_dir=opts.data_dir,
                 openpilot_dir=str(openpilot_dir),
                 acceleration=opts.acceleration,
-                output_path=str(Path(backing_root) / "driver-debug-backing.mp4"),
+                output_path=str(backing_output_path),
                 options=opts.driver_face_swap,
             )
+            candidate_selection_report_path = backing_output_path.with_name(
+                f"{backing_output_path.stem}.driver-face-selection.json"
+            )
+            if candidate_selection_report_path.exists():
+                backing_selection_report_path = candidate_selection_report_path
 
         clip_cmd = [
             *_openpilot_python_cmd(openpilot_dir),
@@ -124,6 +132,11 @@ def render_driver_debug_clip(opts: DriverDebugRenderOptions) -> DriverDebugRende
 
         with temporary_headless_display(env, enabled=use_headless_display) as render_env:
             _run(clip_cmd, cwd=openpilot_dir, env=render_env)
+
+        output_path = Path(opts.output_path).resolve()
+        if backing_selection_report_path is not None and backing_selection_report_path.exists():
+            final_selection_report_path = output_path.with_name(f"{output_path.stem}.driver-face-selection.json")
+            shutil.copy2(backing_selection_report_path, final_selection_report_path)
 
     output_path = Path(opts.output_path).resolve()
     return DriverDebugRenderResult(output_path=output_path)
