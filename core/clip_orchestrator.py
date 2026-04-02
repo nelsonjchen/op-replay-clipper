@@ -216,6 +216,7 @@ def run_clip(request: ClipRequest) -> ClipResult:
                 headless=plan.headless,
                 layout_mode="alt" if plan.render_type == "ui-alt" else "default",
                 qcam=plan.qcam,
+                acceleration=plan.local_acceleration,
             )
         )
         return ClipResult(
@@ -240,6 +241,7 @@ def run_clip(request: ClipRequest) -> ClipResult:
                 jwt_token=plan.jwt_token,
                 openpilot_dir=plan.openpilot_dir,
                 headless=plan.headless,
+                acceleration=plan.local_acceleration,
             )
         )
         return ClipResult(

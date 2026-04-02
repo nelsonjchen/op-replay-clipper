@@ -245,9 +245,89 @@ def _patch_ui_application_record_skip(path: Path) -> bool:
         updated = updated.replace(old_block, new_block, 1)
 
     old_ffmpeg_block = """        ffmpeg_args = [\n          'ffmpeg',\n          '-v', 'warning',          # Reduce ffmpeg log spam\n          '-nostats',               # Suppress encoding progress\n          '-f', 'rawvideo',         # Input format\n          '-pix_fmt', 'rgba',       # Input pixel format\n          '-s', f'{self._scaled_width}x{self._scaled_height}',  # Input resolution\n          '-r', str(fps),           # Input frame rate\n          '-i', 'pipe:0',           # Input from stdin\n          '-vf', 'vflip,format=yuv420p',  # Flip vertically and convert to yuv420p\n          '-r', str(output_fps),    # Output frame rate (for speed multiplier)\n          '-c:v', 'libx264',\n          '-preset', 'veryfast',\n          '-crf', str(RECORD_QUALITY)\n        ]\n        if RECORD_BITRATE:\n          # NOTE: custom bitrate overrides crf setting\n          ffmpeg_args += ['-b:v', RECORD_BITRATE, '-maxrate', RECORD_BITRATE, '-bufsize', RECORD_BITRATE]\n        ffmpeg_args += [\n          '-y',                     # Overwrite existing file\n          '-f', 'mp4',              # Output format\n          RECORD_OUTPUT,            # Output file path\n        ]\n"""
-    new_ffmpeg_block = """        ffmpeg_args = [\n          'ffmpeg',\n          '-v', 'warning',          # Reduce ffmpeg log spam\n          '-nostats',               # Suppress encoding progress\n          '-f', 'rawvideo',         # Input format\n          '-pix_fmt', 'rgba',       # Input pixel format\n          '-s', f'{self._scaled_width}x{self._scaled_height}',  # Input resolution\n          '-r', str(fps),           # Input frame rate\n          '-i', 'pipe:0',           # Input from stdin\n          '-vf', 'vflip,format=yuv420p',  # Flip vertically and convert to yuv420p\n          '-r', str(output_fps),    # Output frame rate (for speed multiplier)\n          '-c:v', RECORD_CODEC,\n          '-preset', RECORD_PRESET,\n        ]\n        if RECORD_CODEC.startswith('libx'):\n          ffmpeg_args += ['-crf', str(RECORD_QUALITY)]\n        if RECORD_BITRATE:\n          # NOTE: custom bitrate overrides crf setting\n          ffmpeg_args += ['-b:v', RECORD_BITRATE, '-maxrate', RECORD_BITRATE, '-bufsize', RECORD_BITRATE]\n        if RECORD_TAG:\n          ffmpeg_args += ['-tag:v', RECORD_TAG]\n        ffmpeg_args += [\n          '-y',                     # Overwrite existing file\n          '-f', 'mp4',              # Output format\n          RECORD_OUTPUT,            # Output file path\n        ]\n"""
+    old_ffmpeg_block_compact = """        ffmpeg_args = [\n          'ffmpeg',\n          '-v', 'warning',\n          '-nostats',\n          '-f', 'rawvideo',\n          '-pix_fmt', 'rgba',\n          '-s', f'{self._scaled_width}x{self._scaled_height}',\n          '-r', str(fps),\n          '-i', 'pipe:0',\n          '-vf', 'vflip,format=yuv420p',\n          '-r', str(output_fps),\n          '-c:v', 'libx264',\n          '-preset', 'veryfast',\n          '-crf', str(RECORD_QUALITY)\n        ]\n        if RECORD_BITRATE:\n          ffmpeg_args += ['-b:v', RECORD_BITRATE, '-maxrate', RECORD_BITRATE, '-bufsize', RECORD_BITRATE]\n        ffmpeg_args += ['-y', '-f', 'mp4', RECORD_OUTPUT]\n"""
+    previous_patched_ffmpeg_block = """        ffmpeg_args = [\n          'ffmpeg',\n          '-v', 'warning',          # Reduce ffmpeg log spam\n          '-nostats',               # Suppress encoding progress\n          '-f', 'rawvideo',         # Input format\n          '-pix_fmt', 'rgba',       # Input pixel format\n          '-s', f'{self._scaled_width}x{self._scaled_height}',  # Input resolution\n          '-r', str(fps),           # Input frame rate\n          '-i', 'pipe:0',           # Input from stdin\n          '-vf', 'vflip,format=yuv420p',  # Flip vertically and convert to yuv420p\n          '-r', str(output_fps),    # Output frame rate (for speed multiplier)\n          '-c:v', RECORD_CODEC,\n          '-preset', RECORD_PRESET,\n        ]\n        if RECORD_CODEC.startswith('libx'):\n          ffmpeg_args += ['-crf', str(RECORD_QUALITY)]\n        if RECORD_BITRATE:\n          # NOTE: custom bitrate overrides crf setting\n          ffmpeg_args += ['-b:v', RECORD_BITRATE, '-maxrate', RECORD_BITRATE, '-bufsize', RECORD_BITRATE]\n        if RECORD_TAG:\n          ffmpeg_args += ['-tag:v', RECORD_TAG]\n        ffmpeg_args += [\n          '-y',                     # Overwrite existing file\n          '-f', 'mp4',              # Output format\n          RECORD_OUTPUT,            # Output file path\n        ]\n"""
+    previous_patched_ffmpeg_block_compact = """        ffmpeg_args = [\n          'ffmpeg',\n          '-v', 'warning',\n          '-nostats',\n          '-f', 'rawvideo',\n          '-pix_fmt', 'rgba',\n          '-s', f'{self._scaled_width}x{self._scaled_height}',\n          '-r', str(fps),\n          '-i', 'pipe:0',\n          '-vf', 'vflip,format=yuv420p',\n          '-r', str(output_fps),\n          '-c:v', RECORD_CODEC,\n        ]\n        if RECORD_PRESET:\n          ffmpeg_args += ['-preset', RECORD_PRESET]\n        if RECORD_CODEC.startswith('libx'):\n          ffmpeg_args += ['-crf', str(RECORD_QUALITY)]\n        if RECORD_BITRATE:\n          ffmpeg_args += ['-b:v', RECORD_BITRATE, '-maxrate', RECORD_BITRATE, '-bufsize', RECORD_BITRATE]\n        if RECORD_TAG:\n          ffmpeg_args += ['-tag:v', RECORD_TAG]\n        ffmpeg_args += ['-y', '-f', 'mp4', RECORD_OUTPUT]\n"""
+    new_ffmpeg_block = """        ffmpeg_args = [\n          'ffmpeg',\n          '-v', 'warning',          # Reduce ffmpeg log spam\n          '-nostats',               # Suppress encoding progress\n          '-f', 'rawvideo',         # Input format\n          '-pix_fmt', 'rgba',       # Input pixel format\n          '-s', f'{self._scaled_width}x{self._scaled_height}',  # Input resolution\n          '-r', str(fps),           # Input frame rate\n          '-i', 'pipe:0',           # Input from stdin\n          '-vf', 'vflip,format=yuv420p',  # Flip vertically and convert to yuv420p\n          '-r', str(output_fps),    # Output frame rate (for speed multiplier)\n          '-c:v', RECORD_CODEC,\n        ]\n        if RECORD_PRESET:\n          ffmpeg_args += ['-preset', RECORD_PRESET]\n        if RECORD_CODEC.startswith('libx'):\n          ffmpeg_args += ['-crf', str(RECORD_QUALITY)]\n        if RECORD_BITRATE:\n          # NOTE: custom bitrate overrides crf setting\n          ffmpeg_args += ['-b:v', RECORD_BITRATE, '-maxrate', RECORD_BITRATE, '-bufsize', RECORD_BITRATE]\n        if RECORD_TAG:\n          ffmpeg_args += ['-tag:v', RECORD_TAG]\n        ffmpeg_args += [\n          '-colorspace', 'bt709',\n          '-color_primaries', 'bt709',\n          '-color_trc', 'bt709',\n          '-color_range', 'tv',\n          '-movflags', '+write_colr',\n          '-y',                     # Overwrite existing file\n          '-f', 'mp4',              # Output format\n          RECORD_OUTPUT,            # Output file path\n        ]\n"""
     if old_ffmpeg_block in updated:
         updated = updated.replace(old_ffmpeg_block, new_ffmpeg_block, 1)
+    if old_ffmpeg_block_compact in updated:
+        updated = updated.replace(old_ffmpeg_block_compact, new_ffmpeg_block, 1)
+    if previous_patched_ffmpeg_block in updated:
+        updated = updated.replace(previous_patched_ffmpeg_block, new_ffmpeg_block, 1)
+    if previous_patched_ffmpeg_block_compact in updated:
+        updated = updated.replace(previous_patched_ffmpeg_block_compact, new_ffmpeg_block, 1)
+    upgraded_tag_tail, count = re.subn(
+        r"""        if RECORD_TAG:\n"""
+        r"""          ffmpeg_args \+= \['-tag:v', RECORD_TAG\]\n"""
+        r"""        ffmpeg_args \+= \[\n"""
+        r"""          '-y',\s+# Overwrite existing file\n"""
+        r"""          '-f', 'mp4',\s+# Output format\n"""
+        r"""          RECORD_OUTPUT,\s+# Output file path\n"""
+        r"""        \]\n""",
+        """        if RECORD_TAG:\n"""
+        """          ffmpeg_args += ['-tag:v', RECORD_TAG]\n"""
+        """        ffmpeg_args += [\n"""
+        """          '-colorspace', 'bt709',\n"""
+        """          '-color_primaries', 'bt709',\n"""
+        """          '-color_trc', 'bt709',\n"""
+        """          '-color_range', 'tv',\n"""
+        """          '-movflags', '+write_colr',\n"""
+        """          '-y',                     # Overwrite existing file\n"""
+        """          '-f', 'mp4',              # Output format\n"""
+        """          RECORD_OUTPUT,            # Output file path\n"""
+        """        ]\n""",
+        updated,
+        count=1,
+    )
+    if count:
+        updated = upgraded_tag_tail
+    upgraded_compact_tail, count = re.subn(
+        r"""        if RECORD_TAG:\n"""
+        r"""          ffmpeg_args \+= \['-tag:v', RECORD_TAG\]\n"""
+        r"""        ffmpeg_args \+= \['-y', '-f', 'mp4', RECORD_OUTPUT\]\n""",
+        """        if RECORD_TAG:\n"""
+        """          ffmpeg_args += ['-tag:v', RECORD_TAG]\n"""
+        """        ffmpeg_args += [\n"""
+        """          '-colorspace', 'bt709',\n"""
+        """          '-color_primaries', 'bt709',\n"""
+        """          '-color_trc', 'bt709',\n"""
+        """          '-color_range', 'tv',\n"""
+        """          '-movflags', '+write_colr',\n"""
+        """          '-y',                     # Overwrite existing file\n"""
+        """          '-f', 'mp4',              # Output format\n"""
+        """          RECORD_OUTPUT,            # Output file path\n"""
+        """        ]\n""",
+        updated,
+        count=1,
+    )
+    if count:
+        updated = upgraded_compact_tail
+    upgraded_colr_tail, count = re.subn(
+        r"""        ffmpeg_args \+= \[\n"""
+        r"""          '-colorspace', 'bt709',\n"""
+        r"""          '-color_primaries', 'bt709',\n"""
+        r"""          '-color_trc', 'bt709',\n"""
+        r"""          '-color_range', 'tv',\n"""
+        r"""          '-y',\s+# Overwrite existing file\n"""
+        r"""          '-f', 'mp4',\s+# Output format\n"""
+        r"""          RECORD_OUTPUT,\s+# Output file path\n"""
+        r"""        \]\n""",
+        """        ffmpeg_args += [\n"""
+        """          '-colorspace', 'bt709',\n"""
+        """          '-color_primaries', 'bt709',\n"""
+        """          '-color_trc', 'bt709',\n"""
+        """          '-color_range', 'tv',\n"""
+        """          '-movflags', '+write_colr',\n"""
+        """          '-y',                     # Overwrite existing file\n"""
+        """          '-f', 'mp4',              # Output format\n"""
+        """          RECORD_OUTPUT,            # Output file path\n"""
+        """        ]\n""",
+        updated,
+        count=1,
+    )
+    if count:
+        updated = upgraded_colr_tail
 
     if updated != source:
         path.write_text(updated)

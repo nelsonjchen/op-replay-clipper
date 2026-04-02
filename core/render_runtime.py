@@ -3,19 +3,47 @@ from __future__ import annotations
 import contextlib
 import os
 import platform
-import sys
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
+from functools import lru_cache
 from pathlib import Path
 
 
-def configure_ui_environment(base_env: dict[str, str] | None = None) -> dict[str, str]:
+@lru_cache(maxsize=1)
+def _ffmpeg_hwaccels() -> frozenset[str]:
+    proc = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-hwaccels"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return frozenset()
+    hwaccels: set[str] = set()
+    for line in proc.stdout.splitlines():
+        stripped = line.strip()
+        if stripped and stripped != "Hardware acceleration methods:":
+            hwaccels.add(stripped)
+    return frozenset(hwaccels)
+
+
+def configure_ui_environment(
+    base_env: dict[str, str] | None = None,
+    *,
+    acceleration: str = "auto",
+) -> dict[str, str]:
     env = dict(base_env or os.environ)
     if platform.system() == "Darwin":
         env["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
-        env.setdefault("FFMPEG_HWACCEL", "none")
+        if acceleration == "cpu":
+            env.setdefault("FFMPEG_HWACCEL", "none")
+        elif "videotoolbox" in _ffmpeg_hwaccels():
+            env.setdefault("FFMPEG_HWACCEL", "videotoolbox")
+        else:
+            env.setdefault("FFMPEG_HWACCEL", "auto")
     env.setdefault("SCALE", "1")
     if platform.system() == "Linux" and "DISPLAY" not in env:
         env.setdefault("OPENPILOT_UI_NULL_EGL", "1")

@@ -13,6 +13,7 @@ from core.openpilot_integration import (
 from core.render_runtime import configure_ui_environment, temporary_headless_display
 from renderers.ui_renderer import (
     UI_FRAMERATE,
+    UIRecordingAcceleration,
     _compute_ui_render_window,
     _configure_ui_recording_encoder,
     _ensure_fonts,
@@ -35,6 +36,7 @@ class DriverDebugRenderOptions:
     jwt_token: str | None = None
     openpilot_dir: str = field(default_factory=default_image_openpilot_root)
     headless: bool = True
+    acceleration: UIRecordingAcceleration = "auto"
 
 
 @dataclass(frozen=True)
@@ -56,8 +58,8 @@ def render_driver_debug_clip(opts: DriverDebugRenderOptions) -> DriverDebugRende
         print(f"Applied openpilot runtime patches: {patch_report}")
     _ensure_fonts(openpilot_dir)
 
-    env = configure_ui_environment()
-    recording_acceleration = _configure_ui_recording_encoder(env, opts.file_format)
+    env = configure_ui_environment(acceleration=opts.acceleration)
+    recording_acceleration = _configure_ui_recording_encoder(env, opts.file_format, opts.acceleration)
     print(f"Driver debug recording encoder: {env['RECORD_CODEC']} ({recording_acceleration})")
 
     smear_seconds = max(0, opts.smear_seconds)

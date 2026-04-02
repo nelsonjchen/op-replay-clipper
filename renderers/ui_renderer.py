@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import os
+import platform
 import shutil
 import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from core.openpilot_config import default_image_openpilot_root
 from core.openpilot_integration import (
@@ -19,6 +22,7 @@ from core.render_runtime import configure_ui_environment, temporary_headless_dis
 UI_STARTUP_WARMUP_SECONDS = 1
 UI_FRAMERATE = 20
 UI_LAYOUT_MODES = ("default", "alt")
+UIRecordingAcceleration = Literal["auto", "cpu", "videotoolbox", "nvidia"]
 
 
 def _compute_ui_render_window(*, start_seconds: int, length_seconds: int, smear_seconds: int) -> tuple[int, int, int, int]:
@@ -44,6 +48,7 @@ class UIRenderOptions:
     headless: bool = True
     layout_mode: str = "default"
     qcam: bool = False
+    acceleration: UIRecordingAcceleration = "auto"
 
 
 @dataclass(frozen=True)
@@ -141,8 +146,45 @@ def _has_nvidia() -> bool:
     return subprocess.run([nvidia_smi, "-L"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode == 0
 
 
-def _configure_ui_recording_encoder(env: dict[str, str], file_format: str) -> str:
-    if _has_nvidia():
+@lru_cache(maxsize=1)
+def _ffmpeg_encoders() -> frozenset[str]:
+    proc = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-v", "error", "-encoders"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return frozenset()
+    encoders: set[str] = set()
+    for line in proc.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0].startswith("V"):
+            encoders.add(parts[1])
+    return frozenset(encoders)
+
+
+def _has_videotoolbox(file_format: str) -> bool:
+    if platform.system() != "Darwin":
+        return False
+    encoder = "h264_videotoolbox" if file_format == "h264" else "hevc_videotoolbox"
+    return encoder in _ffmpeg_encoders()
+
+
+def _configure_ui_recording_encoder(
+    env: dict[str, str],
+    file_format: str,
+    acceleration: UIRecordingAcceleration = "auto",
+) -> str:
+    if acceleration == "auto":
+        if _has_nvidia():
+            acceleration = "nvidia"
+        elif _has_videotoolbox(file_format):
+            acceleration = "videotoolbox"
+        else:
+            acceleration = "cpu"
+
+    if acceleration == "nvidia" and _has_nvidia():
         env["RECORD_CODEC"] = "h264_nvenc" if file_format == "h264" else "hevc_nvenc"
         env["RECORD_PRESET"] = "p4"
         if file_format == "hevc":
@@ -150,6 +192,15 @@ def _configure_ui_recording_encoder(env: dict[str, str], file_format: str) -> st
         else:
             env.pop("RECORD_TAG", None)
         return "nvidia"
+
+    if acceleration == "videotoolbox" and _has_videotoolbox(file_format):
+        env["RECORD_CODEC"] = "h264_videotoolbox" if file_format == "h264" else "hevc_videotoolbox"
+        env["RECORD_PRESET"] = ""
+        if file_format == "hevc":
+            env["RECORD_TAG"] = "hvc1"
+        else:
+            env.pop("RECORD_TAG", None)
+        return "videotoolbox"
 
     env["RECORD_CODEC"] = "libx264" if file_format == "h264" else "libx265"
     env["RECORD_PRESET"] = "veryfast" if file_format == "h264" else "medium"
@@ -240,8 +291,8 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
         print(f"Applied openpilot runtime patches: {patch_report}")
     _ensure_fonts(openpilot_dir)
 
-    env = configure_ui_environment()
-    recording_acceleration = _configure_ui_recording_encoder(env, opts.file_format)
+    env = configure_ui_environment(acceleration=opts.acceleration)
+    recording_acceleration = _configure_ui_recording_encoder(env, opts.file_format, opts.acceleration)
     print(f"UI recording encoder: {env['RECORD_CODEC']} ({recording_acceleration})")
     is_metric = detect_logged_metric(opts.route, data_dir=opts.data_dir, openpilot_dir=openpilot_dir)
     smear_seconds = max(0, opts.smear_seconds)

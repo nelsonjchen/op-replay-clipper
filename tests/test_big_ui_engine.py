@@ -896,8 +896,14 @@ def test_patch_ui_application_record_skip_inserts_skip_logic(tmp_path) -> None:
     assert 'RECORD_SKIP_FRAMES = int(os.getenv("RECORD_SKIP_FRAMES", "0"))' in updated
     assert 'RECORD_CODEC = os.getenv("RECORD_CODEC", "libx264")' in updated
     assert "'-c:v', RECORD_CODEC" in updated
+    assert "if RECORD_PRESET:" in updated
     assert "if RECORD_CODEC.startswith('libx'):" in updated
     assert "if RECORD_TAG:" in updated
+    assert "'-colorspace', 'bt709'" in updated
+    assert "'-color_primaries', 'bt709'" in updated
+    assert "'-color_trc', 'bt709'" in updated
+    assert "'-color_range', 'tv'" in updated
+    assert "'-movflags', '+write_colr'" in updated
     assert "if RECORD and self._frame >= RECORD_SKIP_FRAMES:" in updated
 
 
@@ -1006,6 +1012,7 @@ def test_apply_openpilot_runtime_patches_reports_changed_files(tmp_path) -> None
     )
 
     report = openpilot_integration.apply_openpilot_runtime_patches(openpilot_dir)
+    updated_application = (openpilot_dir / "system/ui/lib/application.py").read_text()
 
     assert report.changed is True
     assert report.framereader_compat is True
@@ -1013,6 +1020,11 @@ def test_apply_openpilot_runtime_patches_reports_changed_files(tmp_path) -> None
     assert report.ui_null_egl is True
     assert report.augmented_road_fill is True
     assert report.model_renderer_lead_position is True
+    assert "'-colorspace', 'bt709'" in updated_application
+    assert "'-color_primaries', 'bt709'" in updated_application
+    assert "'-color_trc', 'bt709'" in updated_application
+    assert "'-color_range', 'tv'" in updated_application
+    assert "'-movflags', '+write_colr'" in updated_application
 
 
 def test_render_overlays_includes_device_type_in_metadata(monkeypatch) -> None:
@@ -1102,9 +1114,25 @@ def test_ui_recording_encoder_prefers_nvidia(monkeypatch) -> None:
     assert env["RECORD_TAG"] == "hvc1"
 
 
+def test_ui_recording_encoder_prefers_videotoolbox_on_macos(monkeypatch) -> None:
+    env: dict[str, str] = {}
+    monkeypatch.setattr(ui_renderer, "_has_nvidia", lambda: False)
+    monkeypatch.setattr(ui_renderer.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(ui_renderer, "_ffmpeg_encoders", lambda: frozenset({"h264_videotoolbox", "hevc_videotoolbox"}))
+
+    acceleration = ui_renderer._configure_ui_recording_encoder(env, "hevc")
+
+    assert acceleration == "videotoolbox"
+    assert env["RECORD_CODEC"] == "hevc_videotoolbox"
+    assert env["RECORD_PRESET"] == ""
+    assert env["RECORD_TAG"] == "hvc1"
+
+
 def test_ui_recording_encoder_falls_back_to_cpu(monkeypatch) -> None:
     env: dict[str, str] = {}
     monkeypatch.setattr(ui_renderer, "_has_nvidia", lambda: False)
+    monkeypatch.setattr(ui_renderer.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(ui_renderer, "_ffmpeg_encoders", lambda: frozenset())
 
     acceleration = ui_renderer._configure_ui_recording_encoder(env, "h264")
 
