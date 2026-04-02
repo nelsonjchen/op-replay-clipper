@@ -100,6 +100,7 @@ def render_driver_debug_clip(opts: DriverDebugRenderOptions) -> DriverDebugRende
                 acceleration=opts.acceleration,
                 output_path=str(backing_output_path),
                 options=opts.driver_face_swap,
+                jwt_token=opts.jwt_token,
             )
             candidate_selection_report_path = backing_output_path.with_name(
                 f"{backing_output_path.stem}.driver-face-selection.json"

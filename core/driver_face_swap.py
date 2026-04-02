@@ -293,6 +293,7 @@ def _prepare_face_crop_artifacts(
     openpilot_dir: Path,
     acceleration: video_renderer.AccelerationPolicy,
     backing_target_mb: int,
+    jwt_token: str | None = None,
 ) -> None:
     source_clip = sample_dir / "driver-source.mp4"
     crop_clip = sample_dir / "face-crop.mp4"
@@ -318,6 +319,7 @@ def _prepare_face_crop_artifacts(
         smear_seconds=0,
         data_dir=data_dir,
         file_types=["logs"],
+        jwt_token=jwt_token,
         decompress_logs=True,
     )
 
@@ -385,6 +387,7 @@ def render_anonymized_driver_backing_video(
     acceleration: video_renderer.AccelerationPolicy,
     output_path: str,
     options: DriverFaceSwapOptions,
+    jwt_token: str | None = None,
 ) -> Path:
     if not has_driver_face_anonymization(options):
         raise ValueError("Driver face anonymization is disabled")
@@ -408,6 +411,7 @@ def render_anonymized_driver_backing_video(
             openpilot_dir=openpilot_root,
             acceleration=acceleration,
             backing_target_mb=backing_target_mb,
+            jwt_token=jwt_token,
         )
         selected_source_image = Path(options.source_image).expanduser().resolve()
         selection_report_path = output.with_name(f"{output.stem}.driver-face-selection.json")

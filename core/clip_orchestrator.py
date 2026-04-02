@@ -302,6 +302,7 @@ def run_clip(request: ClipRequest) -> ClipResult:
             acceleration=plan.local_acceleration,
             output_path=str(plan.output_path),
             options=plan.driver_face_swap,
+            jwt_token=plan.jwt_token,
         )
         return ClipResult(
             output_path=output_path,
