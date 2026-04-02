@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 This repository does not currently publish versioned release tags, so the older history below is backfilled from shipped git history and grouped into date-based milestones instead. There is no `Unreleased` section at the moment because the current project state is considered released.
 
+## 2026-03-27
+
+- Removed: Dropped the repo-local patched Cog runtime builder after confirming upstream Cog `0.17.1` fixes the raw URL coercion regression for this project.
+- Removed: Stopped accepting the legacy `literal:` URL wrapper in route validation and local helper paths.
+- Changed: Simplified local and Replicate deployment docs back down to the stock `cog push` and raw `https://connect.comma.ai/...` flow.
+
 ## 2026-03-26
 
 - Added: Documented the upstream openpilot and Cog modifications that the project depends on.

@@ -4,10 +4,6 @@ from typing import Any
 
 from urllib.parse import urlparse
 
-
-LITERAL_URL_PREFIX = "literal:"
-
-
 def _coerce_route_text(route_or_url: Any) -> str:
     if isinstance(route_or_url, str):
         return route_or_url
@@ -18,13 +14,6 @@ def _coerce_route_text(route_or_url: Any) -> str:
     if isinstance(route_or_url, os.PathLike):
         return os.fspath(route_or_url)
     return str(route_or_url)
-
-
-def _normalize_route_text(route_or_url: Any) -> str:
-    route_or_url = _coerce_route_text(route_or_url)
-    if route_or_url.startswith(LITERAL_URL_PREFIX):
-        return route_or_url[len(LITERAL_URL_PREFIX) :]
-    return route_or_url
 
 # Dataclass for a parsed route or URL
 
@@ -37,7 +26,7 @@ class ParsedRouteOrURL:
 
 
 def validate_connect_url(route_or_url: str | os.PathLike[str], *, error_message: str | None = None) -> str:
-    route_or_url = _normalize_route_text(route_or_url)
+    route_or_url = _coerce_route_text(route_or_url)
     parsed = urlparse(route_or_url)
     if parsed.scheme != "https" or parsed.hostname != "connect.comma.ai":
         raise ValueError(error_message or "Expected a full https://connect.comma.ai/... clip URL.")
@@ -51,7 +40,7 @@ def parseRouteRelativeUrl(
     route_or_url: str | os.PathLike[str],
     jwt_token: str = None,
 ) -> ParsedRouteOrURL:
-    route_or_url = _normalize_route_text(route_or_url)
+    route_or_url = _coerce_route_text(route_or_url)
     # Parse the URL
     parsed_url = urlparse(route_or_url)
     # Check the hostname
@@ -93,7 +82,7 @@ def parseAbsoluteTimeUrl(
     length_seconds: int,
     jwt_token: str = None,
 ) -> ParsedRouteOrURL:
-    route_or_url = _normalize_route_text(route_or_url)
+    route_or_url = _coerce_route_text(route_or_url)
     # Check if the URL is like this:
     # https://connect.comma.ai/a2a0ccea32023010/1690488084000/1690488085000
     # * Hostname is connect.comma.ai
@@ -251,7 +240,7 @@ def parseRouteOrUrl(
     length_seconds: int,
     jwt_token: str = None,
 ) -> ParsedRouteOrURL:
-    route_or_url = _normalize_route_text(route_or_url)
+    route_or_url = _coerce_route_text(route_or_url)
     # if the route_or_url is a route, just return it
     # Assume that a route is a string with a pipe in it
     if "|" in route_or_url:

@@ -75,12 +75,7 @@ def test_build_input_allows_driver_debug_render_type() -> None:
     assert payload["renderType"] == "driver-debug"
 
 
-def test_encode_replicate_route_input_preserves_existing_literal_prefix() -> None:
-    url = "literal:https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496"
-    assert replicate_run.encode_replicate_route_input(url) == url.removeprefix("literal:")
-
-
-def test_encode_replicate_route_input_wraps_plain_connect_url() -> None:
+def test_encode_replicate_route_input_preserves_plain_connect_url() -> None:
     url = "https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496"
     assert replicate_run.encode_replicate_route_input(url) == url
 
@@ -109,11 +104,6 @@ def test_validate_connect_url_rejects_non_connect_hosts() -> None:
 def test_route_validator_accepts_connect_url() -> None:
     url = "https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496"
     assert route_inputs.validate_connect_url(url) == url
-
-
-def test_route_validator_accepts_literal_prefixed_connect_url() -> None:
-    url = "literal:https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496"
-    assert route_inputs.validate_connect_url(url) == url.removeprefix("literal:")
 
 
 def test_route_validator_prefers_source_url_over_rendered_path() -> None:

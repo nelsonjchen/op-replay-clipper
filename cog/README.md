@@ -3,8 +3,8 @@
 This folder generates Cog build artifacts for running the clipper on Replicate or with local `cog build`.
 
 Current upstream Cog already sets `NVIDIA_DRIVER_CAPABILITIES=all`, so a custom
-Cog fork is no longer required for GPU visibility. We still keep a patched
-runtime builder here for the stock Cog `0.17` URL-coercion regression.
+Cog fork is no longer required for GPU visibility. Cog `0.17.1` also fixed the
+upstream URL-coercion regression for this project's plain `route: str` input.
 
 `render_artifacts.sh` is still needed here for two repo-specific reasons:
 
@@ -20,18 +20,3 @@ For the broader runtime-patching background, see
 and
 [`../docs/upstream-modifications.md`](../docs/upstream-modifications.md).
 For the higher-level project history, see [`../CHANGELOG.md`](../CHANGELOG.md).
-
-## Patched Cog 0.17 runtime
-
-This repo also contains a reproducible builder for the `cog 0.17` URL-coercion regression fix in [`runtime_patch/`](./runtime_patch).
-
-Use that folder when you need to rebuild the patched Linux `coglet` runtime
-wheel and matching SDK wheel for Replicate pushes from macOS or any other
-non-Linux development machine.
-
-That patch matters for this project because:
-
-1. The Replicate model should accept a normal raw `https://connect.comma.ai/...` route URL.
-2. Stock local `cog predict` on Cog `0.17` still coerces raw URL-like `str`
-   inputs too early, so unpatched local testing may still need the
-   `literal:https://...` workaround.

@@ -13,12 +13,12 @@ set of behaviors that have actually been risky in practice:
 - 360 rendering on newer mici routes
 - 360 forward-upon-wide rendering on newer mici routes
 - JWT-backed UI rendering on a public route
-- the patched Cog runtime assumptions that make hosted raw URLs work
 
 ## Preconditions
 
 - Have a fresh Replicate staging version built from the current branch.
 - Have a valid `REPLICATE_API_TOKEN` in `.env` or your shell.
+- Use stock Cog `0.17.1` or newer for any local `cog predict` verification.
 - Use a public route for the JWT smoke unless you are explicitly checking a
   private route.
 - Use the same route for the UI and non-UI smokes unless a specific route is
@@ -159,8 +159,6 @@ Pass criteria:
 
 These are not separate smokes, but they should be true when the matrix passes.
 
-- The hosted Replicate model version was built with the patched Cog 0.17
-  runtime, not stock unpatched Cog 0.17.
 - The runtime still accepts plain raw `https://connect.comma.ai/...` URLs on
   the hosted surface.
 - BIG UI unit detection should come from the logged route `IsMetric` param
@@ -179,8 +177,7 @@ Do not promote staging to production until all of the following are true:
 - 360 forward-upon-wide smoke passes
 - JWT-on-public-route smoke passes
 - `ffprobe` matches the expected codec and dimensions for the generated clips
-- the run used the patched Cog runtime assumptions, not a stock `cog predict`
-  fallback path
+- the run used the normal stock Cog raw-URL path, not any legacy URL wrapper
 
 If any one of these fails, stop and fix the regression before promoting.
 
