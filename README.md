@@ -259,7 +259,7 @@ Notes:
 * `driver-debug` is an openpilot-backed render type like `ui` and `ui-alt`, but it only needs `dcameras` and `logs`
 * `driver` and `driver-debug` can optionally anonymize the backing driver video with `--driver-face-anonymization facefusion`
 * That anonymization path reuses the repo-owned DM face track, swaps the prepared face crop with FaceFusion, then composites the swapped crop back into the full driver backing video before the final render
-* Every anonymized output now burns a bright `DRIVER FACE ANONYMIZED` banner into the driver video so the downstream clip is clearly marked
+* Every anonymized output now burns a bright `FACE ANONYMIZED` banner into the driver video so the downstream clip is clearly marked
 * `--driver-face-preset fast` is the practical default for short clips, while `quality` trades more time for cleaner masking and higher-resolution swapping
 * `--driver-face-selection auto_best_match` runs a short same-tone donor search against the donor bank, writes a `<output>.driver-face-selection.json` sidecar report, then uses the selected donor for the final swap
 * `driver` anonymization also needs `logs`, because the face crop is driven by driver-monitoring telemetry rather than a fresh detector pass

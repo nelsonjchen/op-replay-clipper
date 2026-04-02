@@ -125,6 +125,12 @@ def _presentation_is_compatible(source_presentation: str, donor_presentation: st
     return donor_presentation == source_presentation
 
 
+def _has_facial_hair(label: str) -> bool | None:
+    if label == UNKNOWN:
+        return None
+    return label != "none"
+
+
 def _beard_rank(label: str) -> int:
     return {
         "none": 0,
@@ -133,6 +139,16 @@ def _beard_rank(label: str) -> int:
         "full_beard": 3,
         UNKNOWN: -1,
     }.get(label, -1)
+
+
+def _facial_hair_change_score(source_facial_hair: str, donor_facial_hair: str) -> float:
+    source_has_hair = _has_facial_hair(source_facial_hair)
+    donor_has_hair = _has_facial_hair(donor_facial_hair)
+    if source_has_hair is None or donor_has_hair is None:
+        return 0.0
+    if source_has_hair == donor_has_hair:
+        return -0.18
+    return 0.18
 
 
 def _infer_facial_hair_label(frame: Any, bounding_box: list[float]) -> str:
@@ -274,6 +290,7 @@ def _select_prefiltered_candidates(
     source_lab: list[float],
     source_presentation: str,
     source_facial_hair: str,
+    source_glasses: str,
     top_k: int,
     tone_margin_lab: float,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -296,6 +313,20 @@ def _select_prefiltered_candidates(
     if not compatible:
         raise RuntimeError("No presentation-compatible donors are available in the bank.")
 
+    if source_glasses != UNKNOWN:
+        same_glasses = [row for row in compatible if row.get("glasses", UNKNOWN) == source_glasses]
+        if same_glasses:
+            for donor in compatible:
+                if donor not in same_glasses:
+                    incompatible.append(
+                        {
+                            "donor_id": donor["donor_id"],
+                            "reason": "glasses_mismatch",
+                            "glasses": donor.get("glasses", UNKNOWN),
+                        }
+                    )
+            compatible = same_glasses
+
     for donor in compatible:
         donor["donor_tone_distance_lab"] = _lab_distance(source_lab, list(donor.get("tone_lab") or source_lab))
     compatible.sort(key=lambda row: float(row["donor_tone_distance_lab"]))
@@ -305,15 +336,25 @@ def _select_prefiltered_candidates(
     if not tone_filtered:
         tone_filtered = compatible[: max(1, top_k)]
 
-    selected = tone_filtered[: max(1, top_k)]
-    if source_facial_hair != UNKNOWN:
-        different_hair = [
-            row
-            for row in tone_filtered
-            if row.get("facial_hair", UNKNOWN) not in {UNKNOWN, source_facial_hair}
-        ]
-        if different_hair and all(row.get("facial_hair", UNKNOWN) == source_facial_hair for row in selected):
-            selected = selected[:-1] + [different_hair[0]]
+    selected_pool = tone_filtered
+    hair_strategy = "tone_only"
+    source_has_hair = _has_facial_hair(source_facial_hair)
+    if source_has_hair is not None:
+        if source_has_hair:
+            clean_shaven = [row for row in tone_filtered if str(row.get("facial_hair", UNKNOWN)) == "none"]
+            if clean_shaven:
+                selected_pool = clean_shaven
+                hair_strategy = "prefer_clean_shaven_extreme"
+        else:
+            hairy = [row for row in tone_filtered if _has_facial_hair(str(row.get("facial_hair", UNKNOWN))) is True]
+            if hairy:
+                max_rank = max(_beard_rank(str(row.get("facial_hair", UNKNOWN))) for row in hairy)
+                selected_pool = [
+                    row for row in hairy if _beard_rank(str(row.get("facial_hair", UNKNOWN))) == max_rank
+                ]
+                hair_strategy = "prefer_most_facial_hair_extreme"
+
+    selected = selected_pool[: max(1, top_k)]
 
     deduped: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
@@ -330,6 +371,8 @@ def _select_prefiltered_candidates(
         "excluded": incompatible,
         "compatible_count": len(compatible),
         "tone_filtered_count": len(tone_filtered),
+        "hair_strategy": hair_strategy,
+        "selected_pool_count": len(selected_pool),
     }
 
 
@@ -362,15 +405,10 @@ def _score_candidate(
     }
 
     if source_facial_hair != UNKNOWN and donor_facial_hair != UNKNOWN:
-        if donor_facial_hair == source_facial_hair:
-            components["facial_hair_bonus"] -= 0.12
-        else:
-            source_rank = _beard_rank(source_facial_hair)
-            donor_rank = _beard_rank(donor_facial_hair)
-            components["facial_hair_bonus"] += 0.12 + (0.04 * min(2, abs(source_rank - donor_rank)))
+        components["facial_hair_bonus"] += _facial_hair_change_score(source_facial_hair, donor_facial_hair)
 
     if source_glasses != UNKNOWN and donor_glasses != UNKNOWN and source_glasses != donor_glasses:
-        components["glasses_penalty"] -= 0.05
+        components["glasses_penalty"] -= 0.2
 
     score = sum(components.values())
     return score, components
@@ -692,6 +730,7 @@ def main(argv: list[str] | None = None) -> int:
         source_lab=list(source_attributes["tone_lab"]),
         source_presentation=str(source_attributes["presentation"]),
         source_facial_hair=str(source_attributes["facial_hair"]),
+        source_glasses=str(source_attributes["glasses"]),
         top_k=max(1, args.top_k),
         tone_margin_lab=float(args.tone_margin_lab),
     )

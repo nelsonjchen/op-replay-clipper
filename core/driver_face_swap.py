@@ -460,7 +460,7 @@ def render_anonymized_driver_backing_video(
             "--feather-ratio",
             "0.18",
             "--banner-text",
-            "DRIVER FACE ANONYMIZED",
+            "FACE ANONYMIZED",
         ]
         subprocess.run(reintegrate_cmd, check=True)
         reintegrate_seconds = time.perf_counter() - reintegrate_started

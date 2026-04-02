@@ -16,7 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mask-box", choices=("padded_box", "raw_box", "crop_rect"), default="padded_box")
     parser.add_argument("--mask-expand", type=float, default=1.12)
     parser.add_argument("--feather-ratio", type=float, default=0.18)
-    parser.add_argument("--banner-text", default="DRIVER FACE ANONYMIZED")
+    parser.add_argument("--banner-text", default="FACE ANONYMIZED")
     return parser
 
 
