@@ -73,6 +73,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optionally replace the face in the backing driver video before rendering `driver` or `driver-debug`.",
     )
     parser.add_argument(
+        "--driver-face-profile",
+        choices=[
+            "driver_unchanged_passenger_pixelize",
+            "driver_face_swap_passenger_face_swap",
+            "driver_face_swap_passenger_pixelize",
+        ],
+        default="driver_face_swap_passenger_face_swap",
+        help="Seat strategy when driver face anonymization is enabled.",
+    )
+    parser.add_argument(
         "--driver-face-source-image",
         default=default_driver_face_source_image(),
         help="Donor/source portrait for driver face anonymization.",
@@ -177,6 +187,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 headless=not args.windowed,
                 skip_download=args.skip_download,
                 driver_face_anonymization=args.driver_face_anonymization,
+                driver_face_profile=args.driver_face_profile,
                 driver_face_source_image=args.driver_face_source_image,
                 driver_face_preset=args.driver_face_preset,
                 facefusion_root=args.facefusion_root,

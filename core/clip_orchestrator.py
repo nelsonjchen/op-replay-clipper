@@ -7,6 +7,7 @@ from typing import Literal
 from core import route_downloader, route_inputs
 from core.driver_face_swap import (
     DriverFaceAnonymizationMode,
+    DriverFaceAnonymizationProfile,
     DriverFaceSelectionMode,
     DriverFaceSwapOptions,
     DriverFaceSwapPreset,
@@ -74,6 +75,7 @@ class ClipRequest:
     headless: bool = True
     skip_download: bool = False
     driver_face_anonymization: DriverFaceAnonymizationMode = "none"
+    driver_face_profile: DriverFaceAnonymizationProfile = "driver_face_swap_passenger_face_swap"
     driver_face_source_image: str = field(default_factory=default_driver_face_source_image)
     driver_face_preset: DriverFaceSwapPreset = "fast"
     facefusion_root: str = field(default_factory=default_facefusion_root)
@@ -182,6 +184,7 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
 
     driver_face_swap = DriverFaceSwapOptions(
         mode=request.driver_face_anonymization,
+        profile=request.driver_face_profile,
         source_image=request.driver_face_source_image,
         facefusion_root=request.facefusion_root,
         facefusion_model=request.facefusion_model,

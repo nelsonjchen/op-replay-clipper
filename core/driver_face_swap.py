@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import json
 import bz2
+import hashlib
+import shutil
 import subprocess
 import tempfile
 import time
@@ -14,18 +16,26 @@ from renderers import video_renderer
 
 
 DriverFaceAnonymizationMode = Literal["none", "facefusion"]
+DriverFaceAnonymizationProfile = Literal[
+    "driver_unchanged_passenger_pixelize",
+    "driver_face_swap_passenger_face_swap",
+    "driver_face_swap_passenger_pixelize",
+]
 DriverFaceSwapPreset = Literal["fast", "quality"]
 DriverFaceSelectionMode = Literal["manual", "auto_best_match"]
+SeatAnonymizationMode = Literal["none", "facefusion", "pixelize"]
 
 DEFAULT_FACEFUSION_ROOT = "./.cache/facefusion"
 DEFAULT_DRIVER_FACE_SOURCE_IMAGE = "./assets/driver-face-donors/generic-donor-clean-shaven.jpg"
 DEFAULT_FACEFUSION_MODEL = "hyperswap_1b_256"
 DEFAULT_DRIVER_FACE_DONOR_BANK_DIR = "./assets/driver-face-donors"
+BACKING_CACHE_SCHEMA_VERSION = "driver-face-cache-v2"
 
 
 @dataclass(frozen=True)
 class DriverFaceSwapOptions:
     mode: DriverFaceAnonymizationMode = "none"
+    profile: DriverFaceAnonymizationProfile = "driver_face_swap_passenger_face_swap"
     source_image: str = DEFAULT_DRIVER_FACE_SOURCE_IMAGE
     facefusion_root: str = DEFAULT_FACEFUSION_ROOT
     facefusion_model: str = DEFAULT_FACEFUSION_MODEL
@@ -37,6 +47,7 @@ class DriverFaceSwapOptions:
 @dataclass(frozen=True)
 class PreparedSeatArtifacts:
     seat_side: Literal["left", "right"]
+    seat_role: Literal["driver", "passenger"]
     crop_clip: Path
     track_metadata: Path
 
@@ -59,6 +70,94 @@ def default_driver_face_donor_bank_dir() -> str:
 
 def has_driver_face_anonymization(opts: DriverFaceSwapOptions) -> bool:
     return opts.mode != "none"
+
+
+def _seat_modes_for_profile(profile: DriverFaceAnonymizationProfile) -> tuple[SeatAnonymizationMode, SeatAnonymizationMode]:
+    if profile == "driver_unchanged_passenger_pixelize":
+        return "none", "pixelize"
+    if profile == "driver_face_swap_passenger_pixelize":
+        return "facefusion", "pixelize"
+    return "facefusion", "facefusion"
+
+
+def _path_fingerprint(path: Path) -> dict[str, Any]:
+    resolved = path.expanduser().resolve()
+    payload: dict[str, Any] = {"path": str(resolved)}
+    if resolved.exists():
+        stat = resolved.stat()
+        payload["size"] = stat.st_size
+        payload["mtime_ns"] = stat.st_mtime_ns
+    return payload
+
+
+def _cache_paths(
+    *,
+    data_dir: Path,
+    route: str,
+    start_seconds: int,
+    length_seconds: int,
+    options: DriverFaceSwapOptions,
+) -> tuple[Path, Path]:
+    cache_root = data_dir.parent / "driver_face_swap_cache"
+    cache_root.mkdir(parents=True, exist_ok=True)
+
+    donor_manifest = Path(options.donor_bank_dir).expanduser().resolve() / "manifest.json"
+    cache_descriptor = {
+        "schema": BACKING_CACHE_SCHEMA_VERSION,
+        "route": route,
+        "start_seconds": start_seconds,
+        "length_seconds": length_seconds,
+        "mode": options.mode,
+        "profile": options.profile,
+        "selection_mode": options.selection_mode,
+        "preset": options.preset,
+        "facefusion_model": options.facefusion_model,
+        "source_image": _path_fingerprint(Path(options.source_image)),
+        "donor_manifest": _path_fingerprint(donor_manifest),
+    }
+    cache_key = hashlib.sha256(json.dumps(cache_descriptor, sort_keys=True).encode("utf-8")).hexdigest()[:24]
+    route_slug = route.replace("|", "__").replace("/", "_")
+    cache_video = cache_root / f"{route_slug}-{start_seconds}-{length_seconds}-{cache_key}.mp4"
+    cache_report = cache_root / f"{route_slug}-{start_seconds}-{length_seconds}-{cache_key}.driver-face-selection.json"
+    return cache_video, cache_report
+
+
+def _seat_mode_for_role(
+    options: DriverFaceSwapOptions,
+    seat_role: Literal["driver", "passenger"],
+) -> SeatAnonymizationMode:
+    if not has_driver_face_anonymization(options):
+        return "none"
+    driver_mode, passenger_mode = _seat_modes_for_profile(options.profile)
+    return driver_mode if seat_role == "driver" else passenger_mode
+
+
+def _banner_text_for_active_seats(
+    active_seats: list[PreparedSeatArtifacts],
+    options: DriverFaceSwapOptions,
+) -> str:
+    active_driver_mode: SeatAnonymizationMode | None = None
+    active_passenger_mode: SeatAnonymizationMode | None = None
+    for artifact in active_seats:
+        seat_mode = _seat_mode_for_role(options, artifact.seat_role)
+        if artifact.seat_role == "driver":
+            active_driver_mode = seat_mode
+        else:
+            active_passenger_mode = seat_mode
+
+    if active_driver_mode == "facefusion" and active_passenger_mode == "facefusion":
+        return "DRIVER/PASSENGER FACE SWAPPED"
+    if active_driver_mode == "facefusion" and active_passenger_mode == "pixelize":
+        return "DRIVER SWAPPED, PASSENGER PIXELIZED"
+    if active_driver_mode == "none" and active_passenger_mode == "pixelize":
+        return "PASSENGER PIXELIZED"
+    if active_driver_mode == "facefusion":
+        return "DRIVER FACE SWAPPED"
+    if active_passenger_mode == "facefusion":
+        return "PASSENGER FACE SWAPPED"
+    if active_passenger_mode == "pixelize":
+        return "PASSENGER PIXELIZED"
+    return "FACE ANONYMIZED"
 
 
 def _facefusion_swap_command(
@@ -192,6 +291,54 @@ def _run_facefusion_swap(
     env = dict(os.environ)
     env["SYSTEM_VERSION_COMPAT"] = "0"
     subprocess.run(command, cwd=facefusion_root, env=env, check=True)
+    return output_path
+
+
+def _run_pixelize_swap(
+    *,
+    target_path: Path,
+    output_path: Path,
+) -> Path:
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "json",
+            str(target_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    payload = json.loads(probe.stdout)
+    stream = payload["streams"][0]
+    width = int(stream["width"])
+    height = int(stream["height"])
+    shrink_w = max(18, width // 14)
+    shrink_h = max(18, height // 14)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(target_path),
+            "-vf",
+            f"scale={shrink_w}:{shrink_h}:flags=neighbor,scale={width}:{height}:flags=neighbor",
+            "-an",
+            "-c:v",
+            "mpeg4",
+            str(output_path),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     return output_path
 
 
@@ -387,14 +534,33 @@ def _prepare_face_crop_artifacts(
             acceleration,
         ]
         subprocess.run(worker_cmd, check=True)
+        seat_role = _seat_role_from_manifest(track_metadata, seat_side=seat_side)
         seat_artifacts.append(
             PreparedSeatArtifacts(
                 seat_side=seat_side,
+                seat_role=seat_role,
                 crop_clip=crop_clip,
                 track_metadata=track_metadata,
             )
         )
     return source_clip, seat_artifacts
+
+
+def _seat_role_from_manifest(
+    track_metadata: Path,
+    *,
+    seat_side: Literal["left", "right"],
+) -> Literal["driver", "passenger"]:
+    manifest = json.loads(track_metadata.read_text())
+    selected_side = None
+    for frame in manifest.get("frames", []):
+        frame_selected_side = frame.get("selected_side")
+        if frame_selected_side in {"left", "right"}:
+            selected_side = frame_selected_side
+            break
+    if selected_side is None:
+        selected_side = "left"
+    return "driver" if seat_side == selected_side else "passenger"
 
 
 def _manifest_has_active_crop(track_metadata: Path) -> bool:
@@ -426,6 +592,25 @@ def render_anonymized_driver_backing_video(
     data_root = Path(data_dir).expanduser().resolve()
     openpilot_root = Path(openpilot_dir).expanduser().resolve()
     backing_target_mb = max(12, length_seconds)
+    selection_report_path = output.with_name(f"{output.stem}.driver-face-selection.json")
+    cache_video_path, cache_report_path = _cache_paths(
+        data_dir=data_root,
+        route=route,
+        start_seconds=start_seconds,
+        length_seconds=length_seconds,
+        options=options,
+    )
+
+    if cache_video_path.exists():
+        shutil.copy2(cache_video_path, output)
+        if cache_report_path.exists():
+            if selection_report_path.exists():
+                selection_report_path.unlink()
+            shutil.copy2(cache_report_path, selection_report_path)
+        elif selection_report_path.exists():
+            selection_report_path.unlink()
+        print(f"Reusing cached driver face anonymization backing video: {cache_video_path}")
+        return output
 
     with tempfile.TemporaryDirectory(prefix="driver-face-swap-") as temp_dir:
         overall_started = time.perf_counter()
@@ -442,7 +627,6 @@ def render_anonymized_driver_backing_video(
             backing_target_mb=backing_target_mb,
             jwt_token=jwt_token,
         )
-        selection_report_path = output.with_name(f"{output.stem}.driver-face-selection.json")
         selection_report: dict[str, Any] = {
             "mode": options.mode,
             "selection_mode": options.selection_mode,
@@ -460,7 +644,9 @@ def render_anonymized_driver_backing_video(
         active_seats = [artifact for artifact in seat_artifacts if _manifest_has_active_crop(artifact.track_metadata)]
         if not active_seats:
             output.write_bytes(source_clip.read_bytes())
+            shutil.copy2(output, cache_video_path)
             return output
+        banner_text = _banner_text_for_active_seats(active_seats, options)
 
         facefusion_python = Path(options.facefusion_root).expanduser().resolve() / ".venv/bin/python"
         if not facefusion_python.exists():
@@ -471,13 +657,16 @@ def render_anonymized_driver_backing_video(
 
         for seat_index, artifact in enumerate(active_seats):
             seat_key = artifact.seat_side
+            seat_mode = _seat_mode_for_role(options, artifact.seat_role)
             seat_report: dict[str, Any] = {
                 "seat_side": seat_key,
+                "seat_role": artifact.seat_role,
+                "seat_mode": seat_mode,
                 "track_metadata": str(artifact.track_metadata),
                 "crop_clip": str(artifact.crop_clip),
             }
             selected_source_image = Path(options.source_image).expanduser().resolve()
-            if options.selection_mode == "auto_best_match":
+            if seat_mode == "facefusion" and options.selection_mode == "auto_best_match":
                 selection_started = time.perf_counter()
                 seat_report_path = sample_dir / f"{seat_key}-driver-face-selection.json"
                 selected_source_image, _selection_report = _auto_select_source_image(
@@ -487,27 +676,36 @@ def render_anonymized_driver_backing_video(
                     options=options,
                     output_path=seat_report_path,
                 )
-                seat_report = json.loads(seat_report_path.read_text())
+                seat_report["selection"] = json.loads(seat_report_path.read_text())
                 seat_report.setdefault("timings", {})
                 seat_report["timings"]["selection_handoff_seconds"] = time.perf_counter() - selection_started
-            else:
+            elif seat_mode == "facefusion":
                 seat_report["selected_donor_image"] = str(selected_source_image)
 
             swap_started = time.perf_counter()
-            swapped_crop = _run_facefusion_swap(
-                working_dir=sample_dir / f"{seat_key}-facefusion",
-                target_path=artifact.crop_clip,
-                output_path=sample_dir / f"{seat_key}-facefusion-{options.preset}.mp4",
-                options=DriverFaceSwapOptions(
-                    mode=options.mode,
-                    source_image=str(selected_source_image),
-                    facefusion_root=options.facefusion_root,
-                    facefusion_model=options.facefusion_model,
-                    preset=options.preset,
-                    selection_mode=options.selection_mode,
-                    donor_bank_dir=options.donor_bank_dir,
-                ),
-            )
+            if seat_mode == "none":
+                swapped_crop = artifact.crop_clip
+            elif seat_mode == "pixelize":
+                swapped_crop = _run_pixelize_swap(
+                    target_path=artifact.crop_clip,
+                    output_path=sample_dir / f"{seat_key}-pixelized.mp4",
+                )
+            else:
+                swapped_crop = _run_facefusion_swap(
+                    working_dir=sample_dir / f"{seat_key}-facefusion",
+                    target_path=artifact.crop_clip,
+                    output_path=sample_dir / f"{seat_key}-facefusion-{options.preset}.mp4",
+                    options=DriverFaceSwapOptions(
+                        mode=options.mode,
+                        profile=options.profile,
+                        source_image=str(selected_source_image),
+                        facefusion_root=options.facefusion_root,
+                        facefusion_model=options.facefusion_model,
+                        preset=options.preset,
+                        selection_mode=options.selection_mode,
+                        donor_bank_dir=options.donor_bank_dir,
+                    ),
+                )
             seat_swap_seconds = time.perf_counter() - swap_started
             total_swap_seconds += seat_swap_seconds
 
@@ -533,7 +731,7 @@ def render_anonymized_driver_backing_video(
                 "--feather-ratio",
                 "0.18",
                 "--banner-text",
-                "FACE ANONYMIZED" if seat_index == len(active_seats) - 1 else "",
+                banner_text if seat_index == len(active_seats) - 1 else "",
             ]
             subprocess.run(reintegrate_cmd, check=True)
             seat_reintegrate_seconds = time.perf_counter() - reintegrate_started
@@ -544,7 +742,8 @@ def render_anonymized_driver_backing_video(
             assert isinstance(timings, dict)
             timings["final_video_swap_seconds"] = seat_swap_seconds
             timings["reintegrate_seconds"] = seat_reintegrate_seconds
-            seat_report["selected_donor_image"] = str(selected_source_image)
+            if seat_mode == "facefusion":
+                seat_report["selected_donor_image"] = str(selected_source_image)
             seat_report["output_video"] = str(current_source)
             selection_report["seats"][seat_key] = seat_report
 
@@ -556,6 +755,8 @@ def render_anonymized_driver_backing_video(
         timings["reintegrate_seconds"] = total_reintegrate_seconds
         timings["total_request_seconds"] = total_seconds
         selection_report_path.write_text(json.dumps(selection_report, indent=2, sort_keys=True) + "\n")
+        shutil.copy2(output, cache_video_path)
+        shutil.copy2(selection_report_path, cache_report_path)
         print(
             "Driver face anonymization timings: "
             f"seats={len(active_seats)}, "

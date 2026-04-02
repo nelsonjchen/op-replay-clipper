@@ -193,6 +193,8 @@ def test_driver_face_anonymization_flags_flow_into_clip_request(
             "--demo",
             "--driver-face-anonymization",
             "facefusion",
+            "--driver-face-profile",
+            "driver_face_swap_passenger_pixelize",
             "--driver-face-source-image",
             "/tmp/donor.png",
             "--driver-face-selection",
@@ -213,12 +215,47 @@ def test_driver_face_anonymization_flags_flow_into_clip_request(
     request = run_clip.call_args.args[0]
     assert request.render_type == "driver"
     assert request.driver_face_anonymization == "facefusion"
+    assert request.driver_face_profile == "driver_face_swap_passenger_pixelize"
     assert request.driver_face_source_image == "/tmp/donor.png"
     assert request.driver_face_selection == "auto_best_match"
     assert request.driver_face_donor_bank_dir == "/tmp/donor-bank"
     assert request.driver_face_preset == "quality"
     assert request.facefusion_root == "/tmp/facefusion"
     assert request.facefusion_model == "hyperswap_1b_256"
+
+
+def test_build_plan_preserves_driver_face_profile() -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type="driver",
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
+            driver_face_anonymization="facefusion",
+            driver_face_profile="driver_face_swap_passenger_pixelize",
+        )
+    )
+
+    assert plan.driver_face_swap.mode == "facefusion"
+    assert plan.driver_face_swap.profile == "driver_face_swap_passenger_pixelize"
+
+
+def test_build_plan_preserves_driver_unchanged_passenger_pixelize_profile() -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type="driver",
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
+            driver_face_anonymization="facefusion",
+            driver_face_profile="driver_unchanged_passenger_pixelize",
+        )
+    )
+
+    assert plan.driver_face_swap.mode == "facefusion"
+    assert plan.driver_face_swap.profile == "driver_unchanged_passenger_pixelize"
 
 
 def test_run_clip_uses_anonymized_backing_pipeline_for_driver(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
