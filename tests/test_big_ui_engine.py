@@ -790,7 +790,7 @@ def test_build_render_steps_tracks_matching_wide_camera_frames() -> None:
 
 
 def test_ui_environment_forces_scale_one() -> None:
-    env = render_runtime.configure_ui_environment({})
+    env = render_runtime.configure_ui_environment({}, acceleration="cpu")
     assert env["SCALE"] == "1"
 
 

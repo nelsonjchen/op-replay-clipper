@@ -38,6 +38,15 @@ jobs:
       - name: Sync locked environment
         run: uv sync --frozen --all-extras
 
+      - name: Install ffmpeg on macOS
+        if: runner.os == 'macOS'
+        run: |
+          if command -v ffmpeg >/dev/null 2>&1; then
+            echo "ffmpeg already available"
+          else
+            brew install ffmpeg
+          fi
+
       - name: Render Cog build artifacts
         run: ./cog/render_artifacts.sh
 
