@@ -14,12 +14,15 @@ from pathlib import Path
 
 @lru_cache(maxsize=1)
 def _ffmpeg_hwaccels() -> frozenset[str]:
-    proc = subprocess.run(
-        ["ffmpeg", "-hide_banner", "-hwaccels"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-hwaccels"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return frozenset()
     if proc.returncode != 0:
         return frozenset()
     hwaccels: set[str] = set()
