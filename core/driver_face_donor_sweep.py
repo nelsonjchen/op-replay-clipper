@@ -14,6 +14,8 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageOps
 
+from core.driver_face_swap import default_facefusion_output_video_encoder
+
 
 DEFAULT_NEGATIVE_PROMPT = (
     "different person, different skin tone, cartoon, illustration, painted, "
@@ -173,6 +175,7 @@ def _run_facefusion_fast_swap(
     target_video: Path,
     output_video: Path,
 ) -> None:
+    output_video_encoder = default_facefusion_output_video_encoder()
     jobs_path = output_video.parent / "facefusion-jobs"
     temp_path = output_video.parent / "facefusion-temp"
     jobs_path.mkdir(parents=True, exist_ok=True)
@@ -218,7 +221,7 @@ def _run_facefusion_fast_swap(
         "--system-memory-limit",
         "0",
         "--output-video-encoder",
-        "h264_videotoolbox",
+        output_video_encoder,
         "--output-video-quality",
         "75",
         "--output-video-preset",

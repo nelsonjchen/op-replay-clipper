@@ -8,7 +8,9 @@ import shutil
 import subprocess
 import tempfile
 import time
+import platform
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
@@ -29,7 +31,7 @@ DEFAULT_FACEFUSION_ROOT = "./.cache/facefusion"
 DEFAULT_DRIVER_FACE_SOURCE_IMAGE = "./assets/driver-face-donors/generic-donor-clean-shaven.jpg"
 DEFAULT_FACEFUSION_MODEL = "hyperswap_1b_256"
 DEFAULT_DRIVER_FACE_DONOR_BANK_DIR = "./assets/driver-face-donors"
-BACKING_CACHE_SCHEMA_VERSION = "driver-face-cache-v2"
+BACKING_CACHE_SCHEMA_VERSION = "driver-face-cache-v3"
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,59 @@ def default_facefusion_model() -> str:
 
 def default_driver_face_donor_bank_dir() -> str:
     return os.environ.get("DRIVER_FACE_DONOR_BANK_DIR", DEFAULT_DRIVER_FACE_DONOR_BANK_DIR)
+
+
+@lru_cache(maxsize=1)
+def _ffmpeg_encoder_names() -> frozenset[str]:
+    try:
+        completed = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return frozenset()
+
+    encoders: set[str] = set()
+    for line in completed.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0].startswith("V"):
+            encoders.add(parts[1])
+    return frozenset(encoders)
+
+
+def _ffmpeg_encoder_available(name: str) -> bool:
+    return name in _ffmpeg_encoder_names()
+
+
+def _has_nvidia() -> bool:
+    nvidia_smi = shutil.which("nvidia-smi")
+    if not nvidia_smi:
+        return False
+    return subprocess.run([nvidia_smi, "-L"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode == 0
+
+
+def default_facefusion_output_video_encoder() -> str:
+    override = os.environ.get("DRIVER_FACEFUSION_OUTPUT_VIDEO_ENCODER")
+    if override:
+        return override
+    if platform.system() == "Darwin" and _ffmpeg_encoder_available("hevc_videotoolbox"):
+        return "hevc_videotoolbox"
+    if _has_nvidia() and _ffmpeg_encoder_available("hevc_nvenc"):
+        return "hevc_nvenc"
+    return "libx264"
+
+
+def intermediate_video_encoder_args() -> list[str]:
+    encoder = default_facefusion_output_video_encoder()
+    if encoder.startswith("hevc_"):
+        return ["-c:v", encoder, "-vtag", "hvc1"]
+    return ["-c:v", encoder]
+
+
+def intermediate_video_file_format() -> Literal["h264", "hevc"]:
+    return "hevc" if default_facefusion_output_video_encoder().startswith("hevc_") else "h264"
 
 
 def has_driver_face_anonymization(opts: DriverFaceSwapOptions) -> bool:
@@ -169,6 +224,7 @@ def _facefusion_swap_command(
     model_name: str,
     preset: DriverFaceSwapPreset,
 ) -> list[str]:
+    output_video_encoder = default_facefusion_output_video_encoder()
     base_command = [
         str(facefusion_root / ".venv/bin/python"),
         str(facefusion_root / "facefusion.py"),
@@ -223,7 +279,7 @@ def _facefusion_swap_command(
             "--execution-thread-count",
             "1",
             "--output-video-encoder",
-            "h264_videotoolbox",
+            output_video_encoder,
             "--output-video-quality",
             "85",
             "--output-video-preset",
@@ -242,7 +298,7 @@ def _facefusion_swap_command(
         "--execution-thread-count",
         "4",
         "--output-video-encoder",
-        "h264_videotoolbox",
+        output_video_encoder,
         "--output-video-quality",
         "75",
         "--output-video-preset",
@@ -384,8 +440,7 @@ def _build_selection_clip(
         str(source_clip),
         "-t",
         f"{selection_seconds:.3f}",
-        "-c:v",
-        "h264_videotoolbox",
+        *intermediate_video_encoder_args(),
         "-an",
         str(output_path),
     ]
@@ -485,7 +540,7 @@ def _prepare_face_crop_artifacts(
             start_seconds=start_seconds,
             length_seconds=length_seconds,
             target_mb=backing_target_mb,
-            file_format="h264",
+            file_format=intermediate_video_file_format(),
             acceleration=acceleration,
             openpilot_dir=str(openpilot_dir),
             output_path=str(source_clip),

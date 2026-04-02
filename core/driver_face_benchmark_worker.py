@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from core.driver_face_swap import DriverFaceSwapOptions, _auto_select_source_image
+from core.driver_face_swap import DriverFaceSwapOptions, _auto_select_source_image, default_facefusion_output_video_encoder
 
 
 def parse_args() -> argparse.Namespace:
@@ -203,6 +203,7 @@ def _run_facefusion_crop_swap(
     model_name: str,
     preset: str = "quality",
 ) -> tuple[int, float]:
+    output_video_encoder = default_facefusion_output_video_encoder()
     facefusion_python = facefusion_root / ".venv/bin/python"
     facefusion_entry = facefusion_root / "facefusion.py"
     target_path = sample_dir / "face-crop.mp4"
@@ -275,7 +276,7 @@ def _run_facefusion_crop_swap(
                 "--execution-thread-count",
                 "4",
                 "--output-video-encoder",
-                "h264_videotoolbox",
+                output_video_encoder,
                 "--output-video-quality",
                 "75",
                 "--output-video-preset",
@@ -297,7 +298,7 @@ def _run_facefusion_crop_swap(
                 "--execution-thread-count",
                 "1",
                 "--output-video-encoder",
-                "h264_videotoolbox",
+                output_video_encoder,
                 "--output-video-quality",
                 "85",
                 "--output-video-preset",
