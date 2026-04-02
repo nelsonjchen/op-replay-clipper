@@ -5,7 +5,7 @@ import math
 import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from core.openpilot_integration import apply_openpilot_runtime_patches
 from renderers import driver_debug_renderer, video_renderer
@@ -60,6 +60,9 @@ class _FrameRect:
     y: float
     width: float
     height: float
+
+
+FaceTrackSeat = Literal["selected", "left", "right"]
 
 
 DEFAULT_DRIVER_FACE_EVAL_SEEDS: tuple[DriverFaceEvalSeed, ...] = (
@@ -231,7 +234,9 @@ def crop_nv12_frame(
     return bytes(output)
 
 
-def _selected_driver_data(state: dict[str, object]) -> tuple[object | None, bool, float | None]:
+def _driver_state_context(
+    state: dict[str, object],
+) -> tuple[object | None, object | None, object | None, bool, float | None, str]:
     dm_state_msg = state.get("driverMonitoringState")
     driver_state_msg = state.get("driverStateV2")
     dm_state = getattr(dm_state_msg, "driverMonitoringState", None) if dm_state_msg is not None else None
@@ -242,10 +247,17 @@ def _selected_driver_data(state: dict[str, object]) -> tuple[object | None, bool
     if dm_state is None and wheel_on_right_prob is not None:
         is_rhd = float(wheel_on_right_prob) > 0.5
 
-    driver_data = None
-    if driver_state is not None:
-        driver_data = getattr(driver_state, "rightDriverData", None) if is_rhd else getattr(driver_state, "leftDriverData", None)
-    return driver_data, is_rhd, float(wheel_on_right_prob) if wheel_on_right_prob is not None else None
+    left_driver = getattr(driver_state, "leftDriverData", None) if driver_state is not None else None
+    right_driver = getattr(driver_state, "rightDriverData", None) if driver_state is not None else None
+    selected_side = "right" if is_rhd else "left"
+    return (
+        left_driver,
+        right_driver,
+        dm_state,
+        is_rhd,
+        float(wheel_on_right_prob) if wheel_on_right_prob is not None else None,
+        selected_side,
+    )
 
 
 def build_face_track_manifest(
@@ -255,6 +267,7 @@ def build_face_track_manifest(
     frame_height: int,
     device_type: str,
     config: FaceTrackConfig,
+    seat_side: FaceTrackSeat = "selected",
 ) -> dict[str, Any]:
     frame_rect = _FrameRect(x=0.0, y=0.0, width=float(frame_width), height=float(frame_height))
     frame_rows: list[dict[str, Any]] = []
@@ -262,17 +275,21 @@ def build_face_track_manifest(
 
     for frame_index, step in enumerate(render_steps):
         telemetry = extract_driver_debug_telemetry(step.state)
-        driver_data, is_rhd, wheel_on_right_prob = _selected_driver_data(step.state)
+        left_driver_data, right_driver_data, dm_state, is_rhd, wheel_on_right_prob, selected_side = _driver_state_context(step.state)
+        if seat_side == "left":
+            driver_data = left_driver_data
+        elif seat_side == "right":
+            driver_data = right_driver_data
+        else:
+            driver_data = right_driver_data if is_rhd else left_driver_data
         raw_box = None
         if driver_data is not None:
             raw_box = compute_driver_face_box_rect(frame_rect, driver_data=driver_data, device_type=device_type)
 
-        face_prob = telemetry.face_prob if telemetry.face_prob is not None else 0.0
-        trusted = raw_box is not None and (
-            telemetry.face_detected
-            or face_prob >= config.minimum_face_prob
-            or frame_index == 0
-        )
+        explicit_side = selected_side if seat_side == "selected" else seat_side
+        face_prob = float(getattr(driver_data, "faceProb", 0.0) or 0.0) if driver_data is not None else 0.0
+        seat_face_detected = bool(getattr(dm_state, "faceDetected", False)) if seat_side == "selected" else raw_box is not None and face_prob > 0.0
+        trusted = raw_box is not None and (seat_face_detected or face_prob >= config.minimum_face_prob or frame_index == 0)
         padded_box = (
             expand_face_box(raw_box, frame_width=frame_width, frame_height=frame_height, config=config)
             if trusted and raw_box is not None
@@ -284,22 +301,25 @@ def build_face_track_manifest(
                 "frame_index": frame_index,
                 "route_seconds": round(float(step.route_seconds), 3),
                 "route_frame_id": int(step.route_frame_id),
-                "face_detected": bool(telemetry.face_detected),
+                "face_detected": seat_face_detected,
                 "face_prob": round(face_prob, 4),
+                "seat_side": explicit_side,
+                "is_selected_side": explicit_side == selected_side,
                 "selected_side": telemetry.selected_side,
+                "other_side": telemetry.other_side,
                 "is_rhd": bool(is_rhd),
                 "wheel_on_right_prob": round(wheel_on_right_prob, 4) if wheel_on_right_prob is not None else None,
                 "telemetry": {
-                    "left_eye_prob": telemetry.left_eye_prob,
-                    "right_eye_prob": telemetry.right_eye_prob,
-                    "left_blink_prob": telemetry.left_blink_prob,
-                    "right_blink_prob": telemetry.right_blink_prob,
-                    "sunglasses_prob": telemetry.sunglasses_prob,
-                    "phone_prob": telemetry.phone_prob,
-                    "face_orientation": list(telemetry.face_orientation),
-                    "face_position": list(telemetry.face_position),
-                    "face_orientation_std": list(telemetry.face_orientation_std),
-                    "face_position_std": list(telemetry.face_position_std),
+                    "left_eye_prob": float(getattr(driver_data, "leftEyeProb", 0.0)) if driver_data is not None else None,
+                    "right_eye_prob": float(getattr(driver_data, "rightEyeProb", 0.0)) if driver_data is not None else None,
+                    "left_blink_prob": float(getattr(driver_data, "leftBlinkProb", 0.0)) if driver_data is not None else None,
+                    "right_blink_prob": float(getattr(driver_data, "rightBlinkProb", 0.0)) if driver_data is not None else None,
+                    "sunglasses_prob": float(getattr(driver_data, "sunglassesProb", 0.0)) if driver_data is not None else None,
+                    "phone_prob": float(getattr(driver_data, "phoneProb", 0.0)) if driver_data is not None else None,
+                    "face_orientation": list(getattr(driver_data, "faceOrientation", []) or []),
+                    "face_position": list(getattr(driver_data, "facePosition", []) or []),
+                    "face_orientation_std": list(getattr(driver_data, "faceOrientationStd", []) or []),
+                    "face_position_std": list(getattr(driver_data, "facePositionStd", []) or []),
                 },
                 "raw_box": _box_dict(raw_box),
                 "padded_box": _box_dict(padded_box),
@@ -353,6 +373,7 @@ def build_face_track_manifest(
         "frame_width": frame_width,
         "frame_height": frame_height,
         "device_type": device_type,
+        "seat_side": seat_side,
         "framerate": FRAMERATE,
         "crop_side": crop_side,
         "output_resolution": config.output_resolution,

@@ -218,6 +218,16 @@ def _infer_glasses_label(frame: Any, bounding_box: list[float]) -> str:
     return UNKNOWN
 
 
+def _normalize_presentation_frame(frame: Any) -> Any:
+    import cv2
+
+    lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+    l_chan, a_chan, b_chan = cv2.split(lab)
+    l_chan = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(l_chan)
+    merged = cv2.merge((l_chan, a_chan, b_chan))
+    return cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
+
+
 def _load_track(path: Path | None) -> dict[str, Any]:
     if path is None or not path.exists():
         return {"frames": []}
@@ -555,6 +565,8 @@ def _load_source_snapshots(
         face = _extract_primary_face(frame, runtime=runtime)
         if face is None:
             continue
+        presentation_frame = _normalize_presentation_frame(frame)
+        presentation_face = _extract_primary_face(presentation_frame, runtime=runtime)
         snapshots.append(
             {
                 "frame_index": frame_index,
@@ -563,7 +575,7 @@ def _load_source_snapshots(
                 "detector_score": float(face.score_set.get("detector", 0.0)),
                 "bounding_box": [float(value) for value in face.bounding_box.tolist()],
                 "tone_lab": _mean_lab_for_bounding_box(frame, face.bounding_box.tolist()),
-                "presentation": _presentation_from_gender(getattr(face, "gender", None)),
+                "presentation": _presentation_from_gender(getattr(presentation_face or face, "gender", None)),
                 "facial_hair": _infer_facial_hair_label(frame, face.bounding_box.tolist()),
                 "glasses": _infer_glasses_label(frame, face.bounding_box.tolist()),
                 "track_face_prob": float(frames[frame_index].get("face_prob", 0.0) or 0.0) if 0 <= frame_index < len(frames) else 0.0,

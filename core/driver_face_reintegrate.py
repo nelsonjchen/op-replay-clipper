@@ -11,6 +11,8 @@ import numpy as np
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Composite a swapped face-crop video back into the full driver clip.")
     parser.add_argument("--sample-dir", required=True)
+    parser.add_argument("--source-video")
+    parser.add_argument("--track-metadata")
     parser.add_argument("--swapped-crop", required=True)
     parser.add_argument("--output-path", required=True)
     parser.add_argument("--mask-box", choices=("padded_box", "raw_box", "crop_rect"), default="padded_box")
@@ -113,6 +115,8 @@ def _draw_banner(frame, text: str) -> None:
 def composite_sample(
     *,
     sample_dir: Path,
+    source_video_path: Path | None,
+    track_metadata_path: Path | None,
     swapped_crop_path: Path,
     output_path: Path,
     mask_box: str,
@@ -120,8 +124,8 @@ def composite_sample(
     feather_ratio: float,
     banner_text: str,
 ) -> Path:
-    track_path = sample_dir / "face-track.json"
-    source_path = sample_dir / "driver-source.mp4"
+    track_path = track_metadata_path if track_metadata_path is not None else sample_dir / "face-track.json"
+    source_path = source_video_path if source_video_path is not None else sample_dir / "driver-source.mp4"
     manifest = json.loads(track_path.read_text())
     frame_rows = list(manifest["frames"])
 
@@ -187,6 +191,8 @@ def main() -> int:
     args = parser.parse_args()
     composite_sample(
         sample_dir=Path(args.sample_dir).resolve(),
+        source_video_path=Path(args.source_video).resolve() if args.source_video else None,
+        track_metadata_path=Path(args.track_metadata).resolve() if args.track_metadata else None,
         swapped_crop_path=Path(args.swapped_crop).resolve(),
         output_path=Path(args.output_path).resolve(),
         mask_box=args.mask_box,

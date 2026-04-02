@@ -44,6 +44,15 @@
       "label": "Glasses",
       "presentation": "masc",
       "tone_lab": [143.75, 134.32, 138.87]
+    },
+    {
+      "facial_hair": "none",
+      "glasses": "no",
+      "id": "generic-donor-fem-clean-shaven",
+      "image": "generic-donor-fem-clean-shaven.jpg",
+      "label": "Feminine Clean Shaven",
+      "presentation": "fem",
+      "tone_lab": [116.53, 142.12, 142.60]
     }
   ]
 }

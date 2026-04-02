@@ -8,7 +8,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from renderers import video_renderer
 
@@ -32,6 +32,13 @@ class DriverFaceSwapOptions:
     preset: DriverFaceSwapPreset = "fast"
     selection_mode: DriverFaceSelectionMode = "manual"
     donor_bank_dir: str = DEFAULT_DRIVER_FACE_DONOR_BANK_DIR
+
+
+@dataclass(frozen=True)
+class PreparedSeatArtifacts:
+    seat_side: Literal["left", "right"]
+    crop_clip: Path
+    track_metadata: Path
 
 
 def default_facefusion_root() -> str:
@@ -148,13 +155,13 @@ def _facefusion_swap_command(
 
 def _run_facefusion_swap(
     *,
-    sample_dir: Path,
+    working_dir: Path,
+    target_path: Path,
     output_path: Path,
     options: DriverFaceSwapOptions,
 ) -> Path:
     facefusion_root = Path(options.facefusion_root).expanduser().resolve()
     source_image = Path(options.source_image).expanduser().resolve()
-    target_path = sample_dir / "face-crop.mp4"
     facefusion_python = facefusion_root / ".venv/bin/python"
     facefusion_entry = facefusion_root / "facefusion.py"
 
@@ -168,8 +175,8 @@ def _run_facefusion_swap(
         raise FileNotFoundError(f"Prepared driver face crop clip not found at {target_path}")
 
     output_path.unlink(missing_ok=True)
-    jobs_path = sample_dir / "facefusion-jobs"
-    temp_path = sample_dir / "facefusion-temp"
+    jobs_path = working_dir / "facefusion-jobs"
+    temp_path = working_dir / "facefusion-temp"
     jobs_path.mkdir(parents=True, exist_ok=True)
     temp_path.mkdir(parents=True, exist_ok=True)
     command = _facefusion_swap_command(
@@ -242,6 +249,8 @@ def _build_selection_clip(
 def _auto_select_source_image(
     *,
     sample_dir: Path,
+    target_video: Path,
+    track_metadata: Path,
     options: DriverFaceSwapOptions,
     output_path: Path,
 ) -> tuple[Path, Path]:
@@ -256,9 +265,9 @@ def _auto_select_source_image(
         str(facefusion_python),
         str((Path(__file__).resolve().parent / "driver_face_auto_select.py").resolve()),
         "--target-video",
-        str(sample_dir / "face-crop.mp4"),
+        str(target_video),
         "--track-metadata",
-        str(sample_dir / "face-track.json"),
+        str(track_metadata),
         "--donor-bank-dir",
         str(Path(options.donor_bank_dir).expanduser().resolve()),
         "--facefusion-root",
@@ -294,10 +303,8 @@ def _prepare_face_crop_artifacts(
     acceleration: video_renderer.AccelerationPolicy,
     backing_target_mb: int,
     jwt_token: str | None = None,
-) -> None:
+) -> tuple[Path, list[PreparedSeatArtifacts]]:
     source_clip = sample_dir / "driver-source.mp4"
-    crop_clip = sample_dir / "face-crop.mp4"
-    track_metadata = sample_dir / "face-track.json"
 
     from core import route_downloader
 
@@ -341,39 +348,61 @@ def _prepare_face_crop_artifacts(
     worker_python = openpilot_dir / ".venv/bin/python"
     if not worker_python.exists():
         raise FileNotFoundError(f"Openpilot worker interpreter not found at {worker_python}")
-    worker_cmd = [
-        str(worker_python),
-        str((Path(__file__).resolve().parent / "driver_face_eval_worker.py").resolve()),
-        "--route",
-        route,
-        "--route-or-url",
-        route_or_url,
-        "--start-seconds",
-        str(start_seconds),
-        "--length-seconds",
-        str(length_seconds),
-        "--data-dir",
-        str(data_dir),
-        "--openpilot-dir",
-        str(openpilot_dir),
-        "--sample-id",
-        "driver-face-swap",
-        "--category",
-        "driver face swap backing clip",
-        "--notes",
-        "Temporary backing clip artifacts for driver face anonymization.",
-        "--track-metadata",
-        str(track_metadata),
-        "--crop-clip",
-        str(crop_clip),
-        "--source-clip",
-        str(source_clip),
-        "--crop-target-mb",
-        str(max(4, min(12, backing_target_mb))),
-        "--accel",
-        acceleration,
-    ]
-    subprocess.run(worker_cmd, check=True)
+    seat_artifacts: list[PreparedSeatArtifacts] = []
+    for seat_side in ("left", "right"):
+        crop_clip = sample_dir / f"{seat_side}-face-crop.mp4"
+        track_metadata = sample_dir / f"{seat_side}-face-track.json"
+        worker_cmd = [
+            str(worker_python),
+            str((Path(__file__).resolve().parent / "driver_face_eval_worker.py").resolve()),
+            "--route",
+            route,
+            "--route-or-url",
+            route_or_url,
+            "--start-seconds",
+            str(start_seconds),
+            "--length-seconds",
+            str(length_seconds),
+            "--data-dir",
+            str(data_dir),
+            "--openpilot-dir",
+            str(openpilot_dir),
+            "--sample-id",
+            "driver-face-swap",
+            "--category",
+            "driver face swap backing clip",
+            "--notes",
+            "Temporary backing clip artifacts for driver face anonymization.",
+            "--track-metadata",
+            str(track_metadata),
+            "--crop-clip",
+            str(crop_clip),
+            "--source-clip",
+            str(source_clip),
+            "--seat-side",
+            seat_side,
+            "--crop-target-mb",
+            str(max(4, min(12, backing_target_mb))),
+            "--accel",
+            acceleration,
+        ]
+        subprocess.run(worker_cmd, check=True)
+        seat_artifacts.append(
+            PreparedSeatArtifacts(
+                seat_side=seat_side,
+                crop_clip=crop_clip,
+                track_metadata=track_metadata,
+            )
+        )
+    return source_clip, seat_artifacts
+
+
+def _manifest_has_active_crop(track_metadata: Path) -> bool:
+    manifest = json.loads(track_metadata.read_text())
+    for frame in manifest.get("frames", []):
+        if frame.get("crop_rect") is not None:
+            return True
+    return False
 
 
 def render_anonymized_driver_backing_video(
@@ -401,7 +430,7 @@ def render_anonymized_driver_backing_video(
     with tempfile.TemporaryDirectory(prefix="driver-face-swap-") as temp_dir:
         overall_started = time.perf_counter()
         sample_dir = Path(temp_dir).resolve()
-        _prepare_face_crop_artifacts(
+        source_clip, seat_artifacts = _prepare_face_crop_artifacts(
             sample_dir=sample_dir,
             route=route,
             route_or_url=route_or_url,
@@ -413,76 +442,125 @@ def render_anonymized_driver_backing_video(
             backing_target_mb=backing_target_mb,
             jwt_token=jwt_token,
         )
-        selected_source_image = Path(options.source_image).expanduser().resolve()
         selection_report_path = output.with_name(f"{output.stem}.driver-face-selection.json")
-        selection_report: dict[str, object] | None = None
-        if options.selection_mode == "auto_best_match":
-            selection_started = time.perf_counter()
-            selected_source_image, _selection_report = _auto_select_source_image(
-                sample_dir=sample_dir,
-                options=options,
-                output_path=selection_report_path,
-            )
-            selection_report = json.loads(selection_report_path.read_text())
-            selection_report.setdefault("timings", {})
-            selection_report["timings"]["selection_handoff_seconds"] = time.perf_counter() - selection_started
-        elif selection_report_path.exists():
+        selection_report: dict[str, Any] = {
+            "mode": options.mode,
+            "selection_mode": options.selection_mode,
+            "route": route,
+            "route_or_url": route_or_url,
+            "start_seconds": start_seconds,
+            "length_seconds": length_seconds,
+            "output_video": str(output),
+            "seats": {},
+            "timings": {},
+        }
+        if selection_report_path.exists():
             selection_report_path.unlink()
 
-        swap_started = time.perf_counter()
-        swapped_crop = _run_facefusion_swap(
-            sample_dir=sample_dir,
-            output_path=sample_dir / f"facefusion-{options.preset}.mp4",
-            options=DriverFaceSwapOptions(
-                mode=options.mode,
-                source_image=str(selected_source_image),
-                facefusion_root=options.facefusion_root,
-                facefusion_model=options.facefusion_model,
-                preset=options.preset,
-                selection_mode=options.selection_mode,
-                donor_bank_dir=options.donor_bank_dir,
-            ),
-        )
-        swap_seconds = time.perf_counter() - swap_started
+        active_seats = [artifact for artifact in seat_artifacts if _manifest_has_active_crop(artifact.track_metadata)]
+        if not active_seats:
+            output.write_bytes(source_clip.read_bytes())
+            return output
+
         facefusion_python = Path(options.facefusion_root).expanduser().resolve() / ".venv/bin/python"
         if not facefusion_python.exists():
             raise FileNotFoundError(f"FaceFusion interpreter not found at {facefusion_python}")
-        reintegrate_started = time.perf_counter()
-        reintegrate_cmd = [
-            str(facefusion_python),
-            str((Path(__file__).resolve().parent / "driver_face_reintegrate.py").resolve()),
-            "--sample-dir",
-            str(sample_dir),
-            "--swapped-crop",
-            str(swapped_crop),
-            "--output-path",
-            str(output),
-            "--mask-box",
-            "padded_box",
-            "--mask-expand",
-            "1.12",
-            "--feather-ratio",
-            "0.18",
-            "--banner-text",
-            "FACE ANONYMIZED",
-        ]
-        subprocess.run(reintegrate_cmd, check=True)
-        reintegrate_seconds = time.perf_counter() - reintegrate_started
-        total_seconds = time.perf_counter() - overall_started
-        if selection_report is not None:
-            timings = selection_report.setdefault("timings", {})
-            assert isinstance(timings, dict)
-            timings["final_video_swap_seconds"] = swap_seconds
-            timings["reintegrate_seconds"] = reintegrate_seconds
-            timings["total_request_seconds"] = total_seconds
-            selection_report["selected_donor_image"] = str(selected_source_image)
-            selection_report["output_video"] = str(output)
-            selection_report_path.write_text(json.dumps(selection_report, indent=2, sort_keys=True) + "\n")
-            print(
-                "Driver face anonymization timings: "
-                f"selection={timings.get('total_selection_seconds', 0.0):.2f}s, "
-                f"swap={swap_seconds:.2f}s, "
-                f"reintegrate={reintegrate_seconds:.2f}s, "
-                f"total={total_seconds:.2f}s"
+        current_source = source_clip
+        total_swap_seconds = 0.0
+        total_reintegrate_seconds = 0.0
+
+        for seat_index, artifact in enumerate(active_seats):
+            seat_key = artifact.seat_side
+            seat_report: dict[str, Any] = {
+                "seat_side": seat_key,
+                "track_metadata": str(artifact.track_metadata),
+                "crop_clip": str(artifact.crop_clip),
+            }
+            selected_source_image = Path(options.source_image).expanduser().resolve()
+            if options.selection_mode == "auto_best_match":
+                selection_started = time.perf_counter()
+                seat_report_path = sample_dir / f"{seat_key}-driver-face-selection.json"
+                selected_source_image, _selection_report = _auto_select_source_image(
+                    sample_dir=sample_dir / f"{seat_key}-auto-select",
+                    target_video=artifact.crop_clip,
+                    track_metadata=artifact.track_metadata,
+                    options=options,
+                    output_path=seat_report_path,
+                )
+                seat_report = json.loads(seat_report_path.read_text())
+                seat_report.setdefault("timings", {})
+                seat_report["timings"]["selection_handoff_seconds"] = time.perf_counter() - selection_started
+            else:
+                seat_report["selected_donor_image"] = str(selected_source_image)
+
+            swap_started = time.perf_counter()
+            swapped_crop = _run_facefusion_swap(
+                working_dir=sample_dir / f"{seat_key}-facefusion",
+                target_path=artifact.crop_clip,
+                output_path=sample_dir / f"{seat_key}-facefusion-{options.preset}.mp4",
+                options=DriverFaceSwapOptions(
+                    mode=options.mode,
+                    source_image=str(selected_source_image),
+                    facefusion_root=options.facefusion_root,
+                    facefusion_model=options.facefusion_model,
+                    preset=options.preset,
+                    selection_mode=options.selection_mode,
+                    donor_bank_dir=options.donor_bank_dir,
+                ),
             )
+            seat_swap_seconds = time.perf_counter() - swap_started
+            total_swap_seconds += seat_swap_seconds
+
+            reintegrate_started = time.perf_counter()
+            intermediate_output = output if seat_index == len(active_seats) - 1 else sample_dir / f"composited-{seat_key}.mp4"
+            reintegrate_cmd = [
+                str(facefusion_python),
+                str((Path(__file__).resolve().parent / "driver_face_reintegrate.py").resolve()),
+                "--sample-dir",
+                str(sample_dir),
+                "--source-video",
+                str(current_source),
+                "--track-metadata",
+                str(artifact.track_metadata),
+                "--swapped-crop",
+                str(swapped_crop),
+                "--output-path",
+                str(intermediate_output),
+                "--mask-box",
+                "padded_box",
+                "--mask-expand",
+                "1.12",
+                "--feather-ratio",
+                "0.18",
+                "--banner-text",
+                "FACE ANONYMIZED" if seat_index == len(active_seats) - 1 else "",
+            ]
+            subprocess.run(reintegrate_cmd, check=True)
+            seat_reintegrate_seconds = time.perf_counter() - reintegrate_started
+            total_reintegrate_seconds += seat_reintegrate_seconds
+            current_source = intermediate_output
+
+            timings = seat_report.setdefault("timings", {})
+            assert isinstance(timings, dict)
+            timings["final_video_swap_seconds"] = seat_swap_seconds
+            timings["reintegrate_seconds"] = seat_reintegrate_seconds
+            seat_report["selected_donor_image"] = str(selected_source_image)
+            seat_report["output_video"] = str(current_source)
+            selection_report["seats"][seat_key] = seat_report
+
+        total_seconds = time.perf_counter() - overall_started
+        timings = selection_report.setdefault("timings", {})
+        assert isinstance(timings, dict)
+        timings["active_seats"] = len(active_seats)
+        timings["final_video_swap_seconds"] = total_swap_seconds
+        timings["reintegrate_seconds"] = total_reintegrate_seconds
+        timings["total_request_seconds"] = total_seconds
+        selection_report_path.write_text(json.dumps(selection_report, indent=2, sort_keys=True) + "\n")
+        print(
+            "Driver face anonymization timings: "
+            f"seats={len(active_seats)}, "
+            f"swap={total_swap_seconds:.2f}s, "
+            f"reintegrate={total_reintegrate_seconds:.2f}s, "
+            f"total={total_seconds:.2f}s"
+        )
     return output

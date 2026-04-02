@@ -30,6 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--track-metadata", required=True)
     parser.add_argument("--crop-clip", required=True)
     parser.add_argument("--source-clip", required=True)
+    parser.add_argument("--seat-side", choices=["selected", "left", "right"], default="selected")
     parser.add_argument("--crop-target-mb", type=int, default=4)
     parser.add_argument("--accel", choices=["auto", "cpu", "videotoolbox", "nvidia"], default="auto")
     return parser.parse_args()
@@ -70,6 +71,7 @@ def main() -> int:
             frame_height=frame_queue.frame_h,
             device_type=metadata.get("device_type", "unknown"),
             config=FaceTrackConfig(),
+            seat_side=args.seat_side,
         )
         manifest.update(
             {
@@ -80,6 +82,7 @@ def main() -> int:
                 "start_seconds": args.start_seconds,
                 "length_seconds": args.length_seconds,
                 "notes": args.notes,
+                "seat_side": args.seat_side,
                 "source_clip": args.source_clip,
                 "crop_clip": args.crop_clip,
             }
