@@ -249,6 +249,47 @@ Notes:
 * `./cog/render_artifacts.sh` exports `requirements-cog.txt` from `uv.lock` for Cog, so the local and Cog dependency sets stay aligned
 * `cog.yaml` and `requirements-cog.txt` are generated artifacts and are intentionally not committed
 
+### Driver Face Evaluation Harness
+
+Use `driver_face_eval.py` for local-only benchmark prep when you want clean
+`driver` clips plus a DM-guided face-track crop for trying anonymization or
+face-replacement approaches against real comma driver-camera footage.
+
+The built-in seed set currently materializes:
+
+* `mici-baseline`
+* `tici-baseline`
+* `tici-occlusion`
+
+Outputs for each sample land under `./shared/driver-face-eval/<sample-id>/`:
+
+* `driver-source.mp4` - clean full-frame driver clip
+* `face-crop.mp4` - square DM-guided crop clip resized for model input
+* `face-track.json` - per-frame ROI sidecar with telemetry and crop geometry
+* `evaluation.md` - scoring template for candidate methods
+* `driver-debug-analysis.mp4` - optional debug/analysis render
+
+Materialize the default seed set:
+
+```bash
+uv run python driver_face_eval.py seed-set
+```
+
+Include a `driver-debug` analysis clip for the same samples:
+
+```bash
+uv run python driver_face_eval.py seed-set --include-driver-debug
+```
+
+Materialize one custom sample:
+
+```bash
+uv run python driver_face_eval.py sample my-sample \
+  'https://connect.comma.ai/<dongle>/<route>/<start>/<end>' \
+  --start-seconds 90 \
+  --length-seconds 2
+```
+
 ### Hosted Replicate runs with uv
 
 You can also run the hosted Replicate model from this repo with the Python client and a local `.env`.
