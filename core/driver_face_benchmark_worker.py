@@ -351,13 +351,53 @@ def _blur_mask(frame: np.ndarray, mask: np.ndarray) -> None:
     frame[mask] = blurred[mask]
 
 
+def _shift_mask(mask: np.ndarray, *, x: int = 0, y: int = 0) -> np.ndarray:
+    shifted = np.zeros_like(mask)
+    src_y_start = max(0, -y)
+    src_y_end = mask.shape[0] - max(0, y)
+    dst_y_start = max(0, y)
+    dst_y_end = dst_y_start + max(0, src_y_end - src_y_start)
+    src_x_start = max(0, -x)
+    src_x_end = mask.shape[1] - max(0, x)
+    dst_x_start = max(0, x)
+    dst_x_end = dst_x_start + max(0, src_x_end - src_x_start)
+    if src_y_start >= src_y_end or src_x_start >= src_x_end:
+        return shifted
+    shifted[dst_y_start:dst_y_end, dst_x_start:dst_x_end] = mask[src_y_start:src_y_end, src_x_start:src_x_end]
+    return shifted
+
+
 def _white_static_mask(frame: np.ndarray, mask: np.ndarray, *, frame_index: int) -> None:
-    rng = np.random.default_rng(seed=frame_index + 1337)
-    noise = rng.integers(170, 256, size=(frame.shape[0], frame.shape[1]), dtype=np.uint8)
-    sparkles = rng.random(size=noise.shape) > 0.88
-    noise[sparkles] = rng.integers(235, 256, size=int(sparkles.sum()), dtype=np.uint8)
-    static_rgb = np.repeat(noise[:, :, None], 3, axis=2)
-    frame[mask] = static_rgb[mask]
+    del frame_index
+    if not np.any(mask):
+        return
+
+    original = frame.astype(np.float32)
+    interior = mask.astype(np.uint8) * 255
+    interior_alpha = cv2.GaussianBlur(interior, (0, 0), sigmaX=2.4, sigmaY=2.4).astype(np.float32) / 255.0
+    interior_alpha[mask] = 1.0
+
+    luminance = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    luminance = cv2.GaussianBlur(luminance, (0, 0), sigmaX=8.0, sigmaY=8.0)
+    silhouette_fill = np.repeat(luminance[:, :, None], 3, axis=2).astype(np.float32)
+    silhouette_fill = silhouette_fill * 0.08 + 242.0 * 0.92
+
+    output = original.copy()
+    inner_halo = _dilate_mask(mask, kernel_size=9) & ~mask
+    outer_halo = _dilate_mask(mask, kernel_size=17) & ~_dilate_mask(mask, kernel_size=7)
+    fringe_specs = (
+        (_shift_mask(inner_halo, x=-2), np.array((255.0, 250.0, 210.0), dtype=np.float32), 0.38),
+        (_shift_mask(inner_halo, x=2), np.array((228.0, 220.0, 255.0), dtype=np.float32), 0.34),
+        (_shift_mask(outer_halo, x=-3), np.array((255.0, 245.0, 215.0), dtype=np.float32), 0.18),
+        (_shift_mask(outer_halo, x=3), np.array((212.0, 205.0, 255.0), dtype=np.float32), 0.16),
+    )
+    for halo_mask, color, strength in fringe_specs:
+        halo_alpha = cv2.GaussianBlur((halo_mask.astype(np.uint8) * 255), (0, 0), sigmaX=2.0, sigmaY=2.0).astype(np.float32) / 255.0
+        halo_alpha *= strength
+        output = output * (1.0 - halo_alpha[:, :, None]) + color * halo_alpha[:, :, None]
+
+    output = output * (1.0 - interior_alpha[:, :, None]) + silhouette_fill * interior_alpha[:, :, None]
+    frame[:] = np.clip(output, 0, 255).astype(np.uint8)
 
 
 def _apply_rf_detr_effect(
@@ -373,7 +413,7 @@ def _apply_rf_detr_effect(
     if effect == "blur":
         _blur_mask(frame, mask)
         return
-    if effect == "white-static":
+    if effect == "white-silhouette":
         _white_static_mask(frame, mask, frame_index=frame_index)
         return
     raise ValueError(f"Unsupported RF-DETR effect: {effect}")
@@ -535,7 +575,7 @@ def _rf_detr_effect_for_candidate(candidate_id: str) -> str:
     if candidate_id == "rf-detr-passenger-blur":
         return "blur"
     if candidate_id == "rf-detr-passenger-white-static":
-        return "white-static"
+        return "white-silhouette"
     raise ValueError(f"Unsupported RF-DETR candidate id: {candidate_id}")
 
 
@@ -682,7 +722,7 @@ def _append_evaluation_markdown(path: Path, *, candidate_id: str, report: dict[s
     elif candidate_id == "rf-detr-passenger-blur":
         behavior = "Runs RF-DETR segmentation on the full driver clip, selects the passenger-side body mask, and heavily blurs the masked silhouette."
     elif candidate_id == "rf-detr-passenger-white-static":
-        behavior = "Runs RF-DETR segmentation on the full driver clip, selects the passenger-side body mask, and replaces it with bright animated white static."
+        behavior = "Runs RF-DETR segmentation on the full driver clip, selects the passenger-side body mask, and replaces it with a stylized flat white silhouette plus soft chromatic edge fringe."
     else:
         behavior = "Processes the DM-guided ROI on the full-frame driver clip."
     notes = f"Generated `{output_name}` in {report['runtime_seconds']:.2f}s. {behavior}"

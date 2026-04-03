@@ -117,15 +117,15 @@ def test_choose_passenger_mask_uses_anchor_rect_to_reject_stray_blob() -> None:
 def test_rf_detr_effect_for_candidate_maps_expected_styles() -> None:
     assert driver_face_benchmark_worker._rf_detr_effect_for_candidate("rf-detr-passenger-blackout") == "blackout"
     assert driver_face_benchmark_worker._rf_detr_effect_for_candidate("rf-detr-passenger-blur") == "blur"
-    assert driver_face_benchmark_worker._rf_detr_effect_for_candidate("rf-detr-passenger-white-static") == "white-static"
+    assert driver_face_benchmark_worker._rf_detr_effect_for_candidate("rf-detr-passenger-white-static") == "white-silhouette"
 
 
-def test_white_static_mask_replaces_masked_region_with_bright_noise() -> None:
-    frame = np.zeros((4, 4, 3), dtype=np.uint8)
-    mask = np.zeros((4, 4), dtype=bool)
-    mask[1:3, 1:3] = True
+def test_white_static_mask_replaces_masked_region_with_bright_silhouette() -> None:
+    frame = np.zeros((25, 25, 3), dtype=np.uint8)
+    mask = np.zeros((25, 25), dtype=bool)
+    mask[10:15, 10:15] = True
 
     driver_face_benchmark_worker._white_static_mask(frame, mask, frame_index=7)
 
-    assert np.all(frame[~mask] == 0)
-    assert np.all(frame[mask] >= 170)
+    assert np.all(frame[mask] >= 200)
+    assert np.any(frame[~mask] > 0)
