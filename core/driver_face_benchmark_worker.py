@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import subprocess
 import sys
 import time
+import warnings
 from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,16 +22,25 @@ if str(REPO_ROOT) not in sys.path:
 from core.driver_face_swap import (
     DriverFaceSwapOptions,
     _auto_select_source_image,
+    _ffmpeg_encoder_available,
+    _has_nvidia,
     default_facefusion_execution_providers,
     default_facefusion_output_video_encoder,
     facefusion_runtime_env,
 )
 
 RF_DETR_CANDIDATE_IDS = {
-    "rf-detr-passenger-blackout",
     "rf-detr-passenger-blur",
-    "rf-detr-passenger-white-static",
+    "rf-detr-passenger-silhouette",
 }
+
+DM_INPUT_SIZE = (1440.0, 960.0)
+AR_OX_DRIVER_FRAME = (1928.0, 1208.0)
+OS_DRIVER_FRAME = (1344.0, 760.0)
+AR_OX_DRIVER_FOCAL = 567.0
+OS_DRIVER_FOCAL = AR_OX_DRIVER_FOCAL * 0.75
+DM_INTRINSIC_CX = DM_INPUT_SIZE[0] / 2.0
+DM_INTRINSIC_CY = (DM_INPUT_SIZE[1] / 2.0) - ((AR_OX_DRIVER_FRAME[1] - DM_INPUT_SIZE[1]) / 2.0)
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,10 +54,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--driver-face-donor-bank-dir", default="./assets/driver-face-donors")
     parser.add_argument("--rf-detr-model-id", default="rfdetr-seg-preview")
     parser.add_argument("--rf-detr-threshold", type=float, default=0.4)
-    parser.add_argument("--rf-detr-frame-stride", type=int, default=3)
+    parser.add_argument("--rf-detr-frame-stride", type=int, default=5)
     parser.add_argument("--rf-detr-mask-dilate", type=int, default=15)
     parser.add_argument("--rf-detr-startup-hold-frames", type=int, default=6)
-    parser.add_argument("--rf-detr-passenger-crop-margin-ratio", type=float, default=0.18)
+    parser.add_argument("--rf-detr-passenger-crop-margin-ratio", type=float, default=0.10)
+    parser.add_argument("--rf-detr-missing-hold-frames", type=int, default=10)
     return parser.parse_args()
 
 
@@ -68,6 +80,70 @@ def _intermediate_output_path(output_path: Path) -> Path:
     return output_path.with_name(f"{output_path.stem}.intermediate{output_path.suffix}")
 
 
+def _default_rf_detr_device() -> str:
+    override = os.environ.get("DRIVER_FACE_BENCHMARK_RF_DETR_DEVICE", "").strip()
+    if override:
+        return override
+    try:
+        import torch
+    except Exception:
+        return "cpu"
+    if torch.cuda.is_available():
+        return "cuda"
+    mps_backend = getattr(torch.backends, "mps", None)
+    if mps_backend is not None and mps_backend.is_available():
+        return "mps"
+    return "cpu"
+
+
+def _shareable_h264_encoder_args() -> list[str]:
+    override = os.environ.get("DRIVER_FACE_BENCHMARK_OUTPUT_VIDEO_ENCODER", "").strip()
+    encoder = override or ""
+    if not encoder:
+        if platform.system() == "Darwin" and _ffmpeg_encoder_available("h264_videotoolbox"):
+            encoder = "h264_videotoolbox"
+        elif _has_nvidia() and _ffmpeg_encoder_available("h264_nvenc"):
+            encoder = "h264_nvenc"
+        else:
+            encoder = "libx264"
+
+    if encoder == "h264_videotoolbox":
+        return [
+            "-c:v",
+            "h264_videotoolbox",
+            "-allow_sw",
+            "1",
+            "-realtime",
+            "1",
+            "-profile:v",
+            "high",
+            "-pix_fmt",
+            "yuv420p",
+        ]
+    if encoder == "h264_nvenc":
+        return [
+            "-c:v",
+            "h264_nvenc",
+            "-preset",
+            "p4",
+            "-pix_fmt",
+            "yuv420p",
+        ]
+    return [
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-pix_fmt",
+        "yuv420p",
+    ]
+
+
+def _shareable_h264_encoder_name() -> str:
+    args = _shareable_h264_encoder_args()
+    return args[1]
+
+
 def _finalize_shareable_mp4(intermediate_path: Path, output_path: Path) -> None:
     command = [
         "ffmpeg",
@@ -75,12 +151,7 @@ def _finalize_shareable_mp4(intermediate_path: Path, output_path: Path) -> None:
         "-i",
         str(intermediate_path),
         "-an",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-pix_fmt",
-        "yuv420p",
+        *_shareable_h264_encoder_args(),
         "-movflags",
         "+faststart",
         str(output_path),
@@ -122,6 +193,57 @@ def _passenger_side_for_frame(frame_row: dict[str, object]) -> str:
     return selected_side
 
 
+def _normalize_driver_monitoring_device_type(
+    device_type: object,
+    *,
+    frame_width: int,
+    frame_height: int,
+) -> str:
+    normalized = str(device_type or "").strip().lower()
+    if normalized == "tizi":
+        return "tici"
+    if normalized in {"tici", "mici"}:
+        return normalized
+    if int(round(frame_width)) == int(OS_DRIVER_FRAME[0]) and int(round(frame_height)) == int(OS_DRIVER_FRAME[1]):
+        return "mici"
+    if frame_width > 0 and frame_height > 0:
+        return "tici"
+    return "unknown"
+
+
+def _driver_monitoring_input_crop_rect(
+    *,
+    frame_width: int,
+    frame_height: int,
+    device_type: object,
+) -> tuple[int, int, int, int]:
+    frame_width = int(frame_width)
+    frame_height = int(frame_height)
+    if frame_width <= 0 or frame_height <= 0:
+        return 0, 0, 2, 2
+
+    normalized_device_type = _normalize_driver_monitoring_device_type(
+        device_type,
+        frame_width=frame_width,
+        frame_height=frame_height,
+    )
+    focal_length = OS_DRIVER_FOCAL if normalized_device_type == "mici" else AR_OX_DRIVER_FOCAL
+
+    cam_cx = frame_width / 2.0
+    cam_cy = frame_height / 2.0
+    scale = focal_length / AR_OX_DRIVER_FOCAL
+    translate_x = cam_cx - (DM_INTRINSIC_CX * scale)
+    translate_y = cam_cy - (DM_INTRINSIC_CY * scale)
+    max_dm_x = translate_x + (scale * (DM_INPUT_SIZE[0] - 1.0))
+    max_dm_y = translate_y + (scale * (DM_INPUT_SIZE[1] - 1.0))
+
+    x0 = max(0, int(np.floor(translate_x)))
+    y0 = max(0, int(np.floor(translate_y)))
+    x1 = min(frame_width, int(np.ceil(max_dm_x)) + 1)
+    y1 = min(frame_height, int(np.ceil(max_dm_y)) + 1)
+    return x0, y0, max(2, x1 - x0), max(2, y1 - y0)
+
+
 @lru_cache(maxsize=1)
 def _load_rf_detr_model(model_id: str):
     from rfdetr import RFDETRSegLarge, RFDETRSegMedium, RFDETRSegNano, RFDETRSegPreview, RFDETRSegSmall, RFDETRSegXLarge, RFDETRSeg2XLarge
@@ -143,11 +265,22 @@ def _load_rf_detr_model(model_id: str):
 
     weights_dir = REPO_ROOT / ".cache/rfdetr"
     weights_dir.mkdir(parents=True, exist_ok=True)
-    model = model_class(pretrain_weights=str((weights_dir / weight_filename).resolve()))
-    optimize = getattr(model, "optimize_for_inference", None)
-    if callable(optimize):
-        optimize()
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=r"`use_return_dict` is deprecated! Use `return_dict` instead!")
+        model = model_class(
+            pretrain_weights=str((weights_dir / weight_filename).resolve()),
+            device=_default_rf_detr_device(),
+        )
+        optimize = getattr(model, "optimize_for_inference", None)
+        if callable(optimize):
+            optimize(compile=False)
     return model
+
+
+def _predict_rf_detr(model, rgb_frame: np.ndarray, *, threshold: float):
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=r"`use_return_dict` is deprecated! Use `return_dict` instead!")
+        return model.predict(rgb_frame, threshold=threshold)
 
 
 def _detections_masks(detections) -> np.ndarray | None:
@@ -195,17 +328,24 @@ def _passenger_crop_rect(
     frame_width: int,
     frame_height: int,
     margin_ratio: float,
+    device_type: object,
 ) -> tuple[int, int, int, int]:
     passenger_side = _passenger_side_for_frame(frame_row)
-    half_width = frame_width // 2
-    overlap = int(round(frame_width * max(0.0, margin_ratio)))
+    dm_x, dm_y, dm_width, dm_height = _driver_monitoring_input_crop_rect(
+        frame_width=frame_width,
+        frame_height=frame_height,
+        device_type=device_type,
+    )
+    dm_x1 = dm_x + dm_width
+    frame_mid_x = frame_width / 2.0
+    overlap = int(round(dm_width * max(0.0, margin_ratio)))
     if passenger_side == "left":
-        x0 = 0
-        x1 = min(frame_width, half_width + overlap)
+        x0 = dm_x
+        x1 = min(dm_x1, int(round(frame_mid_x)) + overlap)
     else:
-        x0 = max(0, half_width - overlap)
-        x1 = frame_width
-    return x0, 0, max(2, x1 - x0), frame_height
+        x0 = max(dm_x, int(round(frame_mid_x)) - overlap)
+        x1 = dm_x1
+    return x0, dm_y, max(2, x1 - x0), dm_height
 
 
 def _expand_crop_detections_to_full_frame(
@@ -297,6 +437,7 @@ def _choose_passenger_mask(
     frame_width: int,
     frame_height: int,
     anchor_rect: tuple[int, int, int, int] | None = None,
+    crop_rect: tuple[int, int, int, int] | None = None,
 ) -> tuple[np.ndarray | None, dict[str, object]]:
     masks = _detections_masks(detections)
     if masks is None or masks.size == 0:
@@ -315,6 +456,8 @@ def _choose_passenger_mask(
         if anchor_rect is not None
         else None
     )
+    crop_width = crop_rect[2] if crop_rect is not None else frame_width
+    crop_height = crop_rect[3] if crop_rect is not None else frame_height
 
     for index in range(len(masks)):
         if confidences is not None and float(confidences[index]) <= 0.0:
@@ -331,7 +474,14 @@ def _choose_passenger_mask(
             continue
         area = int(mask.sum())
         area_fraction = area / max(1.0, frame_width * frame_height)
+        crop_area_fraction = area / max(1.0, crop_width * crop_height)
+        crop_width_fraction = width / max(1.0, crop_width)
+        crop_height_fraction = height / max(1.0, crop_height)
         if area_fraction < 0.01 or area_fraction > 0.55:
+            continue
+        if crop_area_fraction > 0.82:
+            continue
+        if crop_width_fraction > 0.94 and crop_height_fraction > 0.9:
             continue
         if width >= int(frame_width * 0.92) and height >= int(frame_height * 0.92):
             continue
@@ -358,6 +508,7 @@ def _choose_passenger_mask(
                 "mask_box": {"x": x, "y": y, "width": width, "height": height},
                 "mask_area": area,
                 "mask_area_fraction": round(area_fraction, 4),
+                "mask_crop_area_fraction": round(crop_area_fraction, 4),
                 "anchor_overlap": None if anchor_overlap is None else round(anchor_overlap, 4),
                 "passenger_side": passenger_side,
             }
@@ -370,10 +521,6 @@ def _dilate_mask(mask: np.ndarray, *, kernel_size: int) -> np.ndarray:
     kernel_size = max(1, kernel_size | 1)
     kernel = np.ones((kernel_size, kernel_size), dtype=np.uint8)
     return cv2.dilate(mask.astype(np.uint8), kernel, iterations=1).astype(bool)
-
-
-def _blackout_mask(frame: np.ndarray, mask: np.ndarray) -> None:
-    frame[mask] = 0
 
 
 def _blur_mask(frame: np.ndarray, mask: np.ndarray) -> None:
@@ -397,11 +544,70 @@ def _shift_mask(mask: np.ndarray, *, x: int = 0, y: int = 0) -> np.ndarray:
     return shifted
 
 
-def _white_static_mask(frame: np.ndarray, mask: np.ndarray, *, frame_index: int) -> None:
-    del frame_index
+def _dashed_contour_alpha(
+    mask: np.ndarray,
+    *,
+    offset_kernel: int = 7,
+    dash_length: float = 12.0,
+    gap_length: float = 7.0,
+    thickness: int = 2,
+    scale: int = 3,
+) -> np.ndarray:
+    expanded = _dilate_mask(mask, kernel_size=offset_kernel).astype(np.uint8) * 255
+    scale = max(1, int(scale))
+    high_res_shape = (expanded.shape[1] * scale, expanded.shape[0] * scale)
+    contour_input = cv2.resize(expanded, high_res_shape, interpolation=cv2.INTER_NEAREST)
+    contours, _ = cv2.findContours(contour_input, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    dashed = np.zeros_like(contour_input)
+    cycle_length = max(1.0, dash_length + gap_length)
+
+    for contour in contours:
+        points = contour[:, 0, :]
+        if len(points) < 2:
+            continue
+
+        distance_along = 0.0
+        for index in range(len(points)):
+            start = points[index].astype(np.float32)
+            end = points[(index + 1) % len(points)].astype(np.float32)
+            segment = end - start
+            segment_length = float(np.linalg.norm(segment))
+            if segment_length <= 0.0:
+                continue
+
+            direction = segment / segment_length
+            cursor = 0.0
+            while cursor < segment_length:
+                phase = distance_along % cycle_length
+                remaining_segment = segment_length - cursor
+                if phase < dash_length:
+                    draw_length = min(dash_length - phase, remaining_segment)
+                    draw_start = start + direction * cursor
+                    draw_end = start + direction * (cursor + draw_length)
+                    cv2.line(
+                        dashed,
+                        tuple(np.rint(draw_start).astype(int)),
+                        tuple(np.rint(draw_end).astype(int)),
+                        255,
+                        thickness=max(1, thickness * scale),
+                        lineType=cv2.LINE_8,
+                    )
+                    cursor += draw_length
+                    distance_along += draw_length
+                else:
+                    skip_length = min(cycle_length - phase, remaining_segment)
+                    cursor += skip_length
+                    distance_along += skip_length
+
+    low_res = cv2.resize(dashed, (mask.shape[1], mask.shape[0]), interpolation=cv2.INTER_NEAREST)
+    return (low_res > 0).astype(np.float32)
+
+
+def _silhouette_mask(frame: np.ndarray, mask: np.ndarray, *, frame_index: int) -> None:
     if not np.any(mask):
         return
 
+    del frame_index
     original = frame.astype(np.float32)
     interior = mask.astype(np.uint8) * 255
     interior_alpha = cv2.GaussianBlur(interior, (0, 0), sigmaX=2.4, sigmaY=2.4).astype(np.float32) / 255.0
@@ -416,10 +622,10 @@ def _white_static_mask(frame: np.ndarray, mask: np.ndarray, *, frame_index: int)
     inner_halo = _dilate_mask(mask, kernel_size=9) & ~mask
     outer_halo = _dilate_mask(mask, kernel_size=17) & ~_dilate_mask(mask, kernel_size=7)
     fringe_specs = (
-        (_shift_mask(inner_halo, x=-2), np.array((255.0, 250.0, 210.0), dtype=np.float32), 0.38),
-        (_shift_mask(inner_halo, x=2), np.array((228.0, 220.0, 255.0), dtype=np.float32), 0.34),
-        (_shift_mask(outer_halo, x=-3), np.array((255.0, 245.0, 215.0), dtype=np.float32), 0.18),
-        (_shift_mask(outer_halo, x=3), np.array((212.0, 205.0, 255.0), dtype=np.float32), 0.16),
+        (_shift_mask(inner_halo, x=-2), np.array((255.0, 250.0, 210.0), dtype=np.float32), 0.18),
+        (_shift_mask(inner_halo, x=2), np.array((228.0, 220.0, 255.0), dtype=np.float32), 0.15),
+        (_shift_mask(outer_halo, x=-3), np.array((255.0, 245.0, 215.0), dtype=np.float32), 0.06),
+        (_shift_mask(outer_halo, x=3), np.array((212.0, 205.0, 255.0), dtype=np.float32), 0.05),
     )
     for halo_mask, color, strength in fringe_specs:
         halo_alpha = cv2.GaussianBlur((halo_mask.astype(np.uint8) * 255), (0, 0), sigmaX=2.0, sigmaY=2.0).astype(np.float32) / 255.0
@@ -427,6 +633,16 @@ def _white_static_mask(frame: np.ndarray, mask: np.ndarray, *, frame_index: int)
         output = output * (1.0 - halo_alpha[:, :, None]) + color * halo_alpha[:, :, None]
 
     output = output * (1.0 - interior_alpha[:, :, None]) + silhouette_fill * interior_alpha[:, :, None]
+
+    cutout_matte = _dilate_mask(mask, kernel_size=15) & ~mask
+    matte_alpha = cv2.GaussianBlur((cutout_matte.astype(np.uint8) * 255), (0, 0), sigmaX=0.55, sigmaY=0.55).astype(np.float32) / 255.0
+    border_line = _dashed_contour_alpha(mask, offset_kernel=15, dash_length=52.0, gap_length=64.0, thickness=6, scale=4)
+    line_alpha = border_line
+    if np.any(matte_alpha > 0):
+        output = output * (1.0 - matte_alpha[:, :, None]) + np.array((255.0, 255.0, 255.0), dtype=np.float32) * matte_alpha[:, :, None]
+    if np.any(line_alpha > 0):
+        output = output * (1.0 - line_alpha[:, :, None]) + np.array((0.0, 0.0, 0.0), dtype=np.float32) * line_alpha[:, :, None]
+
     frame[:] = np.clip(output, 0, 255).astype(np.uint8)
 
 
@@ -437,14 +653,11 @@ def _apply_rf_detr_effect(
     effect: str,
     frame_index: int,
 ) -> None:
-    if effect == "blackout":
-        _blackout_mask(frame, mask)
-        return
     if effect == "blur":
         _blur_mask(frame, mask)
         return
-    if effect == "white-silhouette":
-        _white_static_mask(frame, mask, frame_index=frame_index)
+    if effect == "silhouette":
+        _silhouette_mask(frame, mask, frame_index=frame_index)
         return
     raise ValueError(f"Unsupported RF-DETR effect: {effect}")
 
@@ -600,12 +813,10 @@ def _score_rf_detr_sample(track: dict[str, object], *, redacted_frames: int) -> 
 
 
 def _rf_detr_effect_for_candidate(candidate_id: str) -> str:
-    if candidate_id == "rf-detr-passenger-blackout":
-        return "blackout"
     if candidate_id == "rf-detr-passenger-blur":
         return "blur"
-    if candidate_id == "rf-detr-passenger-white-static":
-        return "white-silhouette"
+    if candidate_id == "rf-detr-passenger-silhouette":
+        return "silhouette"
     raise ValueError(f"Unsupported RF-DETR candidate id: {candidate_id}")
 
 
@@ -747,12 +958,10 @@ def _append_evaluation_markdown(path: Path, *, candidate_id: str, report: dict[s
         behavior = "Runs FaceFusion on the prepared `face-crop.mp4` clip using a generic donor image and the configured hyperswap face swapper."
     elif candidate_id == "facefusion-auto-best-match":
         behavior = "Auto-selects a same-tone donor from the donor bank on a short selection clip, then runs fast FaceFusion with that donor."
-    elif candidate_id == "rf-detr-passenger-blackout":
-        behavior = "Runs RF-DETR segmentation on the full driver clip, selects the passenger-side person mask, and blacks out that whole body silhouette."
     elif candidate_id == "rf-detr-passenger-blur":
-        behavior = "Runs RF-DETR segmentation on the full driver clip, selects the passenger-side body mask, and heavily blurs the masked silhouette."
-    elif candidate_id == "rf-detr-passenger-white-static":
-        behavior = "Runs RF-DETR segmentation on the full driver clip, selects the passenger-side body mask, and replaces it with a stylized flat white silhouette plus soft chromatic edge fringe."
+        behavior = "Runs RF-DETR segmentation on a driver-debug-style passenger crop, selects the passenger-side body mask, and heavily blurs the masked silhouette."
+    elif candidate_id == "rf-detr-passenger-silhouette":
+        behavior = "Runs RF-DETR segmentation on a driver-debug-style passenger crop, selects the passenger-side body mask, and replaces it with a flat white silhouette plus a static paper-cutout dotted outline."
     else:
         behavior = "Processes the DM-guided ROI on the full-frame driver clip."
     notes = f"Generated `{output_name}` in {report['runtime_seconds']:.2f}s. {behavior}"
@@ -764,7 +973,7 @@ def _append_evaluation_markdown(path: Path, *, candidate_id: str, report: dict[s
         )
 
 
-def _run_rf_detr_passenger_blackout(
+def _run_rf_detr_passenger_effect(
     *,
     sample_dir: Path,
     output_path: Path,
@@ -775,9 +984,11 @@ def _run_rf_detr_passenger_blackout(
     mask_dilate: int,
     startup_hold_frames: int,
     passenger_crop_margin_ratio: float,
+    missing_hold_frames: int,
 ) -> dict[str, object]:
     source_path = sample_dir / "driver-source.mp4"
     frames = list(track["frames"])
+    device_type = track.get("device_type")
     passenger_anchor_rows = _load_optional_passenger_anchor_rows(sample_dir)
     capture = cv2.VideoCapture(str(source_path))
     if not capture.isOpened():
@@ -804,7 +1015,7 @@ def _run_rf_detr_passenger_blackout(
     last_mask: np.ndarray | None = None
     last_mask_box: tuple[int, int, int, int] | None = None
     missed_detections_since_last_mask = 0
-    missing_hold_frames = 6
+    missing_hold_frames = max(0, int(missing_hold_frames))
     startup_mask_source_frame_index: int | None = None
     startup_hold = max(0, int(startup_hold_frames))
     redacted_frames = 0
@@ -835,11 +1046,12 @@ def _run_rf_detr_passenger_blackout(
                     frame_width=width,
                     frame_height=height,
                     margin_ratio=passenger_crop_margin_ratio,
+                    device_type=device_type,
                 )
                 crop_x, crop_y, crop_width, crop_height = crop_rect
                 cropped_frame = frame[crop_y: crop_y + crop_height, crop_x: crop_x + crop_width]
                 rgb_frame = cv2.cvtColor(cropped_frame, cv2.COLOR_BGR2RGB)
-                crop_detections = model.predict(rgb_frame, threshold=threshold)
+                crop_detections = _predict_rf_detr(model, rgb_frame, threshold=threshold)
                 detections = _expand_crop_detections_to_full_frame(
                     crop_detections,
                     crop_rect=crop_rect,
@@ -853,6 +1065,7 @@ def _run_rf_detr_passenger_blackout(
                     frame_width=width,
                     frame_height=height,
                     anchor_rect=anchor_rect,
+                    crop_rect=crop_rect,
                 )
                 detection_report.update(selection_details)
                 detection_report["crop_rect"] = {
@@ -926,8 +1139,16 @@ def _run_rf_detr_passenger_blackout(
         "rf_detr_startup_hold_applied": min(startup_hold, len(frames)),
         "rf_detr_startup_hold_trimmed_from_output": min(startup_hold, len(frames)),
         "rf_detr_passenger_crop_margin_ratio": passenger_crop_margin_ratio,
+        "rf_detr_passenger_crop_strategy": "driver_debug_dm_input_passenger_half",
+        "rf_detr_driver_monitoring_device_type": _normalize_driver_monitoring_device_type(
+            device_type,
+            frame_width=width,
+            frame_height=height,
+        ),
         "rf_detr_missing_hold_frames": missing_hold_frames,
         "rf_detr_effect": effect,
+        "rf_detr_device": str(model.model.device),
+        "output_video_encoder": _shareable_h264_encoder_name(),
         "startup_mask_source_frame_index": startup_mask_source_frame_index,
         "frame_reports": frame_reports,
     }
@@ -1007,7 +1228,7 @@ def main() -> int:
         return 0
 
     if args.candidate_id in RF_DETR_CANDIDATE_IDS:
-        report = _run_rf_detr_passenger_blackout(
+        report = _run_rf_detr_passenger_effect(
             sample_dir=sample_dir,
             output_path=output_path,
             track=track,
@@ -1017,6 +1238,7 @@ def main() -> int:
             mask_dilate=args.rf_detr_mask_dilate,
             startup_hold_frames=args.rf_detr_startup_hold_frames,
             passenger_crop_margin_ratio=args.rf_detr_passenger_crop_margin_ratio,
+            missing_hold_frames=args.rf_detr_missing_hold_frames,
         )
         report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
         _append_evaluation_markdown(

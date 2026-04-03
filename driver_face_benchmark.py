@@ -24,10 +24,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--driver-face-donor-bank-dir", default="./assets/driver-face-donors")
     parser.add_argument("--rf-detr-model-id", default="rfdetr-seg-preview")
     parser.add_argument("--rf-detr-threshold", type=float, default=0.4)
-    parser.add_argument("--rf-detr-frame-stride", type=int, default=3)
+    parser.add_argument("--rf-detr-frame-stride", type=int, default=5)
     parser.add_argument("--rf-detr-mask-dilate", type=int, default=15)
     parser.add_argument("--rf-detr-startup-hold-frames", type=int, default=6)
-    parser.add_argument("--rf-detr-passenger-crop-margin-ratio", type=float, default=0.18)
+    parser.add_argument("--rf-detr-passenger-crop-margin-ratio", type=float, default=0.10)
+    parser.add_argument("--rf-detr-missing-hold-frames", type=int, default=10)
     parser.add_argument("samples", nargs="*", help="Optional sample ids. Defaults to all samples under the eval root.")
     return parser
 
@@ -82,6 +83,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             str(args.rf_detr_startup_hold_frames),
             "--rf-detr-passenger-crop-margin-ratio",
             str(args.rf_detr_passenger_crop_margin_ratio),
+            "--rf-detr-missing-hold-frames",
+            str(args.rf_detr_missing_hold_frames),
         ]
         subprocess.run(worker_cmd, check=True)
         print(f"Benchmarked {sample_dir.name}")
