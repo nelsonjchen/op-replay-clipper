@@ -3,6 +3,7 @@
 set -euo pipefail
 
 # Shared bootstrap for Docker/Cog images that need a working openpilot clip environment.
+# CACHE_BUSTER: 2026-04-03-facefusion-rebuild
 
 APP_ROOT="${APP_ROOT:-$(pwd)}"
 OPENPILOT_ROOT="${OPENPILOT_ROOT:-/home/batman/openpilot}"
@@ -14,6 +15,7 @@ FACEFUSION_REPO_URL="${FACEFUSION_REPO_URL:-https://github.com/facefusion/facefu
 FACEFUSION_COMMIT="${FACEFUSION_COMMIT:-519360bcd650679275024aa3ed10e8d673718bb3}"
 FACEFUSION_PYTHON_VERSION="${FACEFUSION_PYTHON_VERSION:-3.12}"
 SCONS_JOBS="${SCONS_JOBS:-$(command -v nproc >/dev/null 2>&1 && nproc || echo 8)}"
+BUILD_TMPDIR="${BUILD_TMPDIR:-/var/tmp/op-clipper-build}"
 export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
 
 APT_PACKAGES=(
@@ -48,6 +50,22 @@ APT_PACKAGES=(
 
 log_step() {
   printf '\n==> %s\n' "$1"
+}
+
+configure_build_tempdir() {
+  log_step "Configuring build temp directory"
+  mkdir -p "${BUILD_TMPDIR}"
+  chmod 1777 "${BUILD_TMPDIR}"
+  export TMPDIR="${BUILD_TMPDIR}"
+  export TMP="${BUILD_TMPDIR}"
+  export TEMP="${BUILD_TMPDIR}"
+}
+
+redirect_system_tmp() {
+  log_step "Redirecting /tmp to build temp directory"
+  rm -rf /tmp/*
+  rmdir /tmp
+  ln -s "${BUILD_TMPDIR}" /tmp
 }
 
 install_system_packages() {
@@ -121,13 +139,6 @@ install_facefusion_runtime() {
   . .venv/bin/activate
   python -m pip install --upgrade pip wheel setuptools
   python install.py --onnxruntime cuda --skip-conda
-  python -m pip install \
-    nvidia-cublas-cu12 \
-    nvidia-cuda-runtime-cu12 \
-    nvidia-cuda-nvrtc-cu12 \
-    nvidia-cudnn-cu12 \
-    nvidia-curand-cu12 \
-    nvidia-cufft-cu12
 }
 
 prewarm_facefusion_models() {
@@ -177,6 +188,19 @@ for label, fn in checks:
     if not ok:
         raise SystemExit(f"Failed to prewarm {label}")
 PY
+}
+
+deactivate_facefusion_venv() {
+  if [[ -n "${VIRTUAL_ENV:-}" ]]; then
+    log_step "Deactivating FaceFusion virtualenv before openpilot bootstrap"
+    deactivate || true
+  fi
+}
+
+prune_facefusion_checkout() {
+  log_step "Pruning FaceFusion checkout"
+  cd "${FACEFUSION_ROOT}"
+  rm -rf .git .github tests
 }
 
 fix_vendored_tool_permissions() {
@@ -511,17 +535,22 @@ record_checkout_commit() {
 clean_image_artifacts() {
   log_step "Cleaning bootstrap caches"
   rm -rf /tmp/*
+  rm -rf "${BUILD_TMPDIR}"/*
   rm -rf /root/.cache
   rm -rf /var/lib/apt/lists/*
 }
 
 main() {
   install_system_packages
+  configure_build_tempdir
+  redirect_system_tmp
   configure_git_lfs
   ensure_uv_on_path
   clone_facefusion_checkout
   install_facefusion_runtime
   prewarm_facefusion_models
+  deactivate_facefusion_venv
+  prune_facefusion_checkout
   clone_openpilot_checkout
   install_openpilot_dependencies
   fix_vendored_tool_permissions

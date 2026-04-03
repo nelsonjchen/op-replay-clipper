@@ -3,8 +3,8 @@
 This folder generates Cog build artifacts for running the clipper on Replicate or with local `cog build`.
 
 Current upstream Cog already sets `NVIDIA_DRIVER_CAPABILITIES=all`, so a custom
-Cog fork is no longer required for GPU visibility. We still keep a patched
-runtime builder here for the stock Cog `0.17` URL-coercion regression.
+Cog fork is no longer required for GPU visibility. This repo now assumes stock
+`cog 0.17.2+` for raw route URL handling too.
 
 `render_artifacts.sh` is still needed here for two repo-specific reasons:
 
@@ -12,10 +12,10 @@ runtime builder here for the stock Cog `0.17` URL-coercion regression.
 2. It injects the shared `common/bootstrap_image_env.sh` into `cog.yaml`, because official Cog still documents that repo files are not available to `build.run` commands.
 
 The shared bootstrap now also clones a pinned FaceFusion checkout into the image
-and installs the CUDA-capable ONNX Runtime plus the extra NVIDIA Python wheels
-needed at runtime (`cublas`, `cudnn`, `cudart`, `nvrtc`, `curand`, `cufft`).
-That keeps Replicate GPU containers from needing manual `LD_LIBRARY_PATH`
-fixups before the driver-camera anonymization path can use CUDA. It also
+and installs the CUDA-capable ONNX Runtime. The runtime wiring prefers system
+CUDA libraries in the container, so Replicate GPU containers do not need manual
+`LD_LIBRARY_PATH` fixups before the driver-camera anonymization path can use
+CUDA. It also
 prewarms the specific FaceFusion models this repo uses so the first beta smoke
 request does not spend its latency budget downloading donor-swap assets.
 
@@ -29,17 +29,6 @@ and
 [`../docs/upstream-modifications.md`](../docs/upstream-modifications.md).
 For the higher-level project history, see [`../CHANGELOG.md`](../CHANGELOG.md).
 
-## Patched Cog 0.17 runtime
-
-This repo also contains a reproducible builder for the `cog 0.17` URL-coercion regression fix in [`runtime_patch/`](./runtime_patch).
-
-Use that folder when you need to rebuild the patched Linux `coglet` runtime
-wheel and matching SDK wheel for Replicate pushes from macOS or any other
-non-Linux development machine.
-
-That patch matters for this project because:
-
-1. The Replicate model should accept a normal raw `https://connect.comma.ai/...` route URL.
-2. Stock local `cog predict` on Cog `0.17` still coerces raw URL-like `str`
-   inputs too early, so unpatched local testing may still need the
-   `literal:https://...` workaround.
+The local parser still accepts `literal:https://...` as a backwards-compatible
+route form, but stock `cog 0.17.2+` should no longer require it for normal
+string route inputs.

@@ -42,6 +42,13 @@ _CUDA_LIBRARY_SUBDIRS = (
     "cufft/lib",
     "nvjitlink/lib",
 )
+_SYSTEM_CUDA_LIBRARY_DIRS = (
+    "/usr/local/cuda-12.4/targets/x86_64-linux/lib",
+    "/usr/local/cuda/targets/x86_64-linux/lib",
+    "/usr/local/nvidia/lib64",
+    "/usr/local/nvidia/lib",
+    "/usr/lib/x86_64-linux-gnu",
+)
 
 
 @dataclass(frozen=True)
@@ -146,11 +153,17 @@ def _facefusion_python_site_packages_dir(facefusion_root: Path) -> Path | None:
 
 
 def _facefusion_cuda_library_dirs(facefusion_root: Path) -> list[Path]:
+    library_dirs: list[Path] = []
+    for system_dir in _SYSTEM_CUDA_LIBRARY_DIRS:
+        candidate = Path(system_dir)
+        if candidate.exists():
+            library_dirs.append(candidate)
+
     site_packages = _facefusion_python_site_packages_dir(facefusion_root)
     if site_packages is None:
-        return []
+        return library_dirs
+
     nvidia_root = site_packages / "nvidia"
-    library_dirs: list[Path] = []
     for subdir in _CUDA_LIBRARY_SUBDIRS:
         candidate = nvidia_root / subdir
         if candidate.exists():

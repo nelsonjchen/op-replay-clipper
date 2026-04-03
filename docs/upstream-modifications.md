@@ -7,7 +7,6 @@ That means:
 
 - openpilot files we patch at runtime
 - externally sourced rendering/runtime code we rebuild or carry
-- Cog runtime behavior we patch and rebake into pushed Replicate versions
 
 It intentionally does not list repo-owned orchestration or renderer code such
 as `renderers/big_ui_engine.py`, `renderers/ui_renderer.py`, or
@@ -35,20 +34,7 @@ external rendering/runtime components that the clipper depends on.
 | --- | --- | --- |
 | Linux `pyray` / raylib / GLFW stack as packaged for openpilot-style UI use | [common/build_linux_pyray_null_egl.py](../common/build_linux_pyray_null_egl.py), [common/bootstrap_image_env.sh](../common/bootstrap_image_env.sh), [core/render_runtime.py](../core/render_runtime.py), [tests/test_big_ui_engine.py](../tests/test_big_ui_engine.py) | Produces the patched null-platform EGL-backed Linux wheel that gives the Replicate environment real GPU rendering instead of falling back to software `llvmpipe` through `Xtigervnc`. |
 
-## 3. Cog runtime patches
-
-The repo also carries a small Cog 0.17 patch set so Replicate can keep
-accepting normal raw route URLs.
-
-Related upstream issue:
-
-- [replicate/cog#2868](https://github.com/issues/created?issue=replicate%7Ccog%7C2868)
-
-| Upstream target | Local files | Why it is modified |
-| --- | --- | --- |
-| Cog 0.17 input coercion behavior in `coglet` / SDK runtime | [cog/runtime_patch/0001-only-coerce-url-strings-for-file-and-path-inputs.patch](../cog/runtime_patch/0001-only-coerce-url-strings-for-file-and-path-inputs.patch), [cog/runtime_patch/Dockerfile](../cog/runtime_patch/Dockerfile), [cog/runtime_patch/build_wheels.sh](../cog/runtime_patch/build_wheels.sh), [cog/runtime_patch/push_beta.sh](../cog/runtime_patch/push_beta.sh), [cog/runtime_patch/README.md](../cog/runtime_patch/README.md) | Stock Cog 0.17 started coercing raw URL-looking `str` inputs into file/path inputs too early. The patched runtime keeps plain route URLs as strings so Replicate model versions can accept normal `https://connect.comma.ai/...` inputs again. |
-
-## 4. Generated Cog build wiring
+## 3. Generated Cog build wiring
 
 These files do not patch Cog itself, but they exist specifically because of
 Cog's build/runtime constraints.

@@ -19,10 +19,22 @@ GUI_ANONYMIZATION_PROFILE_MAP = {
 }
 
 
+def default_facefusion_root(repo_root: Path) -> Path:
+    candidates = [
+        Path(os.environ.get("FACEFUSION_ROOT", "")).expanduser() if os.environ.get("FACEFUSION_ROOT") else None,
+        repo_root / ".cache/facefusion",
+        Path("/.cache/facefusion"),
+    ]
+    for candidate in candidates:
+        if candidate and candidate.exists():
+            return candidate.resolve()
+    return (repo_root / ".cache/facefusion").resolve()
+
+
 class Predictor(BasePredictor):
     def setup(self) -> None:
         repo_root = Path(__file__).resolve().parent
-        os.environ.setdefault("FACEFUSION_ROOT", str(repo_root / ".cache/facefusion"))
+        os.environ["FACEFUSION_ROOT"] = str(default_facefusion_root(repo_root))
         os.environ.setdefault("DRIVER_FACE_SOURCE_IMAGE", str(repo_root / "assets/driver-face-donors/generic-donor-clean-shaven.jpg"))
         os.environ.setdefault("DRIVER_FACE_DONOR_BANK_DIR", str(repo_root / "assets/driver-face-donors"))
 
