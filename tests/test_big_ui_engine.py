@@ -212,6 +212,36 @@ def test_reapply_hidden_window_flag_sets_hidden_state(monkeypatch) -> None:
     assert called == [0x80]
 
 
+def test_load_route_metadata_falls_back_without_uploaded_logs(monkeypatch) -> None:
+    class FakeSegment:
+        @staticmethod
+        def _get_route_metadata(_canonical_name: str) -> dict[str, str]:
+            return {
+                "platform": "tici",
+                "git_remote": "origin",
+                "git_branch": "master",
+                "git_commit": "1234567890abcdef",
+            }
+
+    monkeypatch.setitem(sys.modules, "openpilot", types.ModuleType("openpilot"))
+    monkeypatch.setitem(sys.modules, "openpilot.tools", types.ModuleType("openpilot.tools"))
+    monkeypatch.setitem(sys.modules, "openpilot.tools.lib", types.ModuleType("openpilot.tools.lib"))
+    monkeypatch.setitem(sys.modules, "openpilot.tools.lib.logreader", SimpleNamespace(LogReader=None))
+    monkeypatch.setitem(sys.modules, "openpilot.tools.lib.route", SimpleNamespace(Segment=FakeSegment))
+
+    route = SimpleNamespace(
+        log_paths=lambda: [],
+        name=SimpleNamespace(canonical_name="dongle|route"),
+    )
+
+    metadata = big_ui_engine.load_route_metadata(route)
+
+    assert metadata["device_type"] == "tici"
+    assert metadata["platform"] == "tici"
+    assert metadata["branch"] == "master"
+    assert metadata["commit"] == "12345678"
+
+
 def test_build_layout_rects_alt_reserves_footer() -> None:
     rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="alt")
 

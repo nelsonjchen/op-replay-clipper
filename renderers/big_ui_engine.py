@@ -909,18 +909,27 @@ def load_route_metadata(route) -> dict[str, str]:
     from openpilot.tools.lib.logreader import LogReader
     from openpilot.tools.lib.route import Segment
 
-    path = next((item for item in route.log_paths() if item), None)
-    if not path:
-        raise RuntimeError("error getting route metadata: cannot find any uploaded logs")
-    lr = LogReader(path)
-    init_data = lr.first("initData")
-    car_params = lr.first("carParams")
-
     route_info = {}
     try:
         route_info = Segment._get_route_metadata(route.name.canonical_name)
     except Exception:
         route_info = {}
+
+    path = next((item for item in route.log_paths() if item), None)
+    if not path:
+        platform = route_info.get("platform") or "unknown"
+        return {
+            "route": route.name.canonical_name,
+            "device_type": str(route_info.get("device_type") or platform),
+            "platform": str(platform),
+            "remote": route_info.get("git_remote") or "unknown",
+            "branch": route_info.get("git_branch") or "unknown",
+            "commit": str(route_info.get("git_commit") or "unknown")[:8],
+            "dirty": str(route_info.get("dirty", "unknown")).lower(),
+        }
+    lr = LogReader(path)
+    init_data = lr.first("initData")
+    car_params = lr.first("carParams")
 
     platform = route_info.get("platform") or getattr(car_params, "carFingerprint", None) or "unknown"
 
