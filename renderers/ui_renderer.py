@@ -147,17 +147,18 @@ def _has_nvidia() -> bool:
 
 
 @lru_cache(maxsize=1)
-def _ffmpeg_encoders() -> frozenset[str]:
-    proc = subprocess.run(
-        ["ffmpeg", "-hide_banner", "-v", "error", "-encoders"],
+def _ffmpeg_encoder_names() -> frozenset[str]:
+    completed = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-encoders"],
         capture_output=True,
         text=True,
         check=False,
     )
-    if proc.returncode != 0:
+    if completed.returncode != 0:
         return frozenset()
+
     encoders: set[str] = set()
-    for line in proc.stdout.splitlines():
+    for line in completed.stdout.splitlines():
         parts = line.split()
         if len(parts) >= 2 and parts[0].startswith("V"):
             encoders.add(parts[1])
@@ -168,7 +169,11 @@ def _has_videotoolbox(file_format: str) -> bool:
     if platform.system() != "Darwin":
         return False
     encoder = "h264_videotoolbox" if file_format == "h264" else "hevc_videotoolbox"
-    return encoder in _ffmpeg_encoders()
+    return _ffmpeg_encoder_available(encoder)
+
+
+def _ffmpeg_encoder_available(name: str) -> bool:
+    return name in _ffmpeg_encoder_names()
 
 
 def _configure_ui_recording_encoder(
@@ -195,7 +200,7 @@ def _configure_ui_recording_encoder(
 
     if acceleration == "videotoolbox" and _has_videotoolbox(file_format):
         env["RECORD_CODEC"] = "h264_videotoolbox" if file_format == "h264" else "hevc_videotoolbox"
-        env["RECORD_PRESET"] = ""
+        env["RECORD_PRESET"] = "fast"
         if file_format == "hevc":
             env["RECORD_TAG"] = "hvc1"
         else:

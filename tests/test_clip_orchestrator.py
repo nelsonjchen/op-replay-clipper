@@ -25,6 +25,10 @@ def test_download_file_type_mapping() -> None:
     assert clip_orchestrator.select_download_file_types("ui", qcam=True) == ("qcameras", "logs")
     assert clip_orchestrator.select_download_file_types("ui-alt", qcam=True) == ("qcameras", "logs")
     assert clip_orchestrator.select_download_file_types("driver-debug", qcam=False) == ("dcameras", "logs")
+    assert clip_orchestrator.select_download_file_types("driver", qcam=False, driver_face_anonymization="facefusion") == (
+        "dcameras",
+        "logs",
+    )
     assert clip_orchestrator.select_download_file_types("ui", qcam=False) == ("cameras", "ecameras", "logs")
     assert clip_orchestrator.select_download_file_types("ui-alt", qcam=False) == ("cameras", "ecameras", "logs")
 
@@ -74,6 +78,20 @@ def test_build_plan_treats_driver_debug_as_openpilot_render() -> None:
 
     assert plan.download_file_types == ("dcameras", "logs")
     assert plan.decompress_logs is False
+
+
+def test_build_plan_rejects_driver_face_anonymization_for_non_driver_renders() -> None:
+    with pytest.raises(ValueError, match="only supported for `driver` and `driver-debug`"):
+        clip_orchestrator.build_clip_plan(
+            clip_orchestrator.ClipRequest(
+                render_type="forward",
+                route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+                start_seconds=90,
+                length_seconds=5,
+                target_mb=9,
+                driver_face_anonymization="facefusion",
+            )
+        )
 
 
 @mock.patch("renderers.video_renderer.platform.system", return_value="Darwin")
@@ -158,6 +176,150 @@ def test_non_ui_command_uses_requested_accel(ensure_checkout: mock.Mock, bootstr
     bootstrap.assert_not_called()
     request = run_clip.call_args.args[0]
     assert request.local_acceleration == "videotoolbox"
+
+
+@mock.patch("clip.run_clip")
+@mock.patch("clip.bootstrap_openpilot")
+@mock.patch("clip.ensure_openpilot_checkout")
+def test_driver_face_anonymization_flags_flow_into_clip_request(
+    ensure_checkout: mock.Mock,
+    bootstrap: mock.Mock,
+    run_clip: mock.Mock,
+) -> None:
+    run_clip.return_value = mock.Mock(output_path="shared/out.mp4", acceleration=None)
+    exit_code = clip.main(
+        [
+            "driver",
+            "--demo",
+            "--driver-face-anonymization",
+            "facefusion",
+            "--driver-face-profile",
+            "driver_face_swap_passenger_pixelize",
+            "--driver-face-source-image",
+            "/tmp/donor.png",
+            "--driver-face-selection",
+            "auto_best_match",
+            "--driver-face-donor-bank-dir",
+            "/tmp/donor-bank",
+            "--driver-face-preset",
+            "quality",
+            "--facefusion-root",
+            "/tmp/facefusion",
+            "--facefusion-model",
+            "hyperswap_1b_256",
+        ]
+    )
+    assert exit_code == 0
+    ensure_checkout.assert_called_once()
+    bootstrap.assert_called_once()
+    request = run_clip.call_args.args[0]
+    assert request.render_type == "driver"
+    assert request.driver_face_anonymization == "facefusion"
+    assert request.driver_face_profile == "driver_face_swap_passenger_pixelize"
+    assert request.driver_face_source_image == "/tmp/donor.png"
+    assert request.driver_face_selection == "auto_best_match"
+    assert request.driver_face_donor_bank_dir == "/tmp/donor-bank"
+    assert request.driver_face_preset == "quality"
+    assert request.facefusion_root == "/tmp/facefusion"
+    assert request.facefusion_model == "hyperswap_1b_256"
+
+
+def test_build_plan_preserves_driver_face_profile() -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type="driver",
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
+            driver_face_anonymization="facefusion",
+            driver_face_profile="driver_face_swap_passenger_pixelize",
+        )
+    )
+
+    assert plan.driver_face_swap.mode == "facefusion"
+    assert plan.driver_face_swap.profile == "driver_face_swap_passenger_pixelize"
+
+
+def test_build_plan_preserves_driver_unchanged_passenger_pixelize_profile() -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type="driver",
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
+            driver_face_anonymization="facefusion",
+            driver_face_profile="driver_unchanged_passenger_pixelize",
+        )
+    )
+
+    assert plan.driver_face_swap.mode == "facefusion"
+    assert plan.driver_face_swap.profile == "driver_unchanged_passenger_pixelize"
+
+
+def test_build_plan_preserves_driver_unchanged_passenger_face_swap_profile() -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type="driver",
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
+            driver_face_anonymization="facefusion",
+            driver_face_profile="driver_unchanged_passenger_face_swap",
+        )
+    )
+
+    assert plan.driver_face_swap.mode == "facefusion"
+    assert plan.driver_face_swap.profile == "driver_unchanged_passenger_face_swap"
+
+
+def test_run_clip_uses_anonymized_backing_pipeline_for_driver(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type="driver",
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
+            output_path=str(tmp_path / "out.mp4"),
+            explicit_data_dir=str(tmp_path / "data"),
+            driver_face_anonymization="facefusion",
+            driver_face_source_image="/tmp/donor.png",
+            facefusion_root="/tmp/facefusion",
+            facefusion_model="hyperswap_1b_256",
+        )
+    )
+
+    monkeypatch.setattr(clip_orchestrator, "build_clip_plan", lambda request: plan)
+    monkeypatch.setattr(clip_orchestrator.route_downloader, "downloadSegments", lambda **kwargs: None)
+    called: dict[str, object] = {}
+
+    def _fake_render(**kwargs):
+        called.update(kwargs)
+        output = Path(kwargs["output_path"])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"fake")
+        return output
+
+    monkeypatch.setattr(clip_orchestrator, "render_anonymized_driver_backing_video", _fake_render)
+
+    result = clip_orchestrator.run_clip(
+        clip_orchestrator.ClipRequest(
+            render_type="driver",
+            route_or_url="ignored",
+            start_seconds=0,
+            length_seconds=1,
+            target_mb=1,
+        )
+    )
+
+    assert result.output_path == (tmp_path / "out.mp4").resolve()
+    assert called["route"] == plan.route
+    assert called["start_seconds"] == 90
+    assert called["length_seconds"] == 5
+    assert called["options"].mode == "facefusion"
 
 
 def test_probe_video_dimensions_reads_ffprobe_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

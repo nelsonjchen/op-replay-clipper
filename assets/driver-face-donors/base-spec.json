@@ -1,0 +1,117 @@
+{
+  "schema_version": "v1",
+  "base_donors": [
+    {
+      "id": "base-light-masc-younger",
+      "image": "base-light-masc-younger.jpg",
+      "label": "Light Masc Younger",
+      "presentation": "masc",
+      "tone_band": "light",
+      "age_band": "younger",
+      "facial_hair": "none",
+      "glasses": "no"
+    },
+    {
+      "id": "base-light-masc-older",
+      "image": "base-light-masc-older.jpg",
+      "label": "Light Masc Older",
+      "presentation": "masc",
+      "tone_band": "light",
+      "age_band": "older",
+      "facial_hair": "none",
+      "glasses": "no"
+    },
+    {
+      "id": "base-light-fem-younger",
+      "image": "base-light-fem-younger.jpg",
+      "label": "Light Fem Younger",
+      "presentation": "fem",
+      "tone_band": "light",
+      "age_band": "younger",
+      "facial_hair": "none",
+      "glasses": "no"
+    },
+    {
+      "id": "base-medium-masc-younger",
+      "image": "base-medium-masc-younger.jpg",
+      "label": "Medium Masc Younger",
+      "presentation": "masc",
+      "tone_band": "medium",
+      "age_band": "younger",
+      "facial_hair": "none",
+      "glasses": "no"
+    },
+    {
+      "id": "base-medium-masc-older",
+      "image": "base-medium-masc-older.jpg",
+      "label": "Medium Masc Older",
+      "presentation": "masc",
+      "tone_band": "medium",
+      "age_band": "older",
+      "facial_hair": "none",
+      "glasses": "no"
+    },
+    {
+      "id": "base-medium-fem-younger",
+      "image": "base-medium-fem-younger.jpg",
+      "label": "Medium Fem Younger",
+      "presentation": "fem",
+      "tone_band": "medium",
+      "age_band": "younger",
+      "facial_hair": "none",
+      "glasses": "no"
+    },
+    {
+      "id": "base-dark-masc-younger",
+      "image": "base-dark-masc-younger.jpg",
+      "label": "Dark Masc Younger",
+      "presentation": "masc",
+      "tone_band": "dark",
+      "age_band": "younger",
+      "facial_hair": "none",
+      "glasses": "no"
+    },
+    {
+      "id": "base-dark-masc-older",
+      "image": "base-dark-masc-older.jpg",
+      "label": "Dark Masc Older",
+      "presentation": "masc",
+      "tone_band": "dark",
+      "age_band": "older",
+      "facial_hair": "none",
+      "glasses": "no"
+    }
+  ],
+  "variant_donors": [
+    {
+      "id": "variant-light-masc-glasses",
+      "image": "variant-light-masc-glasses.jpg",
+      "label": "Light Masc Glasses",
+      "presentation": "masc",
+      "tone_band": "light",
+      "age_band": "older",
+      "facial_hair": "none",
+      "glasses": "yes"
+    },
+    {
+      "id": "variant-medium-masc-glasses",
+      "image": "variant-medium-masc-glasses.jpg",
+      "label": "Medium Masc Glasses",
+      "presentation": "masc",
+      "tone_band": "medium",
+      "age_band": "older",
+      "facial_hair": "none",
+      "glasses": "yes"
+    },
+    {
+      "id": "variant-dark-masc-glasses",
+      "image": "variant-dark-masc-glasses.jpg",
+      "label": "Dark Masc Glasses",
+      "presentation": "masc",
+      "tone_band": "dark",
+      "age_band": "older",
+      "facial_hair": "none",
+      "glasses": "yes"
+    }
+  ]
+}

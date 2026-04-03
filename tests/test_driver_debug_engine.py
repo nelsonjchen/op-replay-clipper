@@ -102,9 +102,11 @@ def test_extract_driver_debug_telemetry_prefers_dm_side_and_exposes_key_metrics(
 
     assert telemetry.alert_name == "promptDriverDistracted"
     assert telemetry.selected_side == "right"
+    assert telemetry.other_side == "left"
     assert telemetry.face_detected is True
     assert telemetry.is_distracted is True
     assert telemetry.face_prob == 0.91
+    assert telemetry.other_face_prob == 0.1
     assert telemetry.phone_prob == 0.66
     assert telemetry.face_orientation == (1.0, 2.0, 3.0)
     assert telemetry.pitch_valid_count == 33
@@ -130,7 +132,9 @@ def test_extract_driver_debug_telemetry_falls_back_to_wheel_probability_when_dm_
 
     assert telemetry.is_rhd is True
     assert telemetry.selected_side == "right"
+    assert telemetry.other_side == "left"
     assert telemetry.face_prob == 0.7
+    assert telemetry.other_face_prob == 0.2
 
 
 def test_driver_camera_dialog_module_uses_mici_variant_for_mici_routes() -> None:
@@ -143,6 +147,7 @@ def test_normalize_cli_paths_resolves_relative_paths_against_original_cwd(tmp_pa
         openpilot_dir="openpilot",
         output="shared/out.mp4",
         data_dir="shared/data_dir",
+        backing_video="shared/backing.mp4",
     )
 
     normalized = driver_debug_engine._normalize_cli_paths(args, cwd=tmp_path)
@@ -150,6 +155,7 @@ def test_normalize_cli_paths_resolves_relative_paths_against_original_cwd(tmp_pa
     assert normalized.openpilot_dir == str((tmp_path / "openpilot").resolve())
     assert normalized.output == str((tmp_path / "shared/out.mp4").resolve())
     assert normalized.data_dir == str((tmp_path / "shared/data_dir").resolve())
+    assert normalized.backing_video == str((tmp_path / "shared/backing.mp4").resolve())
 
 
 def test_humanize_platform_preserves_raw_platform_text() -> None:

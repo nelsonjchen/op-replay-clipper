@@ -3,12 +3,19 @@
 set -euo pipefail
 
 # Shared bootstrap for Docker/Cog images that need a working openpilot clip environment.
+# CACHE_BUSTER: 2026-04-03-facefusion-rebuild
 
+APP_ROOT="${APP_ROOT:-$(pwd)}"
 OPENPILOT_ROOT="${OPENPILOT_ROOT:-/home/batman/openpilot}"
 OPENPILOT_REPO_URL="${OPENPILOT_REPO_URL:-https://github.com/commaai/openpilot.git}"
 OPENPILOT_BRANCH="${OPENPILOT_BRANCH:-master}"
 OPENPILOT_CLONE_DEPTH="${OPENPILOT_CLONE_DEPTH:-1}"
+FACEFUSION_ROOT="${FACEFUSION_ROOT:-${APP_ROOT}/.cache/facefusion}"
+FACEFUSION_REPO_URL="${FACEFUSION_REPO_URL:-https://github.com/facefusion/facefusion.git}"
+FACEFUSION_COMMIT="${FACEFUSION_COMMIT:-519360bcd650679275024aa3ed10e8d673718bb3}"
+FACEFUSION_PYTHON_VERSION="${FACEFUSION_PYTHON_VERSION:-3.12}"
 SCONS_JOBS="${SCONS_JOBS:-$(command -v nproc >/dev/null 2>&1 && nproc || echo 8)}"
+BUILD_TMPDIR="${BUILD_TMPDIR:-/var/tmp/op-clipper-build}"
 export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
 
 APT_PACKAGES=(
@@ -45,6 +52,22 @@ log_step() {
   printf '\n==> %s\n' "$1"
 }
 
+configure_build_tempdir() {
+  log_step "Configuring build temp directory"
+  mkdir -p "${BUILD_TMPDIR}"
+  chmod 1777 "${BUILD_TMPDIR}"
+  export TMPDIR="${BUILD_TMPDIR}"
+  export TMP="${BUILD_TMPDIR}"
+  export TEMP="${BUILD_TMPDIR}"
+}
+
+redirect_system_tmp() {
+  log_step "Redirecting /tmp to build temp directory"
+  rm -rf /tmp/*
+  rmdir /tmp
+  ln -s "${BUILD_TMPDIR}" /tmp
+}
+
 install_system_packages() {
   log_step "Installing system packages"
   apt-get update -y
@@ -54,6 +77,17 @@ install_system_packages() {
 configure_git_lfs() {
   log_step "Configuring git-lfs"
   git lfs install
+}
+
+clone_facefusion_checkout() {
+  log_step "Cloning FaceFusion into ${FACEFUSION_ROOT}"
+  rm -rf "${FACEFUSION_ROOT}"
+  mkdir -p "$(dirname "${FACEFUSION_ROOT}")"
+  git clone --filter=blob:none "${FACEFUSION_REPO_URL}" "${FACEFUSION_ROOT}"
+  if [[ -n "${FACEFUSION_COMMIT}" ]]; then
+    cd "${FACEFUSION_ROOT}"
+    git checkout "${FACEFUSION_COMMIT}"
+  fi
 }
 
 clone_openpilot_checkout() {
@@ -95,6 +129,78 @@ ensure_uv_on_path() {
   fi
   ln -sf /root/.local/bin/uv /usr/local/bin/uv
   export PATH="/root/.local/bin:${PATH}"
+}
+
+install_facefusion_runtime() {
+  log_step "Installing FaceFusion CUDA runtime"
+  cd "${FACEFUSION_ROOT}"
+  uv python install "${FACEFUSION_PYTHON_VERSION}"
+  uv venv --python "${FACEFUSION_PYTHON_VERSION}" --seed .venv
+  . .venv/bin/activate
+  python -m pip install --upgrade pip wheel setuptools
+  python install.py --onnxruntime cuda --skip-conda
+}
+
+prewarm_facefusion_models() {
+  log_step "Prewarming FaceFusion model assets"
+  cd "${FACEFUSION_ROOT}"
+  . .venv/bin/activate
+  python - <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+root = Path.cwd()
+if str(root) not in sys.path:
+    sys.path.insert(0, str(root))
+
+from facefusion import state_manager
+from facefusion import face_classifier, face_detector, face_landmarker, face_masker, face_recognizer
+from facefusion.processors.modules.face_swapper import core as face_swapper
+
+state_manager.init_item("execution_device_ids", [0])
+state_manager.init_item("execution_providers", ["cpu"])
+state_manager.init_item("download_providers", ["github", "huggingface"])
+state_manager.init_item("face_detector_model", "yunet")
+state_manager.init_item("face_detector_size", "640x640")
+state_manager.init_item("face_detector_margin", [0, 0, 0, 0])
+state_manager.init_item("face_detector_score", 0.35)
+state_manager.init_item("face_detector_angles", [0])
+state_manager.init_item("face_landmarker_model", "2dfan4")
+state_manager.init_item("face_occluder_model", "xseg_1")
+state_manager.init_item("face_parser_model", "bisenet_resnet_34")
+state_manager.init_item("face_swapper_model", "hyperswap_1b_256")
+state_manager.init_item("face_swapper_pixel_boost", "256x256")
+state_manager.init_item("face_swapper_weight", 1.0)
+
+checks = [
+    ("face_detector", face_detector.pre_check),
+    ("face_landmarker", face_landmarker.pre_check),
+    ("face_recognizer", face_recognizer.pre_check),
+    ("face_classifier", face_classifier.pre_check),
+    ("face_masker", face_masker.pre_check),
+    ("face_swapper", face_swapper.pre_check),
+]
+for label, fn in checks:
+    ok = fn()
+    print(f"{label} pre_check={ok}", flush=True)
+    if not ok:
+        raise SystemExit(f"Failed to prewarm {label}")
+PY
+}
+
+deactivate_facefusion_venv() {
+  if [[ -n "${VIRTUAL_ENV:-}" ]]; then
+    log_step "Deactivating FaceFusion virtualenv before openpilot bootstrap"
+    deactivate || true
+  fi
+}
+
+prune_facefusion_checkout() {
+  log_step "Pruning FaceFusion checkout"
+  cd "${FACEFUSION_ROOT}"
+  rm -rf .git .github tests
 }
 
 fix_vendored_tool_permissions() {
@@ -429,15 +535,23 @@ record_checkout_commit() {
 clean_image_artifacts() {
   log_step "Cleaning bootstrap caches"
   rm -rf /tmp/*
+  rm -rf "${BUILD_TMPDIR}"/*
   rm -rf /root/.cache
   rm -rf /var/lib/apt/lists/*
 }
 
 main() {
   install_system_packages
+  configure_build_tempdir
+  redirect_system_tmp
   configure_git_lfs
-  clone_openpilot_checkout
   ensure_uv_on_path
+  clone_facefusion_checkout
+  install_facefusion_runtime
+  prewarm_facefusion_models
+  deactivate_facefusion_venv
+  prune_facefusion_checkout
+  clone_openpilot_checkout
   install_openpilot_dependencies
   fix_vendored_tool_permissions
   build_openpilot_clip_dependencies

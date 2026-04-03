@@ -210,6 +210,36 @@ uv run python clip.py driver-debug "https://connect.comma.ai/<dongle>/<route>/<s
 uv run python clip.py forward "a2a0ccea32023010|2023-07-27--13-01-19" --demo
 ```
 
+Driver backing-video face anonymization:
+
+```bash
+uv run python clip.py driver --demo --length-seconds 20 \
+  --driver-face-anonymization facefusion \
+  --driver-face-source-image ./assets/driver-face-donors/generic-donor-clean-shaven.jpg \
+  --driver-face-preset fast \
+  --output ./shared/driver-facefusion.mp4
+
+uv run python clip.py driver --demo --length-seconds 20 \
+  --driver-face-anonymization facefusion \
+  --driver-face-selection auto_best_match \
+  --driver-face-donor-bank-dir ./assets/driver-face-donors \
+  --driver-face-preset fast \
+  --output ./shared/driver-facefusion-auto.mp4
+
+uv run python clip.py driver-debug --demo --length-seconds 20 \
+  --driver-face-anonymization facefusion \
+  --driver-face-source-image ./assets/driver-face-donors/generic-donor-clean-shaven.jpg \
+  --driver-face-preset fast \
+  --output ./shared/driver-debug-facefusion.mp4
+```
+
+The bundled donor bank lives in [`assets/driver-face-donors`](assets/driver-face-donors). It currently keeps full light/medium/dark tone coverage for masculine donors, while the active feminine bank is intentionally limited to younger light/medium donors plus a feminine clean-shaven fallback, with additional masculine glasses/beard variants. To regenerate the checked-in bank with Runware FLUX Kontext, use:
+
+```bash
+export RUNWARE_API_KEY=...
+./.cache/facefusion/.venv/bin/python tools/generate_driver_face_donor_bank.py --skip-existing
+```
+
 BIG UI smoke test:
 
 ```bash
@@ -234,6 +264,13 @@ Notes:
 
 * `clip.py` is the primary local CLI for UI and non-UI renders
 * `driver-debug` is an openpilot-backed render type like `ui` and `ui-alt`, but it only needs `dcameras` and `logs`
+* `driver` and `driver-debug` can optionally anonymize the backing driver video with `--driver-face-anonymization facefusion`
+* `--driver-face-profile` controls the seat strategy, with `driver_unchanged_passenger_face_swap` for “show my real driver face, swap the passenger”, `driver_unchanged_passenger_pixelize` for “show my real driver face, hide the passenger”, `driver_face_swap_passenger_pixelize` as the cheaper mixed mode, and `driver_face_swap_passenger_face_swap` for swapping both front seats
+* That anonymization path reuses the repo-owned DM face track, swaps the prepared face crop with FaceFusion, then composites the swapped crop back into the full driver backing video before the final render
+* Every anonymized output now burns a bright mode-specific banner into the driver video, for example `PASSENGER PIXELIZED` or `DRIVER SWAPPED, PASSENGER PIXELIZED`, so viewers can tell what was actually changed
+* `--driver-face-preset fast` is the practical default for short clips, while `quality` trades more time for cleaner masking and higher-resolution swapping
+* `--driver-face-selection auto_best_match` runs a short same-tone donor search against the donor bank, writes a `<output>.driver-face-selection.json` sidecar report, then uses the selected donor for the final swap
+* `driver` anonymization also needs `logs`, because the face crop is driven by driver-monitoring telemetry rather than a fresh detector pass
 * `driver-debug` uses the same hidden preroll/cut behavior as the UI renderers so the visible clip starts after the DM state has initialized
 * BIG UI renders now use a repo-owned exact-frame runner instead of the old coarse 20 Hz chunk mapping, so lane lines and path overlays stay aligned to the logged road camera frames
 * The BIG UI renderer also does a hidden 1-second warmup before recording so the visible clip starts with initialized video/UI state instead of a blank opening
@@ -248,6 +285,47 @@ Notes:
 * `uv run pytest` runs the local refactor tests
 * `./cog/render_artifacts.sh` exports `requirements-cog.txt` from `uv.lock` for Cog, so the local and Cog dependency sets stay aligned
 * `cog.yaml` and `requirements-cog.txt` are generated artifacts and are intentionally not committed
+
+### Driver Face Evaluation Harness
+
+Use `driver_face_eval.py` for local-only benchmark prep when you want clean
+`driver` clips plus a DM-guided face-track crop for trying anonymization or
+face-replacement approaches against real comma driver-camera footage.
+
+The built-in seed set currently materializes:
+
+* `mici-baseline`
+* `tici-baseline`
+* `tici-occlusion`
+
+Outputs for each sample land under `./shared/driver-face-eval/<sample-id>/`:
+
+* `driver-source.mp4` - clean full-frame driver clip
+* `face-crop.mp4` - square DM-guided crop clip resized for model input
+* `face-track.json` - per-frame ROI sidecar with telemetry and crop geometry
+* `evaluation.md` - scoring template for candidate methods
+* `driver-debug-analysis.mp4` - optional debug/analysis render
+
+Materialize the default seed set:
+
+```bash
+uv run python driver_face_eval.py seed-set
+```
+
+Include a `driver-debug` analysis clip for the same samples:
+
+```bash
+uv run python driver_face_eval.py seed-set --include-driver-debug
+```
+
+Materialize one custom sample:
+
+```bash
+uv run python driver_face_eval.py sample my-sample \
+  'https://connect.comma.ai/<dongle>/<route>/<start>/<end>' \
+  --start-seconds 90 \
+  --length-seconds 2
+```
 
 ### Hosted Replicate runs with uv
 
@@ -283,28 +361,16 @@ Notes:
 * the hosted helper now takes a full `connect.comma.ai` clip URL and does not expose separate `start-seconds` or `length-seconds` flags
 * `.env` is ignored by git; `.env.example` is the committed placeholder
 
-### Patched Cog runtime pushes
+### Cog 0.17.2 route input behavior
 
-Stock `cog 0.17` regressed plain `https://...` string handling for this
-project's `route: str` input by coercing raw URLs into downloaded file/path
-objects too early.
+This repo now assumes stock `cog 0.17.2+` for Replicate deploys.
 
-This repo keeps a reproducible builder for the patched Replicate runtime in:
+Upstream Cog fixed the earlier raw-URL coercion regression for plain `str`
+inputs, so hosted model versions can once again accept normal
+`https://connect.comma.ai/...` route URLs without a custom patched runtime.
 
-* [cog/runtime_patch](cog/runtime_patch)
-
-That folder builds:
-
-* a patched `cog` SDK wheel
-* a patched Linux `coglet` wheel
-
-Those wheels are then injected into a normal `cog push`, so fresh Replicate
-model versions keep accepting a normal raw
-`https://connect.comma.ai/...` input on the hosted surface.
-
-For local `cog predict`, stock Cog `0.17` still has the URL-coercion regression.
-Use the patched runtime from `cog/runtime_patch`, or pass `literal:https://...`
-as the route input when you are testing with an unpatched local Cog install.
+The local parser still accepts `literal:https://...` as a backwards-compatible
+input form, but it is no longer the recommended deploy or smoke-test path.
 
 For the full current deploy flow, including staging pushes, production pushes,
 and post-promotion verification, see

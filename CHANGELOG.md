@@ -14,6 +14,11 @@ This repository does not currently publish versioned release tags, so the older 
 - Fixed: Corrected newer mici 360 camera dimensions so 360 and 360-forward-upon-wide renders keep working on newer routes.
 - Changed: Tightened predictor field descriptions and added a production-readiness checklist plus supporting docs.
 
+## 2026-04-02
+
+- Changed: Switched Replicate deploy guidance back to stock `cog 0.17.2+` after upstream fixed the raw URL coercion regression for plain `str` inputs.
+- Removed: Retired the repo's patched Cog runtime flow and related push helpers.
+
 ## 2026-03-25
 
 - Added: Replaced the older coarse UI replay path with a repo-owned exact-frame BIG UI engine.

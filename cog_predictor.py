@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from cog import BasePredictor, Input, Path as CogPath
@@ -9,10 +10,33 @@ from core.openpilot_config import default_image_openpilot_root
 MIN_LENGTH_SECONDS = 5
 MAX_LENGTH_SECONDS = 300
 
+GUI_ANONYMIZATION_PROFILE_MAP = {
+    "none": ("none", "driver_face_swap_passenger_face_swap"),
+    "driver unchanged, passenger face swap": ("facefusion", "driver_unchanged_passenger_face_swap"),
+    "driver unchanged, passenger pixelize": ("facefusion", "driver_unchanged_passenger_pixelize"),
+    "driver face swap, passenger pixelize": ("facefusion", "driver_face_swap_passenger_pixelize"),
+    "driver face swap, passenger face swap": ("facefusion", "driver_face_swap_passenger_face_swap"),
+}
+
+
+def default_facefusion_root(repo_root: Path) -> Path:
+    candidates = [
+        Path(os.environ.get("FACEFUSION_ROOT", "")).expanduser() if os.environ.get("FACEFUSION_ROOT") else None,
+        repo_root / ".cache/facefusion",
+        Path("/.cache/facefusion"),
+    ]
+    for candidate in candidates:
+        if candidate and candidate.exists():
+            return candidate.resolve()
+    return (repo_root / ".cache/facefusion").resolve()
+
 
 class Predictor(BasePredictor):
     def setup(self) -> None:
-        pass
+        repo_root = Path(__file__).resolve().parent
+        os.environ["FACEFUSION_ROOT"] = str(default_facefusion_root(repo_root))
+        os.environ.setdefault("DRIVER_FACE_SOURCE_IMAGE", str(repo_root / "assets/driver-face-donors/generic-donor-clean-shaven.jpg"))
+        os.environ.setdefault("DRIVER_FACE_DONOR_BANK_DIR", str(repo_root / "assets/driver-face-donors"))
 
     def predict(
         self,
@@ -51,6 +75,17 @@ class Predictor(BasePredictor):
             description="Optional JWT Token from https://jwt.comma.ai for routes without Public Access. Do not share this token: it is valid for 90 days and cannot be revoked early. Public Access is usually the safer option.",
             default="",
         ),
+        anonymizationProfile: str = Input(
+            description="Seat anonymization strategy for driver-camera renders.",
+            choices=[
+                "none",
+                "driver unchanged, passenger face swap",
+                "driver unchanged, passenger pixelize",
+                "driver face swap, passenger pixelize",
+                "driver face swap, passenger face swap",
+            ],
+            default="none",
+        ),
         notes: str = Input(description="Optional notes for your own reference. Does not affect output.", default=""),
     ) -> CogPath:
         print("NOTES:")
@@ -61,6 +96,7 @@ class Predictor(BasePredictor):
             error_message="Replicate/Cog route input must be a full https://connect.comma.ai/... clip URL.",
         )
 
+        driver_face_anonymization, driver_face_profile = GUI_ANONYMIZATION_PROFILE_MAP[anonymizationProfile]
         result = run_clip(
             ClipRequest(
                 render_type=renderType,  # type: ignore[arg-type]
@@ -80,6 +116,9 @@ class Predictor(BasePredictor):
                 openpilot_dir=default_image_openpilot_root(),
                 qcam=False,
                 headless=True,
+                driver_face_anonymization=driver_face_anonymization,  # type: ignore[arg-type]
+                driver_face_profile=driver_face_profile,  # type: ignore[arg-type]
+                driver_face_selection="auto_best_match",
             )
         )
         return Path(result.output_path)
