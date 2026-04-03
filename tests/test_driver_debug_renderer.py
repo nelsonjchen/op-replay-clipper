@@ -91,8 +91,12 @@ def test_render_driver_debug_clip_can_feed_backing_video(tmp_path, monkeypatch) 
     monkeypatch.setattr(driver_debug_renderer, "_has_modern_openpilot", lambda _: True)
     monkeypatch.setattr(driver_debug_renderer, "apply_openpilot_runtime_patches", lambda _: SimpleNamespace(changed=False))
     monkeypatch.setattr(driver_debug_renderer, "_ensure_fonts", lambda _: None)
-    monkeypatch.setattr(driver_debug_renderer, "configure_ui_environment", lambda: {"RECORD_CODEC": "libx264"})
-    monkeypatch.setattr(driver_debug_renderer, "_configure_ui_recording_encoder", lambda env, _: "cpu")
+    monkeypatch.setattr(
+        driver_debug_renderer,
+        "configure_ui_environment",
+        lambda *args, **kwargs: {"RECORD_CODEC": "libx264"},
+    )
+    monkeypatch.setattr(driver_debug_renderer, "_configure_ui_recording_encoder", lambda env, _, __="auto": "cpu")
     monkeypatch.setattr(driver_debug_renderer, "_compute_ui_render_window", lambda **_: (84, 110, 1, 5))
     monkeypatch.setattr(driver_debug_renderer, "_openpilot_python_cmd", lambda _: ["python"])
     monkeypatch.setattr(driver_debug_renderer, "build_openpilot_compatible_data_dir", lambda route, path: path)
@@ -142,8 +146,12 @@ def test_render_driver_debug_clip_copies_backing_selection_report(tmp_path, monk
     monkeypatch.setattr(driver_debug_renderer, "_has_modern_openpilot", lambda _: True)
     monkeypatch.setattr(driver_debug_renderer, "apply_openpilot_runtime_patches", lambda _: SimpleNamespace(changed=False))
     monkeypatch.setattr(driver_debug_renderer, "_ensure_fonts", lambda _: None)
-    monkeypatch.setattr(driver_debug_renderer, "configure_ui_environment", lambda: {"RECORD_CODEC": "libx264"})
-    monkeypatch.setattr(driver_debug_renderer, "_configure_ui_recording_encoder", lambda env, _: "cpu")
+    monkeypatch.setattr(
+        driver_debug_renderer,
+        "configure_ui_environment",
+        lambda *args, **kwargs: {"RECORD_CODEC": "libx264"},
+    )
+    monkeypatch.setattr(driver_debug_renderer, "_configure_ui_recording_encoder", lambda env, _, __="auto": "cpu")
     monkeypatch.setattr(driver_debug_renderer, "_compute_ui_render_window", lambda **_: (84, 110, 1, 5))
     monkeypatch.setattr(driver_debug_renderer, "_openpilot_python_cmd", lambda _: ["python"])
     monkeypatch.setattr(driver_debug_renderer, "build_openpilot_compatible_data_dir", lambda route, path: path)
@@ -363,6 +371,7 @@ def test_render_driver_debug_clip_passes_requested_acceleration(tmp_path, monkey
     driver_debug_renderer.render_driver_debug_clip(
         driver_debug_renderer.DriverDebugRenderOptions(
             route="dongle|route",
+            route_or_url="dongle|route",
             start_seconds=90,
             length_seconds=20,
             smear_seconds=5,

@@ -1122,7 +1122,10 @@ def test_ui_recording_encoder_prefers_videotoolbox_on_macos(monkeypatch) -> None
     monkeypatch.setattr(
         ui_renderer.subprocess,
         "run",
-        lambda *args, **kwargs: mock.Mock(stdout=" V..... h264_videotoolbox\n V..... hevc_videotoolbox\n"),
+        lambda *args, **kwargs: mock.Mock(
+            stdout=" V..... h264_videotoolbox\n V..... hevc_videotoolbox\n",
+            returncode=0,
+        ),
     )
 
     acceleration = ui_renderer._configure_ui_recording_encoder(env, "hevc")
@@ -1138,7 +1141,7 @@ def test_ui_recording_encoder_falls_back_to_cpu(monkeypatch) -> None:
     monkeypatch.setattr(ui_renderer, "_has_nvidia", lambda: False)
     ui_renderer._ffmpeg_encoder_names.cache_clear()
     monkeypatch.setattr(ui_renderer.platform, "system", lambda: "Linux")
-    monkeypatch.setattr(ui_renderer.subprocess, "run", lambda *args, **kwargs: mock.Mock(stdout=""))
+    monkeypatch.setattr(ui_renderer.subprocess, "run", lambda *args, **kwargs: mock.Mock(stdout="", returncode=0))
 
     acceleration = ui_renderer._configure_ui_recording_encoder(env, "h264")
 
