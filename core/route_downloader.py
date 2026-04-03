@@ -1,9 +1,11 @@
 import argparse
+import bz2
 import parfive
 from pathlib import Path
 from typing import List, Optional, Union, TypedDict
 from parfive import Results
 import requests
+import shutil
 import subprocess
 import re
 import time
@@ -54,6 +56,19 @@ def _download_with_requests(url: str, destination: Path) -> None:
             for chunk in response.iter_content(chunk_size=1024 * 1024):
                 if chunk:
                     handle.write(chunk)
+
+
+def _decompress_log_preserving_source(compressed_path: Path, output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if compressed_path.suffix == ".bz2":
+        with bz2.open(compressed_path, "rb") as src, output_path.open("wb") as dst:
+            shutil.copyfileobj(src, dst)
+        return
+    if compressed_path.suffix == ".zst":
+        with output_path.open("wb") as dst:
+            subprocess.run(["zstd", "-d", "-c", str(compressed_path)], check=True, stdout=dst)
+        return
+    raise ValueError(f"Unsupported compressed log format: {compressed_path}")
 
 
 def _retry_failed_downloads(results: Results, *, max_conn: int) -> None:
@@ -361,11 +376,11 @@ def downloadSegments(
         found_log_path = None
         log_path = segment_dir / "rlog.bz2"
         if log_path.exists():
-            subprocess.run(["bzip2", "-d", log_path])
+            _decompress_log_preserving_source(log_path, segment_dir / "rlog")
             found_log_path = segment_dir / "rlog"
         log_path = segment_dir / "rlog.zst"
         if log_path.exists():
-            subprocess.run(["zstd", "-d", log_path])
+            _decompress_log_preserving_source(log_path, segment_dir / "rlog")
             found_log_path = segment_dir / "rlog"
         if not found_log_path:
             raise ValueError(f"Log for segment {segment_id} not found")
