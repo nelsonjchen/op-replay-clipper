@@ -1116,23 +1116,29 @@ def test_ui_recording_encoder_prefers_nvidia(monkeypatch) -> None:
 
 def test_ui_recording_encoder_prefers_videotoolbox_on_macos(monkeypatch) -> None:
     env: dict[str, str] = {}
+    ui_renderer._ffmpeg_encoder_names.cache_clear()
     monkeypatch.setattr(ui_renderer, "_has_nvidia", lambda: False)
     monkeypatch.setattr(ui_renderer.platform, "system", lambda: "Darwin")
-    monkeypatch.setattr(ui_renderer, "_ffmpeg_encoders", lambda: frozenset({"h264_videotoolbox", "hevc_videotoolbox"}))
+    monkeypatch.setattr(
+        ui_renderer.subprocess,
+        "run",
+        lambda *args, **kwargs: mock.Mock(stdout=" V..... h264_videotoolbox\n V..... hevc_videotoolbox\n"),
+    )
 
     acceleration = ui_renderer._configure_ui_recording_encoder(env, "hevc")
 
     assert acceleration == "videotoolbox"
     assert env["RECORD_CODEC"] == "hevc_videotoolbox"
-    assert env["RECORD_PRESET"] == ""
+    assert env["RECORD_PRESET"] == "fast"
     assert env["RECORD_TAG"] == "hvc1"
 
 
 def test_ui_recording_encoder_falls_back_to_cpu(monkeypatch) -> None:
     env: dict[str, str] = {}
     monkeypatch.setattr(ui_renderer, "_has_nvidia", lambda: False)
+    ui_renderer._ffmpeg_encoder_names.cache_clear()
     monkeypatch.setattr(ui_renderer.platform, "system", lambda: "Linux")
-    monkeypatch.setattr(ui_renderer, "_ffmpeg_encoders", lambda: frozenset())
+    monkeypatch.setattr(ui_renderer.subprocess, "run", lambda *args, **kwargs: mock.Mock(stdout=""))
 
     acceleration = ui_renderer._configure_ui_recording_encoder(env, "h264")
 

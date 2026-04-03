@@ -11,6 +11,14 @@ runtime builder here for the stock Cog `0.17` URL-coercion regression.
 1. It exports `requirements-cog.txt` from `uv.lock` so Cog uses a supported `python_requirements` file instead of deprecated `python_packages`.
 2. It injects the shared `common/bootstrap_image_env.sh` into `cog.yaml`, because official Cog still documents that repo files are not available to `build.run` commands.
 
+The shared bootstrap now also clones a pinned FaceFusion checkout into the image
+and installs the CUDA-capable ONNX Runtime plus the extra NVIDIA Python wheels
+needed at runtime (`cublas`, `cudnn`, `cudart`, `nvrtc`, `curand`, `cufft`).
+That keeps Replicate GPU containers from needing manual `LD_LIBRARY_PATH`
+fixups before the driver-camera anonymization path can use CUDA. It also
+prewarms the specific FaceFusion models this repo uses so the first beta smoke
+request does not spend its latency budget downloading donor-swap assets.
+
 The shell entrypoint is intentionally thin now. The YAML rendering itself lives in `cog/render_config.py` so the Cog-specific generation logic is testable without adding more shell branching.
 
 The project pins `attrs<24` in `pyproject.toml` on purpose so the exported Cog requirements remain compatible with Cog's own runtime dependency bounds.

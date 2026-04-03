@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from cog import BasePredictor, Input, Path as CogPath
@@ -20,7 +21,10 @@ GUI_ANONYMIZATION_PROFILE_MAP = {
 
 class Predictor(BasePredictor):
     def setup(self) -> None:
-        pass
+        repo_root = Path(__file__).resolve().parent
+        os.environ.setdefault("FACEFUSION_ROOT", str(repo_root / ".cache/facefusion"))
+        os.environ.setdefault("DRIVER_FACE_SOURCE_IMAGE", str(repo_root / "assets/driver-face-donors/generic-donor-clean-shaven.jpg"))
+        os.environ.setdefault("DRIVER_FACE_DONOR_BANK_DIR", str(repo_root / "assets/driver-face-donors"))
 
     def predict(
         self,

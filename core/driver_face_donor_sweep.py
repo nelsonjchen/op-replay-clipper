@@ -14,7 +14,8 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageOps
 
-from core.driver_face_swap import default_facefusion_output_video_encoder
+from core.driver_face_swap import default_facefusion_execution_providers, default_facefusion_output_video_encoder
+from core.driver_face_swap import apply_facefusion_runtime_env, facefusion_runtime_env
 
 
 DEFAULT_NEGATIVE_PROMPT = (
@@ -146,6 +147,7 @@ def _generate_variant(
     output_image: Path,
     spec: DonorVariantSpec,
 ) -> None:
+    execution_providers = default_facefusion_execution_providers()
     command = [
         str(runware_python),
         str((repo_root / "tools/runware_flux_kontext_edit.py").resolve()),
@@ -212,8 +214,7 @@ def _run_facefusion_fast_swap(
         "8",
         "8",
         "--execution-providers",
-        "coreml",
-        "cpu",
+        *execution_providers,
         "--execution-thread-count",
         "4",
         "--video-memory-strategy",
@@ -237,8 +238,7 @@ def _run_facefusion_fast_swap(
         "--log-level",
         "warn",
     ]
-    env = dict(os.environ)
-    env["SYSTEM_VERSION_COMPAT"] = "0"
+    env = facefusion_runtime_env(facefusion_root)
     _run_subprocess(command, cwd=facefusion_root, env=env)
 
 
@@ -281,6 +281,7 @@ def _lab_distance(a: list[float], b: list[float]) -> float:
 
 
 def _init_facefusion_modules(facefusion_root: Path) -> tuple[Any, Any, Any]:
+    apply_facefusion_runtime_env(facefusion_root)
     root_str = str(facefusion_root.resolve())
     if root_str not in sys.path:
         sys.path.insert(0, root_str)
@@ -289,7 +290,7 @@ def _init_facefusion_modules(facefusion_root: Path) -> tuple[Any, Any, Any]:
     from facefusion.face_recognizer import calculate_face_embedding, pre_check as face_recognizer_pre_check  # type: ignore
 
     state_manager.init_item("execution_device_ids", [0])
-    state_manager.init_item("execution_providers", ["cpu"])
+    state_manager.init_item("execution_providers", default_facefusion_execution_providers())
     state_manager.init_item("download_providers", ["github", "huggingface"])
     state_manager.init_item("face_detector_model", "yunet")
     state_manager.init_item("face_detector_size", "640x640")

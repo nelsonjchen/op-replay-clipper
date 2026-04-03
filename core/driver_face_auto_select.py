@@ -14,6 +14,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from core.driver_face_swap import apply_facefusion_runtime_env, default_facefusion_execution_providers
+
 DONOR_MANIFEST_NAME = "manifest.json"
 DEFAULT_TOP_K = 3
 DEFAULT_TONE_MARGIN_LAB = 12.0
@@ -461,6 +463,7 @@ def _score_candidate(
 
 
 def _init_facefusion_runtime(facefusion_root: Path, *, facefusion_model: str) -> dict[str, Any]:
+    apply_facefusion_runtime_env(facefusion_root)
     root_str = str(facefusion_root.resolve())
     if root_str not in sys.path:
         sys.path.insert(0, root_str)
@@ -471,7 +474,7 @@ def _init_facefusion_runtime(facefusion_root: Path, *, facefusion_model: str) ->
     from facefusion.processors.modules.face_swapper import core as face_swapper
 
     state_manager.init_item("execution_device_ids", [0])
-    state_manager.init_item("execution_providers", ["coreml", "cpu"])
+    state_manager.init_item("execution_providers", default_facefusion_execution_providers())
     state_manager.init_item("execution_thread_count", 4)
     state_manager.init_item("download_providers", ["github", "huggingface"])
     state_manager.init_item("face_detector_model", "yunet")

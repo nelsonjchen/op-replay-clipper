@@ -15,7 +15,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from core.driver_face_swap import DriverFaceSwapOptions, _auto_select_source_image, default_facefusion_output_video_encoder
+from core.driver_face_swap import (
+    DriverFaceSwapOptions,
+    _auto_select_source_image,
+    default_facefusion_execution_providers,
+    default_facefusion_output_video_encoder,
+    facefusion_runtime_env,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -223,6 +229,7 @@ def _run_facefusion_crop_swap(
     jobs_path.mkdir(parents=True, exist_ok=True)
     temp_path.mkdir(parents=True, exist_ok=True)
 
+    execution_providers = default_facefusion_execution_providers()
     command = [
         str(facefusion_python),
         str(facefusion_entry),
@@ -249,8 +256,7 @@ def _run_facefusion_crop_swap(
         "8",
         "8",
         "--execution-providers",
-        "coreml",
-        "cpu",
+        *execution_providers,
         "--video-memory-strategy",
         "tolerant",
         "--system-memory-limit",
@@ -307,8 +313,7 @@ def _run_facefusion_crop_swap(
                 "png",
             ]
         )
-    env = dict(os.environ)
-    env["SYSTEM_VERSION_COMPAT"] = "0"
+    env = facefusion_runtime_env(facefusion_root)
     started = time.perf_counter()
     subprocess.run(command, check=True, cwd=facefusion_root, env=env)
     runtime_seconds = time.perf_counter() - started

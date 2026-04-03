@@ -33,6 +33,15 @@ DEFAULT_DRIVER_FACE_SOURCE_IMAGE = "./assets/driver-face-donors/generic-donor-cl
 DEFAULT_FACEFUSION_MODEL = "hyperswap_1b_256"
 DEFAULT_DRIVER_FACE_DONOR_BANK_DIR = "./assets/driver-face-donors"
 BACKING_CACHE_SCHEMA_VERSION = "driver-face-cache-v3"
+_CUDA_LIBRARY_SUBDIRS = (
+    "cublas/lib",
+    "cudnn/lib",
+    "cuda_runtime/lib",
+    "cuda_nvrtc/lib",
+    "curand/lib",
+    "cufft/lib",
+    "nvjitlink/lib",
+)
 
 
 @dataclass(frozen=True)
@@ -111,6 +120,72 @@ def default_facefusion_output_video_encoder() -> str:
     if _has_nvidia() and _ffmpeg_encoder_available("hevc_nvenc"):
         return "hevc_nvenc"
     return "libx264"
+
+
+def default_facefusion_execution_providers() -> list[str]:
+    override = os.environ.get("DRIVER_FACEFUSION_EXECUTION_PROVIDERS")
+    if override:
+        providers = [provider.strip() for provider in override.split(",") if provider.strip()]
+        if providers:
+            return providers
+    if platform.system() == "Darwin":
+        return ["coreml", "cpu"]
+    if _has_nvidia():
+        return ["cuda", "cpu"]
+    return ["cpu"]
+
+
+def _facefusion_python_site_packages_dir(facefusion_root: Path) -> Path | None:
+    venv_lib = facefusion_root / ".venv/lib"
+    if not venv_lib.exists():
+        return None
+    for candidate in sorted(venv_lib.glob("python*/site-packages")):
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _facefusion_cuda_library_dirs(facefusion_root: Path) -> list[Path]:
+    site_packages = _facefusion_python_site_packages_dir(facefusion_root)
+    if site_packages is None:
+        return []
+    nvidia_root = site_packages / "nvidia"
+    library_dirs: list[Path] = []
+    for subdir in _CUDA_LIBRARY_SUBDIRS:
+        candidate = nvidia_root / subdir
+        if candidate.exists():
+            library_dirs.append(candidate)
+    return library_dirs
+
+
+def facefusion_runtime_env(
+    facefusion_root: Path,
+    *,
+    base_env: dict[str, str] | None = None,
+) -> dict[str, str]:
+    env = dict(os.environ if base_env is None else base_env)
+    env["SYSTEM_VERSION_COMPAT"] = "0"
+    if "cuda" not in default_facefusion_execution_providers():
+        return env
+
+    cuda_library_dirs = [str(path) for path in _facefusion_cuda_library_dirs(facefusion_root)]
+    if not cuda_library_dirs:
+        return env
+
+    existing = env.get("LD_LIBRARY_PATH", "")
+    existing_parts = [part for part in existing.split(":") if part]
+    combined_parts: list[str] = []
+    for path in [*cuda_library_dirs, *existing_parts]:
+        if path not in combined_parts:
+            combined_parts.append(path)
+    env["LD_LIBRARY_PATH"] = ":".join(combined_parts)
+    return env
+
+
+def apply_facefusion_runtime_env(facefusion_root: Path) -> None:
+    updated = facefusion_runtime_env(facefusion_root, base_env=dict(os.environ))
+    for key, value in updated.items():
+        os.environ[key] = value
 
 
 def intermediate_video_encoder_args() -> list[str]:
@@ -228,6 +303,7 @@ def _facefusion_swap_command(
     preset: DriverFaceSwapPreset,
 ) -> list[str]:
     output_video_encoder = default_facefusion_output_video_encoder()
+    execution_providers = default_facefusion_execution_providers()
     base_command = [
         str(facefusion_root / ".venv/bin/python"),
         str(facefusion_root / "facefusion.py"),
@@ -254,8 +330,7 @@ def _facefusion_swap_command(
         "8",
         "8",
         "--execution-providers",
-        "coreml",
-        "cpu",
+        *execution_providers,
         "--video-memory-strategy",
         "tolerant",
         "--system-memory-limit",
@@ -347,8 +422,7 @@ def _run_facefusion_swap(
     )
     command[command.index("--jobs-path") + 1] = str(jobs_path)
     command[command.index("--temp-path") + 1] = str(temp_path)
-    env = dict(os.environ)
-    env["SYSTEM_VERSION_COMPAT"] = "0"
+    env = facefusion_runtime_env(facefusion_root)
     subprocess.run(command, cwd=facefusion_root, env=env, check=True)
     return output_path
 
@@ -488,7 +562,8 @@ def _auto_select_source_image(
         "--representative-frames",
         "3",
     ]
-    proc = subprocess.run(command, check=True, capture_output=True, text=True)
+    env = facefusion_runtime_env(facefusion_root)
+    proc = subprocess.run(command, check=True, capture_output=True, text=True, env=env)
     payload = json.loads((proc.stdout or "").strip().splitlines()[-1])
     selected_donor = Path(payload["selected_donor_image"]).resolve()
     report_path = Path(payload["report_path"]).resolve()

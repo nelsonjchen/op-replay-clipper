@@ -21,6 +21,7 @@ __pycache__/
 # Keep `.cog/tmp` available so `cog predict` can build from its generated
 # wheel/requirements inputs.
 .cache/
+.caches/
 .cog/*
 !.cog/tmp/
 !.cog/tmp/**
@@ -31,4 +32,6 @@ requirements-cog.txt
 
 # Exclude local shared folder
 shared/
+.env
+.env.*
 *.mp4
