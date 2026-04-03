@@ -1,49 +1,163 @@
 {
   "donors": [
     {
+      "id": "base-dark-masc-older",
+      "image": "base-dark-masc-older.jpg",
+      "label": "Dark Masc Older",
+      "presentation": "masc",
+      "tone_band": "dark",
+      "age_band": "older",
+      "facial_hair": "none",
+      "glasses": "no",
+      "tone_lab": [
+        85.99,
+        138.13,
+        144.91
+      ],
+      "role": "base",
+      "source": "runware_flux_kontext_dev",
+      "seed": 3062752444
+    },
+    {
+      "id": "base-dark-masc-younger",
+      "image": "base-dark-masc-younger.jpg",
+      "label": "Dark Masc Younger",
+      "presentation": "masc",
+      "tone_band": "dark",
+      "age_band": "younger",
+      "facial_hair": "none",
+      "glasses": "no",
+      "tone_lab": [
+        73.47,
+        133.68,
+        136.51
+      ],
+      "role": "base",
+      "source": "runware_flux_kontext_dev",
+      "seed": 3370189200
+    },
+    {
+      "id": "base-light-fem-younger",
+      "image": "base-light-fem-younger.jpg",
+      "label": "Light Fem Younger",
+      "presentation": "fem",
+      "tone_band": "light",
+      "age_band": "younger",
+      "facial_hair": "none",
+      "glasses": "no",
+      "tone_lab": [
+        136.68,
+        138.95,
+        143.16
+      ],
+      "role": "base",
+      "source": "runware_flux_kontext_dev",
+      "seed": 2559498745
+    },
+    {
+      "id": "base-light-masc-older",
+      "image": "base-light-masc-older.jpg",
+      "label": "Light Masc Older",
+      "presentation": "masc",
+      "tone_band": "light",
+      "age_band": "older",
+      "facial_hair": "none",
+      "glasses": "no",
+      "tone_lab": [
+        147.58,
+        139.68,
+        144.02
+      ],
+      "role": "base",
+      "source": "runware_flux_kontext_dev",
+      "seed": 1000467513
+    },
+    {
+      "id": "base-light-masc-younger",
+      "image": "base-light-masc-younger.jpg",
+      "label": "Light Masc Younger",
+      "presentation": "masc",
+      "tone_band": "light",
+      "age_band": "younger",
+      "facial_hair": "none",
+      "glasses": "no",
+      "tone_lab": [
+        138.45,
+        136.0,
+        137.58
+      ],
+      "role": "base",
+      "source": "runware_flux_kontext_dev",
+      "seed": 2743510410
+    },
+    {
+      "id": "base-medium-fem-younger",
+      "image": "base-medium-fem-younger.jpg",
+      "label": "Medium Fem Younger",
+      "presentation": "fem",
+      "tone_band": "medium",
+      "age_band": "younger",
+      "facial_hair": "none",
+      "glasses": "no",
+      "tone_lab": [
+        80.56,
+        137.94,
+        143.79
+      ],
+      "role": "base",
+      "source": "runware_flux_kontext_dev",
+      "seed": 3829306614
+    },
+    {
+      "id": "base-medium-masc-older",
+      "image": "base-medium-masc-older.jpg",
+      "label": "Medium Masc Older",
+      "presentation": "masc",
+      "tone_band": "medium",
+      "age_band": "older",
+      "facial_hair": "none",
+      "glasses": "no",
+      "tone_lab": [
+        104.61,
+        141.87,
+        149.2
+      ],
+      "role": "base",
+      "source": "runware_flux_kontext_dev",
+      "seed": 4128088506
+    },
+    {
+      "id": "base-medium-masc-younger",
+      "image": "base-medium-masc-younger.jpg",
+      "label": "Medium Masc Younger",
+      "presentation": "masc",
+      "tone_band": "medium",
+      "age_band": "younger",
+      "facial_hair": "none",
+      "glasses": "no",
+      "tone_lab": [
+        90.43,
+        135.42,
+        139.77
+      ],
+      "role": "base",
+      "source": "runware_flux_kontext_dev",
+      "seed": 1037128918
+    },
+    {
       "facial_hair": "none",
       "glasses": "no",
       "id": "generic-donor-clean-shaven",
       "image": "generic-donor-clean-shaven.jpg",
       "label": "Clean Shaven",
       "presentation": "masc",
-      "tone_lab": [146.18, 135.36, 138.01]
-    },
-    {
-      "facial_hair": "stubble",
-      "glasses": "no",
-      "id": "generic-donor-stubble",
-      "image": "generic-donor-stubble.png",
-      "label": "Stubble",
-      "presentation": "masc",
-      "tone_lab": [142.30, 134.34, 135.94]
-    },
-    {
-      "facial_hair": "short_beard",
-      "glasses": "no",
-      "id": "generic-donor-short-beard",
-      "image": "generic-donor-short-beard.png",
-      "label": "Short Beard",
-      "presentation": "masc",
-      "tone_lab": [145.21, 133.14, 137.43]
-    },
-    {
-      "facial_hair": "full_beard",
-      "glasses": "no",
-      "id": "generic-donor-fuller-beard",
-      "image": "generic-donor-fuller-beard.png",
-      "label": "Fuller Beard",
-      "presentation": "masc",
-      "tone_lab": [141.42, 133.36, 135.63]
-    },
-    {
-      "facial_hair": "none",
-      "glasses": "yes",
-      "id": "generic-donor-glasses",
-      "image": "generic-donor-glasses.png",
-      "label": "Glasses",
-      "presentation": "masc",
-      "tone_lab": [143.75, 134.32, 138.87]
+      "tone_lab": [
+        146.18,
+        135.36,
+        138.01
+      ],
+      "role": "variant",
+      "source": "legacy"
     },
     {
       "facial_hair": "none",
@@ -52,7 +166,129 @@
       "image": "generic-donor-fem-clean-shaven.jpg",
       "label": "Feminine Clean Shaven",
       "presentation": "fem",
-      "tone_lab": [116.53, 142.12, 142.60]
+      "tone_band": "medium",
+      "age_band": "younger",
+      "tone_lab": [
+        116.53,
+        142.12,
+        142.6
+      ],
+      "role": "variant",
+      "source": "legacy"
+    },
+    {
+      "facial_hair": "full_beard",
+      "glasses": "no",
+      "id": "generic-donor-fuller-beard",
+      "image": "generic-donor-fuller-beard.png",
+      "label": "Fuller Beard",
+      "presentation": "masc",
+      "tone_lab": [
+        141.42,
+        133.36,
+        135.63
+      ],
+      "role": "variant",
+      "source": "legacy"
+    },
+    {
+      "facial_hair": "none",
+      "glasses": "yes",
+      "id": "generic-donor-glasses",
+      "image": "generic-donor-glasses.png",
+      "label": "Glasses",
+      "presentation": "masc",
+      "tone_lab": [
+        143.75,
+        134.32,
+        138.87
+      ],
+      "role": "variant",
+      "source": "legacy"
+    },
+    {
+      "facial_hair": "short_beard",
+      "glasses": "no",
+      "id": "generic-donor-short-beard",
+      "image": "generic-donor-short-beard.png",
+      "label": "Short Beard",
+      "presentation": "masc",
+      "tone_lab": [
+        145.21,
+        133.14,
+        137.43
+      ],
+      "role": "variant",
+      "source": "legacy"
+    },
+    {
+      "facial_hair": "stubble",
+      "glasses": "no",
+      "id": "generic-donor-stubble",
+      "image": "generic-donor-stubble.png",
+      "label": "Stubble",
+      "presentation": "masc",
+      "tone_lab": [
+        142.3,
+        134.34,
+        135.94
+      ],
+      "role": "variant",
+      "source": "legacy"
+    },
+    {
+      "id": "variant-dark-masc-glasses",
+      "image": "variant-dark-masc-glasses.jpg",
+      "label": "Dark Masc Glasses",
+      "presentation": "masc",
+      "tone_band": "dark",
+      "age_band": "older",
+      "facial_hair": "none",
+      "glasses": "yes",
+      "tone_lab": [
+        77.38,
+        138.47,
+        142.15
+      ],
+      "role": "variant",
+      "source": "runware_flux_kontext_dev",
+      "seed": 2796253682
+    },
+    {
+      "id": "variant-light-masc-glasses",
+      "image": "variant-light-masc-glasses.jpg",
+      "label": "Light Masc Glasses",
+      "presentation": "masc",
+      "tone_band": "light",
+      "age_band": "older",
+      "facial_hair": "none",
+      "glasses": "yes",
+      "tone_lab": [
+        138.59,
+        134.14,
+        136.71
+      ],
+      "role": "variant",
+      "source": "runware_flux_kontext_dev",
+      "seed": 2575945123
+    },
+    {
+      "id": "variant-medium-masc-glasses",
+      "image": "variant-medium-masc-glasses.jpg",
+      "label": "Medium Masc Glasses",
+      "presentation": "masc",
+      "tone_band": "medium",
+      "age_band": "older",
+      "facial_hair": "none",
+      "glasses": "yes",
+      "tone_lab": [
+        106.88,
+        138.13,
+        145.24
+      ],
+      "role": "variant",
+      "source": "runware_flux_kontext_dev",
+      "seed": 2928874761
     }
   ]
 }

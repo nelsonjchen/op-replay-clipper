@@ -19,6 +19,7 @@ from renderers import video_renderer
 
 DriverFaceAnonymizationMode = Literal["none", "facefusion"]
 DriverFaceAnonymizationProfile = Literal[
+    "driver_unchanged_passenger_face_swap",
     "driver_unchanged_passenger_pixelize",
     "driver_face_swap_passenger_face_swap",
     "driver_face_swap_passenger_pixelize",
@@ -128,6 +129,8 @@ def has_driver_face_anonymization(opts: DriverFaceSwapOptions) -> bool:
 
 
 def _seat_modes_for_profile(profile: DriverFaceAnonymizationProfile) -> tuple[SeatAnonymizationMode, SeatAnonymizationMode]:
+    if profile == "driver_unchanged_passenger_face_swap":
+        return "none", "facefusion"
     if profile == "driver_unchanged_passenger_pixelize":
         return "none", "pixelize"
     if profile == "driver_face_swap_passenger_pixelize":

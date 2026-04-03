@@ -75,6 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--driver-face-profile",
         choices=[
+            "driver_unchanged_passenger_face_swap",
             "driver_unchanged_passenger_pixelize",
             "driver_face_swap_passenger_face_swap",
             "driver_face_swap_passenger_pixelize",

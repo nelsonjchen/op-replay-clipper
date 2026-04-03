@@ -12,6 +12,13 @@ def test_driver_unchanged_passenger_pixelize_profile_maps_to_expected_seat_modes
     assert passenger_mode == "pixelize"
 
 
+def test_driver_unchanged_passenger_face_swap_profile_maps_to_expected_seat_modes() -> None:
+    driver_mode, passenger_mode = driver_face_swap._seat_modes_for_profile("driver_unchanged_passenger_face_swap")
+
+    assert driver_mode == "none"
+    assert passenger_mode == "facefusion"
+
+
 def test_driver_face_swap_passenger_pixelize_profile_maps_to_expected_seat_modes() -> None:
     driver_mode, passenger_mode = driver_face_swap._seat_modes_for_profile("driver_face_swap_passenger_pixelize")
 

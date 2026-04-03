@@ -18,6 +18,7 @@ DONOR_MANIFEST_NAME = "manifest.json"
 DEFAULT_TOP_K = 3
 DEFAULT_TONE_MARGIN_LAB = 12.0
 DEFAULT_REPRESENTATIVE_FRAMES = 3
+DEFAULT_TONE_LIGHTNESS_WEIGHT = 0.4
 UNKNOWN = "uncertain"
 
 
@@ -44,6 +45,18 @@ def _clip(value: float, lower: float, upper: float) -> float:
 
 def _lab_distance(a: list[float], b: list[float]) -> float:
     return float(math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b))))
+
+
+def _tone_distance_lab(
+    a: list[float],
+    b: list[float],
+    *,
+    lightness_weight: float = DEFAULT_TONE_LIGHTNESS_WEIGHT,
+) -> float:
+    delta_l = (a[0] - b[0]) * lightness_weight
+    delta_a = a[1] - b[1]
+    delta_b = a[2] - b[2]
+    return float(math.sqrt((delta_l * delta_l) + (delta_a * delta_a) + (delta_b * delta_b)))
 
 
 def _cosine_similarity(a: list[float] | tuple[float, ...], b: list[float] | tuple[float, ...]) -> float:
@@ -228,6 +241,16 @@ def _normalize_presentation_frame(frame: Any) -> Any:
     return cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
 
 
+def _normalize_tone_frame(frame: Any) -> Any:
+    import cv2
+
+    lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+    l_chan, a_chan, b_chan = cv2.split(lab)
+    l_chan = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(l_chan)
+    merged = cv2.merge((l_chan, a_chan, b_chan))
+    return cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
+
+
 def _load_track(path: Path | None) -> dict[str, Any]:
     if path is None or not path.exists():
         return {"frames": []}
@@ -323,22 +346,32 @@ def _select_prefiltered_candidates(
     if not compatible:
         raise RuntimeError("No presentation-compatible donors are available in the bank.")
 
-    if source_glasses != UNKNOWN:
-        same_glasses = [row for row in compatible if row.get("glasses", UNKNOWN) == source_glasses]
+    glasses_strategy = "none"
+    preferred_glasses_value: str | None = None
+    if source_glasses == "yes":
+        preferred_glasses_value = "yes"
+        glasses_strategy = "preserve_yes"
+    elif source_glasses in {"no", UNKNOWN}:
+        preferred_glasses_value = "no"
+        glasses_strategy = "prefer_no_glasses"
+
+    if preferred_glasses_value is not None:
+        same_glasses = [row for row in compatible if row.get("glasses", UNKNOWN) == preferred_glasses_value]
         if same_glasses:
+            mismatch_reason = "prefer_no_glasses" if source_glasses == UNKNOWN else "glasses_mismatch"
             for donor in compatible:
                 if donor not in same_glasses:
                     incompatible.append(
                         {
                             "donor_id": donor["donor_id"],
-                            "reason": "glasses_mismatch",
+                            "reason": mismatch_reason,
                             "glasses": donor.get("glasses", UNKNOWN),
                         }
                     )
             compatible = same_glasses
 
     for donor in compatible:
-        donor["donor_tone_distance_lab"] = _lab_distance(source_lab, list(donor.get("tone_lab") or source_lab))
+        donor["donor_tone_distance_lab"] = _tone_distance_lab(source_lab, list(donor.get("tone_lab") or source_lab))
     compatible.sort(key=lambda row: float(row["donor_tone_distance_lab"]))
     nearest = float(compatible[0]["donor_tone_distance_lab"])
     tone_threshold = nearest + max(0.0, tone_margin_lab)
@@ -381,6 +414,7 @@ def _select_prefiltered_candidates(
         "excluded": incompatible,
         "compatible_count": len(compatible),
         "tone_filtered_count": len(tone_filtered),
+        "glasses_strategy": glasses_strategy,
         "hair_strategy": hair_strategy,
         "selected_pool_count": len(selected_pool),
     }
@@ -417,7 +451,9 @@ def _score_candidate(
     if source_facial_hair != UNKNOWN and donor_facial_hair != UNKNOWN:
         components["facial_hair_bonus"] += _facial_hair_change_score(source_facial_hair, donor_facial_hair)
 
-    if source_glasses != UNKNOWN and donor_glasses != UNKNOWN and source_glasses != donor_glasses:
+    if donor_glasses == "yes" and source_glasses != "yes":
+        components["glasses_penalty"] -= 0.25
+    elif source_glasses != UNKNOWN and donor_glasses != UNKNOWN and source_glasses != donor_glasses:
         components["glasses_penalty"] -= 0.2
 
     score = sum(components.values())
@@ -480,6 +516,7 @@ def _init_facefusion_runtime(facefusion_root: Path, *, facefusion_model: str) ->
         "get_one_face": get_one_face,
         "sort_faces_by_order": sort_faces_by_order,
         "face_swapper": face_swapper,
+        "face_masker": face_masker,
     }
 
 
@@ -507,9 +544,7 @@ def _extract_primary_face(frame: Any, *, runtime: dict[str, Any]) -> Any | None:
     return runtime["get_one_face"](faces)
 
 
-def _mean_lab_for_bounding_box(frame: Any, bounding_box: list[float]) -> list[float]:
-    import cv2
-
+def _crop_frame_to_bounding_box(frame: Any, bounding_box: list[float]) -> Any:
     x1, y1, x2, y2 = [int(round(value)) for value in bounding_box]
     x1 = max(0, min(x1, frame.shape[1] - 2))
     y1 = max(0, min(y1, frame.shape[0] - 2))
@@ -517,10 +552,92 @@ def _mean_lab_for_bounding_box(frame: Any, bounding_box: list[float]) -> list[fl
     y2 = max(y1 + 2, min(y2, frame.shape[0]))
     roi = frame[y1:y2, x1:x2]
     if roi.size == 0:
-        roi = frame
+        return frame
+    return roi
+
+
+def _mean_lab_for_bounding_box(frame: Any, bounding_box: list[float]) -> list[float]:
+    import cv2
+
+    roi = _crop_frame_to_bounding_box(frame, bounding_box)
     lab = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB)
     mean = lab.reshape(-1, 3).mean(axis=0)
     return [float(value) for value in mean.tolist()]
+
+
+def _mean_lab_for_skin(
+    frame: Any,
+    bounding_box: list[float],
+    *,
+    runtime: dict[str, Any] | None = None,
+) -> list[float]:
+    import cv2
+    import numpy as np
+
+    roi = _crop_frame_to_bounding_box(frame, bounding_box)
+    normalized_roi = _normalize_tone_frame(roi)
+    height, width = normalized_roi.shape[:2]
+
+    cheek_mask = np.zeros((height, width), dtype=np.float32)
+    y1 = int(height * 0.30)
+    y2 = max(y1 + 1, int(height * 0.68))
+    left_x1 = int(width * 0.10)
+    left_x2 = max(left_x1 + 1, int(width * 0.40))
+    right_x1 = int(width * 0.60)
+    right_x2 = max(right_x1 + 1, int(width * 0.90))
+    cheek_mask[y1:y2, left_x1:left_x2] = 1.0
+    cheek_mask[y1:y2, right_x1:right_x2] = 1.0
+
+    skin_mask = None
+    if runtime is not None and runtime.get("face_masker") is not None:
+        try:
+            skin_mask = runtime["face_masker"].create_region_mask(normalized_roi, ["skin"])
+        except Exception:
+            skin_mask = None
+
+    mask = cheek_mask
+    min_pixels = max(48.0, float(height * width) * 0.01)
+    if skin_mask is not None and getattr(skin_mask, "size", 0):
+        skin_mask = skin_mask.astype(np.float32)
+        if skin_mask.shape[:2] != cheek_mask.shape[:2]:
+            skin_mask = cv2.resize(skin_mask, (width, height))
+        mask = cheek_mask * (skin_mask > 0.5).astype(np.float32)
+        if float(np.count_nonzero(mask)) < min_pixels:
+            mask = (skin_mask > 0.5).astype(np.float32)
+
+    if float(np.count_nonzero(mask)) < min_pixels:
+        return _mean_lab_for_bounding_box(normalized_roi, [0, 0, width, height])
+
+    lab = cv2.cvtColor(normalized_roi, cv2.COLOR_BGR2LAB)
+    masked_pixels = lab[mask > 0.5]
+    if masked_pixels.size == 0:
+        return _mean_lab_for_bounding_box(normalized_roi, [0, 0, width, height])
+    mean = masked_pixels.reshape(-1, 3).mean(axis=0)
+    return [float(value) for value in mean.tolist()]
+
+
+def _hydrate_donor_tones(
+    donor_candidates: list[dict[str, Any]],
+    *,
+    runtime: dict[str, Any],
+) -> list[dict[str, Any]]:
+    import cv2
+
+    hydrated: list[dict[str, Any]] = []
+    for donor in donor_candidates:
+        row = dict(donor)
+        donor_path = Path(row["image_path"])
+        donor_frame = cv2.imread(str(donor_path))
+        if donor_frame is not None:
+            donor_face = _extract_primary_face(donor_frame, runtime=runtime)
+            if donor_face is not None:
+                row["tone_lab"] = _mean_lab_for_skin(
+                    donor_frame,
+                    donor_face.bounding_box.tolist(),
+                    runtime=runtime,
+                )
+        hydrated.append(row)
+    return hydrated
 
 
 def _swap_target_frame(*, runtime: dict[str, Any], donor_frame: Any, donor_path: Path, target_frame: Any) -> Any:
@@ -574,7 +691,7 @@ def _load_source_snapshots(
                 "embedding_norm": [float(value) for value in face.embedding_norm.tolist()],
                 "detector_score": float(face.score_set.get("detector", 0.0)),
                 "bounding_box": [float(value) for value in face.bounding_box.tolist()],
-                "tone_lab": _mean_lab_for_bounding_box(frame, face.bounding_box.tolist()),
+                "tone_lab": _mean_lab_for_skin(frame, face.bounding_box.tolist(), runtime=runtime),
                 "presentation": _presentation_from_gender(getattr(presentation_face or face, "gender", None)),
                 "facial_hair": _infer_facial_hair_label(frame, face.bounding_box.tolist()),
                 "glasses": _infer_glasses_label(frame, face.bounding_box.tolist()),
@@ -623,7 +740,9 @@ def _score_donor_candidates(
         if donor_face is None:
             continue
         donor_embedding = [float(value) for value in donor_face.embedding_norm.tolist()]
-        donor_tone = list(donor.get("tone_lab") or _mean_lab_for_bounding_box(donor_frame, donor_face.bounding_box.tolist()))
+        donor_tone = list(
+            donor.get("tone_lab") or _mean_lab_for_skin(donor_frame, donor_face.bounding_box.tolist(), runtime=runtime)
+        )
         donor_started = time.perf_counter()
         frame_scores: list[dict[str, Any]] = []
         for source_snapshot in source_snapshots:
@@ -636,7 +755,7 @@ def _score_donor_candidates(
             swapped_face = _extract_primary_face(swapped_frame, runtime=runtime)
             if swapped_face is None:
                 continue
-            swapped_tone = _mean_lab_for_bounding_box(swapped_frame, swapped_face.bounding_box.tolist())
+            swapped_tone = _mean_lab_for_skin(swapped_frame, swapped_face.bounding_box.tolist(), runtime=runtime)
             frame_scores.append(
                 {
                     "frame_index": int(source_snapshot["frame_index"]),
@@ -648,7 +767,7 @@ def _score_donor_candidates(
                         donor_embedding,
                         [float(value) for value in swapped_face.embedding_norm.tolist()],
                     ),
-                    "swap_tone_distance_lab": _lab_distance(source_snapshot["tone_lab"], swapped_tone),
+                    "swap_tone_distance_lab": _tone_distance_lab(source_snapshot["tone_lab"], swapped_tone),
                     "swap_detector_score": float(swapped_face.score_set.get("detector", 0.0)),
                 }
             )
@@ -725,6 +844,10 @@ def main(argv: list[str] | None = None) -> int:
     runtime_started = time.perf_counter()
     runtime = _init_facefusion_runtime(facefusion_root, facefusion_model=args.facefusion_model)
     timings["facefusion_runtime_init_seconds"] = time.perf_counter() - runtime_started
+
+    donor_analysis_started = time.perf_counter()
+    donor_candidates = _hydrate_donor_tones(donor_candidates, runtime=runtime)
+    timings["donor_face_analysis_seconds"] = time.perf_counter() - donor_analysis_started
 
     track = _load_track(track_metadata)
     source_snapshots, snapshot_timings = _load_source_snapshots(

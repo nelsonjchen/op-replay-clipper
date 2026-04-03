@@ -11,6 +11,7 @@ MAX_LENGTH_SECONDS = 300
 
 GUI_ANONYMIZATION_PROFILE_MAP = {
     "none": ("none", "driver_face_swap_passenger_face_swap"),
+    "driver unchanged, passenger face swap": ("facefusion", "driver_unchanged_passenger_face_swap"),
     "driver unchanged, passenger pixelize": ("facefusion", "driver_unchanged_passenger_pixelize"),
     "driver face swap, passenger pixelize": ("facefusion", "driver_face_swap_passenger_pixelize"),
     "driver face swap, passenger face swap": ("facefusion", "driver_face_swap_passenger_face_swap"),
@@ -62,6 +63,7 @@ class Predictor(BasePredictor):
             description="Seat anonymization strategy for driver-camera renders.",
             choices=[
                 "none",
+                "driver unchanged, passenger face swap",
                 "driver unchanged, passenger pixelize",
                 "driver face swap, passenger pixelize",
                 "driver face swap, passenger face swap",

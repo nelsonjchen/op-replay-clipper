@@ -258,6 +258,23 @@ def test_build_plan_preserves_driver_unchanged_passenger_pixelize_profile() -> N
     assert plan.driver_face_swap.profile == "driver_unchanged_passenger_pixelize"
 
 
+def test_build_plan_preserves_driver_unchanged_passenger_face_swap_profile() -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type="driver",
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
+            driver_face_anonymization="facefusion",
+            driver_face_profile="driver_unchanged_passenger_face_swap",
+        )
+    )
+
+    assert plan.driver_face_swap.mode == "facefusion"
+    assert plan.driver_face_swap.profile == "driver_unchanged_passenger_face_swap"
+
+
 def test_run_clip_uses_anonymized_backing_pipeline_for_driver(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     plan = clip_orchestrator.build_clip_plan(
         clip_orchestrator.ClipRequest(

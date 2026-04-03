@@ -233,6 +233,13 @@ uv run python clip.py driver-debug --demo --length-seconds 20 \
   --output ./shared/driver-debug-facefusion.mp4
 ```
 
+The bundled donor bank lives in [`assets/driver-face-donors`](assets/driver-face-donors). It currently keeps full light/medium/dark tone coverage for masculine donors, while the active feminine bank is intentionally limited to younger light/medium donors plus a feminine clean-shaven fallback, with additional masculine glasses/beard variants. To regenerate the checked-in bank with Runware FLUX Kontext, use:
+
+```bash
+export RUNWARE_API_KEY=...
+./.cache/facefusion/.venv/bin/python tools/generate_driver_face_donor_bank.py --skip-existing
+```
+
 BIG UI smoke test:
 
 ```bash
@@ -258,7 +265,7 @@ Notes:
 * `clip.py` is the primary local CLI for UI and non-UI renders
 * `driver-debug` is an openpilot-backed render type like `ui` and `ui-alt`, but it only needs `dcameras` and `logs`
 * `driver` and `driver-debug` can optionally anonymize the backing driver video with `--driver-face-anonymization facefusion`
-* `--driver-face-profile` controls the seat strategy, with `driver_unchanged_passenger_pixelize` for “show my real driver face, hide the passenger”, `driver_face_swap_passenger_pixelize` as the cheaper mixed mode, and `driver_face_swap_passenger_face_swap` for swapping both front seats
+* `--driver-face-profile` controls the seat strategy, with `driver_unchanged_passenger_face_swap` for “show my real driver face, swap the passenger”, `driver_unchanged_passenger_pixelize` for “show my real driver face, hide the passenger”, `driver_face_swap_passenger_pixelize` as the cheaper mixed mode, and `driver_face_swap_passenger_face_swap` for swapping both front seats
 * That anonymization path reuses the repo-owned DM face track, swaps the prepared face crop with FaceFusion, then composites the swapped crop back into the full driver backing video before the final render
 * Every anonymized output now burns a bright mode-specific banner into the driver video, for example `PASSENGER PIXELIZED` or `DRIVER SWAPPED, PASSENGER PIXELIZED`, so viewers can tell what was actually changed
 * `--driver-face-preset fast` is the practical default for short clips, while `quality` trades more time for cleaner masking and higher-resolution swapping
