@@ -278,6 +278,20 @@ def _seat_mode_for_role(
     return driver_mode if seat_role == "driver" else passenger_mode
 
 
+def _seat_mode_counts(
+    active_seats: list[PreparedSeatArtifacts],
+    options: DriverFaceSwapOptions,
+) -> dict[SeatAnonymizationMode, int]:
+    counts: dict[SeatAnonymizationMode, int] = {
+        "none": 0,
+        "facefusion": 0,
+        "pixelize": 0,
+    }
+    for artifact in active_seats:
+        counts[_seat_mode_for_role(options, artifact.seat_role)] += 1
+    return counts
+
+
 def _banner_text_for_active_seats(
     active_seats: list[PreparedSeatArtifacts],
     options: DriverFaceSwapOptions,
@@ -332,7 +346,7 @@ def _facefusion_swap_command(
         "--face-swapper-weight",
         "1.0",
         "--face-selector-mode",
-        "one",
+        "many",
         "--face-detector-model",
         "yunet",
         "--face-detector-score",
@@ -792,13 +806,16 @@ def render_anonymized_driver_backing_video(
             output.write_bytes(source_clip.read_bytes())
             shutil.copy2(output, cache_video_path)
             return output
+        seat_mode_counts = _seat_mode_counts(active_seats, options)
         banner_text = _banner_text_for_active_seats(active_seats, options)
 
         facefusion_python = Path(options.facefusion_root).expanduser().resolve() / ".venv/bin/python"
         if not facefusion_python.exists():
             raise FileNotFoundError(f"FaceFusion interpreter not found at {facefusion_python}")
         current_source = source_clip
-        total_swap_seconds = 0.0
+        total_transform_seconds = 0.0
+        total_facefusion_seconds = 0.0
+        total_pixelize_seconds = 0.0
         total_reintegrate_seconds = 0.0
 
         for seat_index, artifact in enumerate(active_seats):
@@ -853,7 +870,11 @@ def render_anonymized_driver_backing_video(
                     ),
                 )
             seat_swap_seconds = time.perf_counter() - swap_started
-            total_swap_seconds += seat_swap_seconds
+            total_transform_seconds += seat_swap_seconds
+            if seat_mode == "facefusion":
+                total_facefusion_seconds += seat_swap_seconds
+            elif seat_mode == "pixelize":
+                total_pixelize_seconds += seat_swap_seconds
 
             reintegrate_started = time.perf_counter()
             intermediate_output = output if seat_index == len(active_seats) - 1 else sample_dir / f"composited-{seat_key}.mp4"
@@ -897,7 +918,13 @@ def render_anonymized_driver_backing_video(
         timings = selection_report.setdefault("timings", {})
         assert isinstance(timings, dict)
         timings["active_seats"] = len(active_seats)
-        timings["final_video_swap_seconds"] = total_swap_seconds
+        timings["facefusion_seats"] = seat_mode_counts["facefusion"]
+        timings["pixelized_seats"] = seat_mode_counts["pixelize"]
+        timings["unchanged_seats"] = seat_mode_counts["none"]
+        timings["transform_seconds"] = total_transform_seconds
+        timings["facefusion_seconds"] = total_facefusion_seconds
+        timings["pixelize_seconds"] = total_pixelize_seconds
+        timings["final_video_swap_seconds"] = total_facefusion_seconds
         timings["reintegrate_seconds"] = total_reintegrate_seconds
         timings["total_request_seconds"] = total_seconds
         selection_report_path.write_text(json.dumps(selection_report, indent=2, sort_keys=True) + "\n")
@@ -905,8 +932,12 @@ def render_anonymized_driver_backing_video(
         shutil.copy2(selection_report_path, cache_report_path)
         print(
             "Driver face anonymization timings: "
-            f"seats={len(active_seats)}, "
-            f"swap={total_swap_seconds:.2f}s, "
+            f"active_seats={len(active_seats)}, "
+            f"swapped_seats={seat_mode_counts['facefusion']}, "
+            f"pixelized_seats={seat_mode_counts['pixelize']}, "
+            f"unchanged_seats={seat_mode_counts['none']}, "
+            f"face_swap={total_facefusion_seconds:.2f}s, "
+            f"pixelize={total_pixelize_seconds:.2f}s, "
             f"reintegrate={total_reintegrate_seconds:.2f}s, "
             f"total={total_seconds:.2f}s"
         )

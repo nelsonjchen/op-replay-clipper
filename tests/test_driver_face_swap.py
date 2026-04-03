@@ -27,6 +27,54 @@ def test_driver_face_swap_passenger_pixelize_profile_maps_to_expected_seat_modes
     assert passenger_mode == "pixelize"
 
 
+def test_seat_mode_counts_reflect_mixed_profile(tmp_path: Path) -> None:
+    active_seats = [
+        driver_face_swap.PreparedSeatArtifacts(
+            seat_side="left",
+            seat_role="driver",
+            crop_clip=tmp_path / "left.mp4",
+            track_metadata=tmp_path / "left.json",
+        ),
+        driver_face_swap.PreparedSeatArtifacts(
+            seat_side="right",
+            seat_role="passenger",
+            crop_clip=tmp_path / "right.mp4",
+            track_metadata=tmp_path / "right.json",
+        ),
+    ]
+
+    counts = driver_face_swap._seat_mode_counts(
+        active_seats,
+        driver_face_swap.DriverFaceSwapOptions(
+            mode="facefusion",
+            profile="driver_face_swap_passenger_pixelize",
+        ),
+    )
+
+    assert counts == {
+        "none": 0,
+        "facefusion": 1,
+        "pixelize": 1,
+    }
+
+
+def test_facefusion_command_swaps_all_faces_in_crop(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(driver_face_swap, "default_facefusion_output_video_encoder", lambda: "libx264")
+    monkeypatch.setattr(driver_face_swap, "default_facefusion_execution_providers", lambda: ["cpu"])
+
+    command = driver_face_swap._facefusion_swap_command(
+        facefusion_root=tmp_path / "facefusion",
+        source_image=tmp_path / "source.jpg",
+        target_video=tmp_path / "target.mp4",
+        output_video=tmp_path / "output.mp4",
+        model_name="hyperswap_1b_256",
+        preset="fast",
+    )
+
+    selector_index = command.index("--face-selector-mode")
+    assert command[selector_index + 1] == "many"
+
+
 def test_intermediate_encoder_falls_back_to_libx264(monkeypatch) -> None:
     driver_face_swap._ffmpeg_encoder_names.cache_clear()
     monkeypatch.delenv("DRIVER_FACEFUSION_OUTPUT_VIDEO_ENCODER", raising=False)
