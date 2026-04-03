@@ -645,7 +645,7 @@ def materialize_eval_sample(
         "--accel",
         acceleration,
     ]
-    subprocess.run(worker_cmd, check=True)
+    _run_face_eval_worker(worker_cmd, acceleration=acceleration)
     manifest = json.loads(track_metadata.read_text())
     metadata_device_type = str(manifest.get("device_type", "unknown"))
 
@@ -719,3 +719,30 @@ def materialize_seed_set(
     }
     write_json(output_root / "manifest.json", manifest)
     return artifacts
+
+
+def _run_face_eval_worker(worker_cmd: list[str], *, acceleration: video_renderer.AccelerationPolicy) -> None:
+    accel_index = worker_cmd.index("--accel") + 1
+    attempts: list[video_renderer.AccelerationPolicy] = [acceleration]
+    if acceleration in ("auto", "nvidia"):
+        attempts.append("cpu")
+    last_error: subprocess.CalledProcessError | None = None
+    for attempt_accel in attempts:
+        cmd = list(worker_cmd)
+        cmd[accel_index] = attempt_accel
+        completed = subprocess.run(cmd, check=False, capture_output=True, text=True)
+        if completed.returncode == 0:
+            return
+        if completed.stdout.strip():
+            print(completed.stdout.rstrip())
+        if completed.stderr.strip():
+            print(completed.stderr.rstrip())
+        print(f"Driver face eval worker failed (accel={attempt_accel}, returncode={completed.returncode})")
+        last_error = subprocess.CalledProcessError(
+            completed.returncode,
+            cmd,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
+    if last_error is not None:
+        raise last_error

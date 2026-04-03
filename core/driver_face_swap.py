@@ -693,7 +693,7 @@ def _prepare_face_crop_artifacts(
             "--accel",
             acceleration,
         ]
-        subprocess.run(worker_cmd, check=True)
+        _run_face_eval_worker(worker_cmd, acceleration=acceleration)
         seat_role = _seat_role_from_manifest(track_metadata, seat_side=seat_side)
         seat_artifacts.append(
             PreparedSeatArtifacts(
@@ -704,6 +704,33 @@ def _prepare_face_crop_artifacts(
             )
         )
     return source_clip, seat_artifacts
+
+
+def _run_face_eval_worker(worker_cmd: list[str], *, acceleration: video_renderer.AccelerationPolicy) -> None:
+    accel_index = worker_cmd.index("--accel") + 1
+    attempts: list[video_renderer.AccelerationPolicy] = [acceleration]
+    if acceleration in ("auto", "nvidia"):
+        attempts.append("cpu")
+    last_error: subprocess.CalledProcessError | None = None
+    for attempt_accel in attempts:
+        cmd = list(worker_cmd)
+        cmd[accel_index] = attempt_accel
+        completed = subprocess.run(cmd, check=False, capture_output=True, text=True)
+        if completed.returncode == 0:
+            return
+        if completed.stdout.strip():
+            print(completed.stdout.rstrip())
+        if completed.stderr.strip():
+            print(completed.stderr.rstrip())
+        print(f"Driver face eval worker failed (accel={attempt_accel}, returncode={completed.returncode})")
+        last_error = subprocess.CalledProcessError(
+            completed.returncode,
+            cmd,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
+    if last_error is not None:
+        raise last_error
 
 
 def _seat_role_from_manifest(
