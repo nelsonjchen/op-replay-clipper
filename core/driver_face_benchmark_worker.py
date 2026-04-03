@@ -64,6 +64,36 @@ def _pixelize_roi(frame, rect: tuple[int, int, int, int], *, block_size: int) ->
     frame[y:y + h, x:x + w] = pixelized
 
 
+def _intermediate_output_path(output_path: Path) -> Path:
+    return output_path.with_name(f"{output_path.stem}.intermediate{output_path.suffix}")
+
+
+def _finalize_shareable_mp4(intermediate_path: Path, output_path: Path) -> None:
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(intermediate_path),
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        str(output_path),
+    ]
+    try:
+        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.strip()
+        raise RuntimeError(f"Failed to finalize shareable mp4 {output_path}: {stderr}") from exc
+    finally:
+        intermediate_path.unlink(missing_ok=True)
+
+
 def _load_rect(frame_row: dict[str, object], key: str) -> tuple[int, int, int, int] | None:
     value = frame_row.get(key)
     if not isinstance(value, dict):
@@ -756,8 +786,9 @@ def _run_rf_detr_passenger_blackout(
     width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = float(capture.get(cv2.CAP_PROP_FPS) or 20.0)
+    intermediate_output_path = _intermediate_output_path(output_path)
     writer = cv2.VideoWriter(
-        str(output_path),
+        str(intermediate_output_path),
         cv2.VideoWriter_fourcc(*"mp4v"),
         fps,
         (width, height),
@@ -872,6 +903,8 @@ def _run_rf_detr_passenger_blackout(
     finally:
         capture.release()
         writer.release()
+
+    _finalize_shareable_mp4(intermediate_output_path, output_path)
 
     runtime_seconds = time.perf_counter() - started
     return {
@@ -1001,8 +1034,9 @@ def main() -> int:
     width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = float(capture.get(cv2.CAP_PROP_FPS) or 20.0)
+    intermediate_output_path = _intermediate_output_path(output_path)
     writer = cv2.VideoWriter(
-        str(output_path),
+        str(intermediate_output_path),
         cv2.VideoWriter_fourcc(*"mp4v"),
         fps,
         (width, height),
@@ -1030,6 +1064,7 @@ def main() -> int:
     finally:
         capture.release()
         writer.release()
+    _finalize_shareable_mp4(intermediate_output_path, output_path)
     runtime_seconds = time.perf_counter() - started
 
     scores = _score_sample(track) if args.candidate_id == "dm-box-pixelize" else _score_surrogate_sample(track)
