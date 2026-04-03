@@ -288,8 +288,16 @@ def build_face_track_manifest(
 
         explicit_side = selected_side if seat_side == "selected" else seat_side
         face_prob = float(getattr(driver_data, "faceProb", 0.0) or 0.0) if driver_data is not None else 0.0
-        seat_face_detected = bool(getattr(dm_state, "faceDetected", False)) if seat_side == "selected" else raw_box is not None and face_prob > 0.0
-        trusted = raw_box is not None and (seat_face_detected or face_prob >= config.minimum_face_prob or frame_index == 0)
+        if seat_side == "selected":
+            seat_face_detected = bool(getattr(dm_state, "faceDetected", False))
+            trusted = raw_box is not None and (
+                seat_face_detected or face_prob >= config.minimum_face_prob or frame_index == 0
+            )
+        else:
+            # Be conservative on the non-selected seat so weak or phantom detections
+            # do not create a bogus passenger crop that leaks the real driver face.
+            seat_face_detected = raw_box is not None and face_prob >= config.minimum_face_prob
+            trusted = bool(seat_face_detected)
         padded_box = (
             expand_face_box(raw_box, frame_width=frame_width, frame_height=frame_height, config=config)
             if trusted and raw_box is not None

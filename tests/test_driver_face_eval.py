@@ -188,6 +188,56 @@ def test_build_face_track_manifest_supports_explicit_left_and_right_seats() -> N
     assert right_manifest["frames"][0]["is_selected_side"] is False
 
 
+def test_build_face_track_manifest_requires_strong_non_selected_seat_detection() -> None:
+    left_driver = SimpleNamespace(
+        faceProb=0.92,
+        leftEyeProb=0.7,
+        rightEyeProb=0.72,
+        leftBlinkProb=0.1,
+        rightBlinkProb=0.11,
+        sunglassesProb=0.0,
+        phoneProb=0.0,
+        faceOrientation=[0.0, 0.0, 0.0],
+        facePosition=[-0.22, 0.10],
+        faceOrientationStd=[0.05, 0.05, 0.03],
+        facePositionStd=[0.01, 0.01],
+    )
+    weak_right_driver = SimpleNamespace(
+        faceProb=0.02,
+        leftEyeProb=0.0,
+        rightEyeProb=0.0,
+        leftBlinkProb=0.0,
+        rightBlinkProb=0.0,
+        sunglassesProb=0.0,
+        phoneProb=0.0,
+        faceOrientation=[0.0, 0.0, 0.0],
+        facePosition=[0.24, 0.08],
+        faceOrientationStd=[0.05, 0.05, 0.03],
+        facePositionStd=[0.01, 0.01],
+    )
+    step = SimpleNamespace(
+        route_seconds=0.0,
+        route_frame_id=0,
+        state={
+            "driverMonitoringState": FakeMsg("driverMonitoringState", SimpleNamespace(faceDetected=True, isRHD=False)),
+            "driverStateV2": FakeMsg("driverStateV2", SimpleNamespace(leftDriverData=left_driver, rightDriverData=weak_right_driver, wheelOnRightProb=0.2)),
+        },
+    )
+
+    right_manifest = driver_face_eval.build_face_track_manifest(
+        [step],
+        frame_width=1928,
+        frame_height=1208,
+        device_type="tici",
+        config=driver_face_eval.FaceTrackConfig(),
+        seat_side="right",
+    )
+
+    assert right_manifest["frames"][0]["face_prob"] == 0.02
+    assert right_manifest["frames"][0]["face_detected"] is False
+    assert right_manifest["frames"][0]["crop_rect"] is None
+
+
 @mock.patch("driver_face_eval.materialize_seed_set")
 @mock.patch("driver_face_eval._prepare_openpilot")
 def test_cli_defaults_to_seed_set(prepare_openpilot: mock.Mock, materialize_seed_set: mock.Mock, tmp_path) -> None:
