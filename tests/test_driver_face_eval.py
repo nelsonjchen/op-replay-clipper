@@ -249,3 +249,58 @@ def test_cli_defaults_to_seed_set(prepare_openpilot: mock.Mock, materialize_seed
     assert exit_code == 0
     prepare_openpilot.assert_called_once()
     materialize_seed_set.assert_called_once()
+
+
+@mock.patch("driver_face_eval.load_dotenv")
+@mock.patch("driver_face_eval.materialize_seed_set")
+@mock.patch("driver_face_eval._prepare_openpilot")
+def test_cli_seed_set_uses_comma_jwt_from_env(
+    prepare_openpilot: mock.Mock,
+    materialize_seed_set: mock.Mock,
+    load_dotenv: mock.Mock,
+    monkeypatch,
+    tmp_path,
+) -> None:
+    prepare_openpilot.return_value = str(tmp_path / "openpilot")
+    materialize_seed_set.return_value = []
+    monkeypatch.setenv("COMMA_JWT", "env-jwt-token")
+
+    exit_code = driver_face_eval_cli.main(["--output-root", str(tmp_path), "seed-set"])
+
+    assert exit_code == 0
+    load_dotenv.assert_called_once()
+    assert materialize_seed_set.call_args.kwargs["jwt_token"] == "env-jwt-token"
+
+
+@mock.patch("driver_face_eval.materialize_eval_sample")
+@mock.patch("driver_face_eval.parseRouteOrUrl")
+@mock.patch("driver_face_eval._prepare_openpilot")
+def test_cli_sample_allows_explicit_jwt_token_override(
+    prepare_openpilot: mock.Mock,
+    parse_route_or_url: mock.Mock,
+    materialize_eval_sample: mock.Mock,
+    tmp_path,
+) -> None:
+    prepare_openpilot.return_value = str(tmp_path / "openpilot")
+    parse_route_or_url.return_value = None
+    materialize_eval_sample.return_value = SimpleNamespace(output_dir=str(tmp_path / "sample"))
+
+    exit_code = driver_face_eval_cli.main(
+        [
+            "--output-root",
+            str(tmp_path),
+            "--jwt-token",
+            "cli-jwt-token",
+            "sample",
+            "custom-sample",
+            "https://connect.comma.ai/fde53c3c109fb4c0/0000026f--c5469f881d/289/315",
+            "--start-seconds",
+            "289",
+            "--length-seconds",
+            "26",
+        ]
+    )
+
+    assert exit_code == 0
+    assert parse_route_or_url.call_args.kwargs["jwt_token"] == "cli-jwt-token"
+    assert materialize_eval_sample.call_args.kwargs["jwt_token"] == "cli-jwt-token"

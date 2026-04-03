@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from typing import Sequence
+
+from dotenv import load_dotenv
 
 from core.driver_face_eval import DriverFaceEvalSeed, default_driver_face_eval_seeds, materialize_eval_sample, materialize_seed_set
 from core.openpilot_config import default_local_openpilot_root, default_openpilot_branch, default_openpilot_repo_url
@@ -29,6 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--include-driver-debug", action="store_true", help="Also render an analysis-oriented driver-debug clip.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite sample artifacts if they already exist.")
     parser.add_argument("--accel", choices=["auto", "cpu", "videotoolbox", "nvidia"], default="auto")
+    parser.add_argument("--jwt-token", default="", help="Optional JWT token. If unset, COMMA_JWT from .env or the shell is used.")
 
     subparsers = parser.add_subparsers(dest="command")
 
@@ -78,11 +82,13 @@ def _selected_seeds(seed_ids: list[str] | None) -> list[DriverFaceEvalSeed]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    load_dotenv()
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     output_root = Path(args.output_root).expanduser().resolve()
     openpilot_dir = _prepare_openpilot(args)
+    jwt_token = (args.jwt_token or os.environ.get("COMMA_JWT", "")).strip() or None
 
     if args.command in (None, "seed-set"):
         artifacts = materialize_seed_set(
@@ -95,6 +101,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             include_driver_debug=args.include_driver_debug,
             overwrite=args.overwrite,
             acceleration=args.accel,
+            jwt_token=jwt_token,
         )
         print(f"Wrote benchmark set to: {output_root}")
         for artifact in artifacts:
@@ -106,7 +113,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             route_or_url=args.route,
             start_seconds=args.start_seconds,
             length_seconds=args.length_seconds,
-            jwt_token=None,
+            jwt_token=jwt_token,
         )
         seed = DriverFaceEvalSeed(
             sample_id=args.sample_id,
@@ -126,6 +133,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             include_driver_debug=args.include_driver_debug,
             overwrite=args.overwrite,
             acceleration=args.accel,
+            jwt_token=jwt_token,
         )
         print(f"Wrote sample: {artifact.output_dir}")
         return 0

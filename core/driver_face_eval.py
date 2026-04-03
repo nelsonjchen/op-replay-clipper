@@ -537,6 +537,7 @@ def ensure_driver_face_eval_inputs(
     length_seconds: int,
     data_dir: Path,
     skip_download: bool,
+    jwt_token: str | None,
 ) -> None:
     from core import route_downloader
 
@@ -549,7 +550,7 @@ def ensure_driver_face_eval_inputs(
         smear_seconds=0,
         data_dir=data_dir,
         file_types=["dcameras", "logs"],
-        jwt_token=None,
+        jwt_token=jwt_token,
         decompress_logs=False,
     )
 
@@ -565,6 +566,7 @@ def materialize_eval_sample(
     include_driver_debug: bool,
     overwrite: bool,
     acceleration: video_renderer.AccelerationPolicy,
+    jwt_token: str | None = None,
     source_target_mb: int = 3,
     crop_target_mb: int = 4,
     analysis_target_mb: int = 6,
@@ -577,7 +579,7 @@ def materialize_eval_sample(
         route_or_url=seed.route_or_url,
         start_seconds=seed.start_seconds,
         length_seconds=seed.length_seconds,
-        jwt_token=None,
+        jwt_token=jwt_token,
     )
     data_dir = resolve_data_dir(parsed.route, data_root, explicit_data_dir)
     ensure_driver_face_eval_inputs(
@@ -586,6 +588,7 @@ def materialize_eval_sample(
         length_seconds=parsed.length_seconds,
         data_dir=data_dir,
         skip_download=skip_download,
+        jwt_token=jwt_token,
     )
 
     sample_dir = output_root / seed.sample_id
@@ -706,6 +709,7 @@ def materialize_seed_set(
     include_driver_debug: bool,
     overwrite: bool,
     acceleration: video_renderer.AccelerationPolicy,
+    jwt_token: str | None = None,
 ) -> list[EvalSampleArtifacts]:
     artifacts = [
         materialize_eval_sample(
@@ -718,6 +722,7 @@ def materialize_seed_set(
             include_driver_debug=include_driver_debug,
             overwrite=overwrite,
             acceleration=acceleration,
+            jwt_token=jwt_token,
         )
         for seed in seeds
     ]
