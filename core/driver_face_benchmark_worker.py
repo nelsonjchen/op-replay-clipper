@@ -25,6 +25,12 @@ from core.driver_face_swap import (
     facefusion_runtime_env,
 )
 
+RF_DETR_CANDIDATE_IDS = {
+    "rf-detr-passenger-blackout",
+    "rf-detr-passenger-blur",
+    "rf-detr-passenger-white-static",
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run one driver-face benchmark candidate over a prepared sample.")
@@ -340,6 +346,39 @@ def _blackout_mask(frame: np.ndarray, mask: np.ndarray) -> None:
     frame[mask] = 0
 
 
+def _blur_mask(frame: np.ndarray, mask: np.ndarray) -> None:
+    blurred = cv2.GaussianBlur(frame, (0, 0), sigmaX=18, sigmaY=18)
+    frame[mask] = blurred[mask]
+
+
+def _white_static_mask(frame: np.ndarray, mask: np.ndarray, *, frame_index: int) -> None:
+    rng = np.random.default_rng(seed=frame_index + 1337)
+    noise = rng.integers(170, 256, size=(frame.shape[0], frame.shape[1]), dtype=np.uint8)
+    sparkles = rng.random(size=noise.shape) > 0.88
+    noise[sparkles] = rng.integers(235, 256, size=int(sparkles.sum()), dtype=np.uint8)
+    static_rgb = np.repeat(noise[:, :, None], 3, axis=2)
+    frame[mask] = static_rgb[mask]
+
+
+def _apply_rf_detr_effect(
+    frame: np.ndarray,
+    mask: np.ndarray,
+    *,
+    effect: str,
+    frame_index: int,
+) -> None:
+    if effect == "blackout":
+        _blackout_mask(frame, mask)
+        return
+    if effect == "blur":
+        _blur_mask(frame, mask)
+        return
+    if effect == "white-static":
+        _white_static_mask(frame, mask, frame_index=frame_index)
+        return
+    raise ValueError(f"Unsupported RF-DETR effect: {effect}")
+
+
 def _mean_skin_color_bgr(roi) -> tuple[int, int, int]:
     if roi.size == 0:
         return (180, 170, 160)
@@ -490,6 +529,16 @@ def _score_rf_detr_sample(track: dict[str, object], *, redacted_frames: int) -> 
     }
 
 
+def _rf_detr_effect_for_candidate(candidate_id: str) -> str:
+    if candidate_id == "rf-detr-passenger-blackout":
+        return "blackout"
+    if candidate_id == "rf-detr-passenger-blur":
+        return "blur"
+    if candidate_id == "rf-detr-passenger-white-static":
+        return "white-static"
+    raise ValueError(f"Unsupported RF-DETR candidate id: {candidate_id}")
+
+
 def _run_facefusion_crop_swap(
     *,
     sample_dir: Path,
@@ -630,6 +679,10 @@ def _append_evaluation_markdown(path: Path, *, candidate_id: str, report: dict[s
         behavior = "Auto-selects a same-tone donor from the donor bank on a short selection clip, then runs fast FaceFusion with that donor."
     elif candidate_id == "rf-detr-passenger-blackout":
         behavior = "Runs RF-DETR segmentation on the full driver clip, selects the passenger-side person mask, and blacks out that whole body silhouette."
+    elif candidate_id == "rf-detr-passenger-blur":
+        behavior = "Runs RF-DETR segmentation on the full driver clip, selects the passenger-side body mask, and heavily blurs the masked silhouette."
+    elif candidate_id == "rf-detr-passenger-white-static":
+        behavior = "Runs RF-DETR segmentation on the full driver clip, selects the passenger-side body mask, and replaces it with bright animated white static."
     else:
         behavior = "Processes the DM-guided ROI on the full-frame driver clip."
     notes = f"Generated `{output_name}` in {report['runtime_seconds']:.2f}s. {behavior}"
@@ -673,6 +726,8 @@ def _run_rf_detr_passenger_blackout(
         capture.release()
         raise RuntimeError(f"Failed to create output clip: {output_path}")
 
+    candidate_id = output_path.stem
+    effect = _rf_detr_effect_for_candidate(candidate_id)
     model = _load_rf_detr_model(model_id)
     stride = max(1, int(frame_stride))
     last_mask: np.ndarray | None = None
@@ -768,7 +823,7 @@ def _run_rf_detr_passenger_blackout(
                 continue
 
             if last_mask is not None:
-                _blackout_mask(frame, last_mask)
+                _apply_rf_detr_effect(frame, last_mask, effect=effect, frame_index=frame_index)
                 redacted_frames += 1
 
             writer.write(frame)
@@ -780,7 +835,7 @@ def _run_rf_detr_passenger_blackout(
 
     runtime_seconds = time.perf_counter() - started
     return {
-        "candidate_id": "rf-detr-passenger-blackout",
+        "candidate_id": candidate_id,
         "sample_dir": str(sample_dir),
         "source_clip": str(source_path),
         "output_clip": str(output_path),
@@ -799,6 +854,7 @@ def _run_rf_detr_passenger_blackout(
         "rf_detr_startup_hold_trimmed_from_output": min(startup_hold, len(frames)),
         "rf_detr_passenger_crop_margin_ratio": passenger_crop_margin_ratio,
         "rf_detr_missing_hold_frames": missing_hold_frames,
+        "rf_detr_effect": effect,
         "startup_mask_source_frame_index": startup_mask_source_frame_index,
         "frame_reports": frame_reports,
     }
@@ -877,7 +933,7 @@ def main() -> int:
         print(json.dumps({"output_clip": str(output_path), "report": str(report_path)}))
         return 0
 
-    if args.candidate_id == "rf-detr-passenger-blackout":
+    if args.candidate_id in RF_DETR_CANDIDATE_IDS:
         report = _run_rf_detr_passenger_blackout(
             sample_dir=sample_dir,
             output_path=output_path,
