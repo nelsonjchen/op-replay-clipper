@@ -80,7 +80,7 @@ def build_input(args: argparse.Namespace) -> dict[str, Any]:
         "notes": args.notes,
         "route": encode_replicate_route_input(args.url),
         "fileSize": args.file_size,
-        "jwtToken": args.jwt_token,
+        "jwtToken": resolve_jwt_token(args.jwt_token),
         "fileFormat": args.file_format,
         "renderType": args.render_type,
         "smearAmount": args.smear_amount,
@@ -95,6 +95,19 @@ def require_api_token() -> str:
     if not token:
         raise SystemExit("REPLICATE_API_TOKEN is not set. Put it in .env or export it before running this script.")
     return token
+
+
+def resolve_jwt_token(jwt_token: str) -> str:
+    explicit = jwt_token.strip()
+    if explicit:
+        return explicit
+    return os.environ.get("COMMA_JWT", "").strip()
+
+
+def resolve_jwt_token(explicit_token: str) -> str:
+    if explicit_token.strip():
+        return explicit_token.strip()
+    return os.environ.get("COMMA_JWT", "").strip()
 
 
 def encode_replicate_route_input(url: str) -> str:
@@ -221,6 +234,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     require_api_token()
+    load_dotenv()
+    args.jwt_token = resolve_jwt_token(args.jwt_token)
     args.url = validate_connect_url(args.url)
     args.model, model_was_explicit = resolve_model(args.model)
     payload = build_input(args)

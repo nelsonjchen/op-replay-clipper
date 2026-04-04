@@ -14,6 +14,9 @@ FACEFUSION_ROOT="${FACEFUSION_ROOT:-${APP_ROOT}/.cache/facefusion}"
 FACEFUSION_REPO_URL="${FACEFUSION_REPO_URL:-https://github.com/facefusion/facefusion.git}"
 FACEFUSION_COMMIT="${FACEFUSION_COMMIT:-519360bcd650679275024aa3ed10e8d673718bb3}"
 FACEFUSION_PYTHON_VERSION="${FACEFUSION_PYTHON_VERSION:-3.12}"
+FACEFUSION_PREWARM_MODELS="${FACEFUSION_PREWARM_MODELS:-1}"
+FACEFUSION_PRUNE_VENV="${FACEFUSION_PRUNE_VENV:-1}"
+FACEFUSION_HARDLINK_DEDUPE="${FACEFUSION_HARDLINK_DEDUPE:-1}"
 SCONS_JOBS="${SCONS_JOBS:-$(command -v nproc >/dev/null 2>&1 && nproc || echo 8)}"
 BUILD_TMPDIR="${BUILD_TMPDIR:-/var/tmp/op-clipper-build}"
 export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
@@ -176,6 +179,10 @@ install_facefusion_runtime() {
 }
 
 prewarm_facefusion_models() {
+  if [[ "${FACEFUSION_PREWARM_MODELS}" != "1" ]]; then
+    log_step "Skipping FaceFusion model prewarm"
+    return
+  fi
   log_step "Prewarming FaceFusion model assets"
   cd "${FACEFUSION_ROOT}"
   . .venv/bin/activate
@@ -224,11 +231,130 @@ for label, fn in checks:
 PY
 }
 
+dedupe_facefusion_venv_files() {
+  if [[ "${FACEFUSION_HARDLINK_DEDUPE}" != "1" ]]; then
+    log_step "Skipping FaceFusion virtualenv hardlink dedupe"
+    return
+  fi
+
+  log_step "Hardlinking duplicate FaceFusion virtualenv files"
+  python3 - "${FACEFUSION_ROOT}" <<'PY'
+from __future__ import annotations
+
+import hashlib
+import os
+import site
+import sys
+from pathlib import Path
+
+
+def sha256sum(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+facefusion_root = Path(sys.argv[1]).expanduser().resolve()
+venv_site_packages = next(facefusion_root.glob(".venv/lib/python*/site-packages"), None)
+if venv_site_packages is None:
+    print("FaceFusion site-packages directory not found; skipping dedupe", flush=True)
+    raise SystemExit(0)
+
+main_site_packages = None
+for candidate in map(Path, site.getsitepackages()):
+    if candidate.name == "site-packages" and candidate.exists():
+        main_site_packages = candidate.resolve()
+        break
+
+if main_site_packages is None:
+    print("Main site-packages directory not found; skipping dedupe", flush=True)
+    raise SystemExit(0)
+
+linked_files = 0
+linked_bytes = 0
+for ff_path in sorted(venv_site_packages.rglob("*")):
+    if not ff_path.is_file() or ff_path.is_symlink():
+        continue
+    relative = ff_path.relative_to(venv_site_packages)
+    main_path = main_site_packages / relative
+    if not main_path.exists() or not main_path.is_file() or main_path.is_symlink():
+        continue
+    ff_stat = ff_path.stat()
+    main_stat = main_path.stat()
+    if ff_stat.st_size == 0 or ff_stat.st_size != main_stat.st_size:
+        continue
+    if ff_stat.st_ino == main_stat.st_ino and ff_stat.st_dev == main_stat.st_dev:
+        continue
+    if sha256sum(ff_path) != sha256sum(main_path):
+        continue
+    ff_path.unlink()
+    os.link(main_path, ff_path)
+    linked_files += 1
+    linked_bytes += ff_stat.st_size
+
+print(
+    f"Hardlinked {linked_files} duplicate FaceFusion files "
+    f"({linked_bytes / (1024 * 1024):.1f} MiB shared)",
+    flush=True,
+)
+PY
+}
+
 deactivate_facefusion_venv() {
   if [[ -n "${VIRTUAL_ENV:-}" ]]; then
     log_step "Deactivating FaceFusion virtualenv before openpilot bootstrap"
     deactivate || true
   fi
+}
+
+prune_facefusion_venv() {
+  if [[ "${FACEFUSION_PRUNE_VENV}" != "1" ]]; then
+    log_step "Skipping FaceFusion virtualenv pruning"
+    return
+  fi
+
+  log_step "Pruning FaceFusion virtualenv bootstrap tooling"
+  local facefusion_venv="${FACEFUSION_ROOT}/.venv"
+  if [[ ! -d "${facefusion_venv}" ]]; then
+    return
+  fi
+
+  rm -rf "${facefusion_venv}/include" "${facefusion_venv}/share"
+  find "${facefusion_venv}" -type d -name '__pycache__' -prune -exec rm -rf {} +
+  find "${facefusion_venv}" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+
+  python3 - "${facefusion_venv}" <<'PY'
+from __future__ import annotations
+
+import shutil
+import sys
+from pathlib import Path
+
+venv_root = Path(sys.argv[1]).expanduser().resolve()
+site_packages = next(venv_root.glob("lib/python*/site-packages"), None)
+if site_packages is None:
+    raise SystemExit(0)
+
+for pattern in (
+    "pip",
+    "pip-*",
+    "setuptools",
+    "setuptools-*",
+    "wheel",
+    "wheel-*",
+    "pkg_resources",
+):
+    for path in site_packages.glob(pattern):
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+        elif path.exists():
+            path.unlink()
+
+for path in site_packages.glob("distutils-precedence.pth"):
+    path.unlink()
+PY
 }
 
 prune_facefusion_checkout() {
@@ -591,6 +717,8 @@ main() {
   clone_facefusion_checkout
   install_facefusion_runtime
   prewarm_facefusion_models
+  dedupe_facefusion_venv_files
+  prune_facefusion_venv
   deactivate_facefusion_venv
   prune_facefusion_checkout
   clean_transient_package_caches

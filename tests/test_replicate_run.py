@@ -122,6 +122,16 @@ def test_resolve_model_preserves_explicit_model() -> None:
     assert explicit is True
 
 
+def test_resolve_jwt_token_prefers_explicit_value(monkeypatch) -> None:
+    monkeypatch.setenv("COMMA_JWT", "env-jwt")
+    assert replicate_run.resolve_jwt_token("cli-jwt") == "cli-jwt"
+
+
+def test_resolve_jwt_token_falls_back_to_env(monkeypatch) -> None:
+    monkeypatch.setenv("COMMA_JWT", "env-jwt")
+    assert replicate_run.resolve_jwt_token("") == "env-jwt"
+
+
 def test_create_prediction_uses_model_alias_when_version_not_pinned(monkeypatch) -> None:
     create = Mock(return_value="prediction")
     monkeypatch.setattr(replicate_run.replicate.predictions, "create", create)
@@ -277,9 +287,9 @@ def test_save_file_output_downloads_string_url(monkeypatch, tmp_path) -> None:
 def test_main_warns_when_model_is_not_explicit(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.setattr(replicate_run, "require_api_token", lambda: "token")
     monkeypatch.setattr(replicate_run, "validate_connect_url", lambda url: url)
-    create_prediction = Mock(return_value=FakePrediction(output=FakeFileOutput(b"video-bytes")))
     run_prediction_with_retries = Mock(return_value=FakePrediction(output=FakeFileOutput(b"video-bytes")))
     monkeypatch.setattr(replicate_run, "run_prediction_with_retries", run_prediction_with_retries)
+    monkeypatch.setenv("COMMA_JWT", "env-jwt")
 
     output_path = tmp_path / "clip.mp4"
     exit_code = replicate_run.main(["--url", "https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496", "--output", str(output_path)])
@@ -287,6 +297,8 @@ def test_main_warns_when_model_is_not_explicit(monkeypatch, tmp_path, capsys) ->
     assert exit_code == 0
     assert output_path.read_bytes() == b"video-bytes"
     run_prediction_with_retries.assert_called_once()
+    _, payload = run_prediction_with_retries.call_args.args[:2]
+    assert payload["jwtToken"] == "env-jwt"
     captured = capsys.readouterr()
     assert "Warning: --model was not set; using latest beta alias" in captured.out
     assert replicate_run.DEFAULT_MODEL in captured.out
