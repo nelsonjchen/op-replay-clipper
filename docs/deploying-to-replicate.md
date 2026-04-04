@@ -195,6 +195,88 @@ set +a
 It retries through `ZONE_RESOURCE_POOL_EXHAUSTED` / stockout errors every 10
 minutes by default and exits as soon as the instance reaches `RUNNING`.
 
+For the RF-DETR Linux/CUDA debugging track, use the dedicated T4 acquisition
+helper instead. It creates a temporary T4 VM, tries spot first, falls back to
+standard if spot capacity stays unavailable, and keeps retrying ordered zones
+until one succeeds:
+
+```bash
+set -a
+source .env
+set +a
+
+./scripts/acquire_t4_gce_instance.sh
+```
+
+It writes the chosen instance name and zone into a local temp state dir so
+follow-up scripts can reuse the VM. When you are done, delete that temporary VM
+and clear the state with:
+
+```bash
+./scripts/delete_t4_gce_instance.sh
+```
+
+Before running Cog or RF-DETR smokes on that VM, bootstrap it into the
+known-good T4 state:
+
+```bash
+./scripts/bootstrap_t4_gce_vm.sh
+```
+
+That installs Docker, Cog, `nvidia-container-toolkit`, and the NVIDIA video
+driver packages (`libnvidia-encode-580-server`,
+`libnvidia-decode-580-server`) so NVENC/NVCUVID are available inside the Cog
+container instead of only bare CUDA compute.
+
+### Tiny RF-DETR repro path
+
+There is also a tiny RF-DETR-only repro surface for debugging Cog/Replicate GPU
+issues without the rest of the clipper stack.
+
+It uses:
+
+- [`scripts/rf_detr_repro.py`](../scripts/rf_detr_repro.py) for plain local Python
+- [`cog_rfdetr_repro_predictor.py`](../cog_rfdetr_repro_predictor.py) for local/hosted Cog
+- [`rf_detr_repro_run.py`](../rf_detr_repro_run.py) for hosted Replicate smoke runs
+- [`scripts/smoke_rf_detr_repro.sh`](../scripts/smoke_rf_detr_repro.sh) to prepare a tiny still and tiny clip from an existing local source
+
+Local plain-Python repro:
+
+```bash
+uv sync
+./scripts/smoke_rf_detr_repro.sh --backend local-cli
+```
+
+Local Cog repro:
+
+```bash
+./cog/render_artifacts.sh
+./scripts/smoke_rf_detr_repro.sh --backend local-cog --device cuda --require-actual-device cuda
+```
+
+Hosted beta repro:
+
+```bash
+./cog/render_artifacts.sh
+cog push --file cog-rfdetr-repro.yaml r8.im/nelsonjchen/op-replay-clipper-rfdetr-repro-beta
+
+uv run python rf_detr_repro_run.py \
+  --model 'nelsonjchen/op-replay-clipper-rfdetr-repro-beta:<version>' \
+  --input ./shared/rf-detr-repro-inputs/tiny-clip.mp4 \
+  --output ./shared/rf-detr-repro-hosted-artifacts.zip
+```
+
+Use this path when you want to answer questions like:
+
+- does RF-DETR itself succeed on GPU in plain Python?
+- does local `cog predict` keep or lose GPU access?
+- does hosted Replicate fail on the same tiny input?
+
+For the current GPU-only debugging track, treat any RF-DETR CPU fallback as a
+failure. On Linux/NVIDIA, require `actual_model_device = "cuda"` in the repro
+report and require the driver redaction selection report to show
+`hidden_redaction.rf_detr_device = "cuda"`.
+
 ## Step 1: Regenerate Cog build artifacts
 
 The push helper does this for you, but the underlying command is:
@@ -207,6 +289,7 @@ That regenerates:
 
 - `requirements-cog.txt`
 - `cog.yaml`
+- `cog-rfdetr-repro.yaml`
 
 The rendered `cog.yaml` embeds the shared bootstrap script so the build stays
 reproducible inside Replicate/Cog.

@@ -239,6 +239,21 @@ uv run python clip.py driver-debug --demo --length-seconds 20 \
   --output ./shared/driver-debug-facefusion.mp4
 ```
 
+Tiny RF-DETR-only repro:
+
+```bash
+uv sync
+./scripts/smoke_rf_detr_repro.sh --backend local-cli
+./scripts/smoke_rf_detr_repro.sh --backend local-cog
+
+./cog/render_artifacts.sh
+cog push --file cog-rfdetr-repro.yaml r8.im/nelsonjchen/op-replay-clipper-rfdetr-repro-beta
+uv run python rf_detr_repro_run.py \
+  --model 'nelsonjchen/op-replay-clipper-rfdetr-repro-beta:<version>' \
+  --input ./shared/rf-detr-repro-inputs/tiny-clip.mp4 \
+  --output ./shared/rf-detr-repro-hosted-artifacts.zip
+```
+
 The bundled donor bank lives in [`assets/driver-face-donors`](assets/driver-face-donors). It currently keeps full light/medium/dark tone coverage for masculine donors, while the active feminine bank is intentionally limited to younger light/medium donors plus a feminine clean-shaven fallback, with additional masculine glasses/beard variants. To regenerate the checked-in bank with Runware FLUX Kontext, use:
 
 ```bash

@@ -1,8 +1,10 @@
-.PHONY: build cog-predict cog-predict-360 cog-push cog-push-beta clip ui-exact-smoke local-venv test-local replicate-run video-renderer video-renderer-fuw video-renderer-360 video-renderer-360-fuw
+.PHONY: build cog-predict cog-predict-360 cog-predict-rfdetr-repro cog-push cog-push-beta cog-push-rfdetr-repro-beta clip ui-exact-smoke local-venv test-local replicate-run rf-detr-repro-run rf-detr-repro-hosted-run video-renderer video-renderer-fuw video-renderer-360 video-renderer-360-fuw
 
 REPLICATE_URL ?= https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496
 REPLICATE_RENDER ?= forward
 REPLICATE_OUTPUT ?= ./shared/replicate-run.mp4
+RF_DETR_REPRO_INPUT ?= ./shared/driver-face-eval/passenger-blackout-289-315/driver-source-hq-hevc.mp4
+RF_DETR_REPRO_OUTPUT ?= ./shared/rf-detr-repro-local
 
 # Generate fresh Cog artifacts from uv metadata and build the image.
 build: cog/cog.template.yaml cog/render_artifacts.sh
@@ -32,6 +34,10 @@ video-renderer-360-fuw:
 cog-predict:
 	./cog/render_artifacts.sh
 	cog predict
+
+cog-predict-rfdetr-repro:
+	./cog/render_artifacts.sh
+	cog predict --file cog-rfdetr-repro.yaml -i media=@$(RF_DETR_REPRO_INPUT)
 
 cog-predict-url-wide:
 	./cog/render_artifacts.sh
@@ -101,6 +107,10 @@ cog-push-beta:
 	./cog/render_artifacts.sh
 	cog push r8.im/nelsonjchen/op-replay-clipper-beta
 
+cog-push-rfdetr-repro-beta:
+	./cog/render_artifacts.sh
+	cog push --file cog-rfdetr-repro.yaml r8.im/nelsonjchen/op-replay-clipper-rfdetr-repro-beta
+
 # Create or refresh the local uv environment.
 local-venv:
 	uv sync
@@ -122,3 +132,9 @@ test-local:
 # make replicate-run REPLICATE_RENDER=ui REPLICATE_OUTPUT=./shared/replicate-run-ui.mp4
 replicate-run:
 	uv run python replicate_run.py --url "$(REPLICATE_URL)" --render-type "$(REPLICATE_RENDER)" --output "$(REPLICATE_OUTPUT)"
+
+rf-detr-repro-run:
+	uv run python scripts/rf_detr_repro.py --input "$(RF_DETR_REPRO_INPUT)" --output-dir "$(RF_DETR_REPRO_OUTPUT)" --write-overlay-video
+
+rf-detr-repro-hosted-run:
+	uv run python rf_detr_repro_run.py --input "$(RF_DETR_REPRO_INPUT)"

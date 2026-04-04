@@ -808,7 +808,7 @@ def _run_hidden_passenger_redaction(
 
     track = json.loads(track_metadata.read_text())
     started = time.perf_counter()
-    driver_face_benchmark_worker.render_rf_detr_redacted_clip(
+    report = driver_face_benchmark_worker.render_rf_detr_redacted_clip(
         sample_dir=sample_dir,
         output_path=output_path,
         source_path=source_path,
@@ -827,7 +827,7 @@ def _run_hidden_passenger_redaction(
         source_clip_description="driver_face_swap_backing_video",
         trim_startup_from_output=False,
     )
-    return output_path, time.perf_counter() - started
+    return output_path, time.perf_counter() - started, report
 
 
 def render_anonymized_driver_backing_video(
@@ -976,7 +976,7 @@ def render_anonymized_driver_backing_video(
                 total_facefusion_seconds += seat_swap_seconds
             intermediate_output = output if seat_index == len(active_seats) - 1 else sample_dir / f"composited-{seat_key}.mp4"
             if seat_mode == "hidden":
-                current_source, seat_reintegrate_seconds = _run_hidden_passenger_redaction(
+                current_source, seat_reintegrate_seconds, hidden_report = _run_hidden_passenger_redaction(
                     sample_dir=sample_dir,
                     source_path=current_source,
                     output_path=intermediate_output,
@@ -986,6 +986,22 @@ def render_anonymized_driver_backing_video(
                 )
                 total_hidden_seconds += seat_reintegrate_seconds
                 total_transform_seconds += seat_reintegrate_seconds
+                seat_report["hidden_redaction"] = {
+                    "candidate_id": hidden_report.get("candidate_id"),
+                    "rf_detr_device": hidden_report.get("rf_detr_device"),
+                    "rf_detr_model_id": hidden_report.get("rf_detr_model_id"),
+                    "rf_detr_threshold": hidden_report.get("rf_detr_threshold"),
+                    "rf_detr_frame_stride": hidden_report.get("rf_detr_frame_stride"),
+                    "rf_detr_effect": hidden_report.get("rf_detr_effect"),
+                    "output_video_encoder": hidden_report.get("output_video_encoder"),
+                    "source_clip_kind": hidden_report.get("source_clip_kind"),
+                    "source_frames_processed": hidden_report.get("source_frames_processed"),
+                    "frames_processed": hidden_report.get("frames_processed"),
+                    "redacted_frames": hidden_report.get("redacted_frames"),
+                    "detector_frames": hidden_report.get("detector_frames"),
+                    "runtime_seconds": hidden_report.get("runtime_seconds"),
+                    "startup_mask_source_frame_index": hidden_report.get("startup_mask_source_frame_index"),
+                }
             else:
                 reintegrate_started = time.perf_counter()
                 reintegrate_cmd = [

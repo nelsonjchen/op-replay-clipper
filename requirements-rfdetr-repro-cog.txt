@@ -1,0 +1,6 @@
+numpy==2.4.4
+opencv-python-headless==4.13.0.92
+torch==2.11.0
+torchvision==0.26.0
+rfdetr==1.6.3
+supervision==0.27.0.post2

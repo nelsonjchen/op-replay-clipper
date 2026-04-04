@@ -80,6 +80,34 @@ install_system_packages() {
   apt-get install -y "${APT_PACKAGES[@]}"
 }
 
+sync_python_nvidia_runtime_libs() {
+  log_step "Linking Python-provided NVIDIA runtime libraries into system library path"
+  python - <<'PY'
+from __future__ import annotations
+
+import pathlib
+import site
+
+system_lib_dir = pathlib.Path("/usr/lib/x86_64-linux-gnu")
+if not system_lib_dir.exists():
+    raise SystemExit(0)
+
+for root in site.getsitepackages():
+    nvidia_root = pathlib.Path(root) / "nvidia"
+    if not nvidia_root.exists():
+        continue
+    for lib_dir in sorted(path for path in nvidia_root.iterdir() if (path / "lib").exists()):
+        for lib_file in sorted((lib_dir / "lib").glob("lib*.so*")):
+            if lib_file.is_dir():
+                continue
+            target = system_lib_dir / lib_file.name
+            if target.exists() or target.is_symlink():
+                target.unlink()
+            target.symlink_to(lib_file)
+            print(f"linked {target} -> {lib_file}", flush=True)
+PY
+}
+
 configure_git_lfs() {
   log_step "Checking git-lfs CLI"
   git lfs version
@@ -555,6 +583,7 @@ clean_image_artifacts() {
 
 main() {
   install_system_packages
+  sync_python_nvidia_runtime_libs
   configure_build_tempdir
   redirect_system_tmp
   configure_git_lfs

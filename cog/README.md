@@ -10,6 +10,7 @@ Cog fork is no longer required for GPU visibility. This repo now assumes stock
 
 1. It exports `requirements-cog.txt` from `uv.lock` so Cog uses a supported `python_requirements` file instead of deprecated `python_packages`.
 2. It injects the shared `common/bootstrap_image_env.sh` into `cog.yaml`, because official Cog still documents that repo files are not available to `build.run` commands.
+3. It renders the tiny RF-DETR repro config at `cog-rfdetr-repro.yaml`, so the minimal hosted/Cog debugging surface stays on the same dependency/bootstrap path as the main model.
 
 The shared bootstrap now also clones a pinned FaceFusion checkout into the image
 and installs the CUDA-capable ONNX Runtime. The runtime wiring prefers system

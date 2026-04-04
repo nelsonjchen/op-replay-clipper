@@ -7,8 +7,6 @@ import platform
 import subprocess
 import sys
 import time
-import warnings
-from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -28,12 +26,22 @@ from core.driver_face_swap import (
     default_facefusion_output_video_encoder,
     facefusion_runtime_env,
 )
+from core.rf_detr_runtime import (
+    DEFAULT_RF_DETR_MODEL_ID,
+    default_rf_detr_device as _default_rf_detr_device,
+    detections_class_id as _detections_class_id,
+    detections_confidence as _detections_confidence,
+    detections_masks as _detections_masks,
+    detections_xyxy as _detections_xyxy,
+    load_rf_detr_model as _load_rf_detr_model,
+    model_device as _rf_detr_model_device,
+    predict_rf_detr as _predict_rf_detr,
+)
 
 RF_DETR_CANDIDATE_IDS = {
     "rf-detr-passenger-blur",
     "rf-detr-passenger-silhouette",
 }
-DEFAULT_RF_DETR_MODEL_ID = "rfdetr-seg-preview"
 DEFAULT_RF_DETR_THRESHOLD = 0.4
 DEFAULT_RF_DETR_FRAME_STRIDE = 5
 DEFAULT_RF_DETR_MASK_DILATE = 15
@@ -159,22 +167,6 @@ def _resolve_preferred_source_clip(sample_dir: Path, track: dict[str, object]) -
             )
         )
     return hq_clip, "raw_hevc_derived_working_clip"
-
-
-def _default_rf_detr_device() -> str:
-    override = os.environ.get("DRIVER_FACE_BENCHMARK_RF_DETR_DEVICE", "").strip()
-    if override:
-        return override
-    try:
-        import torch
-    except Exception:
-        return "cpu"
-    if torch.cuda.is_available():
-        return "cuda"
-    mps_backend = getattr(torch.backends, "mps", None)
-    if mps_backend is not None and mps_backend.is_available():
-        return "mps"
-    return "cpu"
 
 
 def _shareable_h264_encoder_args() -> list[str]:
@@ -330,77 +322,6 @@ def _driver_monitoring_input_crop_rect(
     x1 = min(frame_width, int(np.ceil(max_dm_x)) + 1)
     y1 = min(frame_height, int(np.ceil(max_dm_y)) + 1)
     return x0, y0, max(2, x1 - x0), max(2, y1 - y0)
-
-
-@lru_cache(maxsize=1)
-def _load_rf_detr_model(model_id: str):
-    from rfdetr import RFDETRSegLarge, RFDETRSegMedium, RFDETRSegNano, RFDETRSegPreview, RFDETRSegSmall, RFDETRSegXLarge, RFDETRSeg2XLarge
-
-    model_specs = {
-        "rfdetr-seg-preview": (RFDETRSegPreview, "rf-detr-seg-preview.pt"),
-        "rfdetr-seg-nano": (RFDETRSegNano, "rf-detr-seg-nano.pt"),
-        "rfdetr-seg-small": (RFDETRSegSmall, "rf-detr-seg-small.pt"),
-        "rfdetr-seg-medium": (RFDETRSegMedium, "rf-detr-seg-medium.pt"),
-        "rfdetr-seg-large": (RFDETRSegLarge, "rf-detr-seg-large.pt"),
-        "rfdetr-seg-xlarge": (RFDETRSegXLarge, "rf-detr-seg-xlarge.pt"),
-        "rfdetr-seg-2xlarge": (RFDETRSeg2XLarge, "rf-detr-seg-xxlarge.pt"),
-        "rfdetr-seg-xxlarge": (RFDETRSeg2XLarge, "rf-detr-seg-xxlarge.pt"),
-    }
-    try:
-        model_class, weight_filename = model_specs[model_id]
-    except KeyError as exc:
-        raise ValueError(f"Unsupported RF-DETR segmentation model id: {model_id}") from exc
-
-    weights_dir = REPO_ROOT / ".cache/rfdetr"
-    weights_dir.mkdir(parents=True, exist_ok=True)
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message=r"`use_return_dict` is deprecated! Use `return_dict` instead!")
-        model = model_class(
-            pretrain_weights=str((weights_dir / weight_filename).resolve()),
-            device=_default_rf_detr_device(),
-        )
-        optimize = getattr(model, "optimize_for_inference", None)
-        if callable(optimize):
-            optimize(compile=False)
-    return model
-
-
-def _predict_rf_detr(model, rgb_frame: np.ndarray, *, threshold: float):
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message=r"`use_return_dict` is deprecated! Use `return_dict` instead!")
-        return model.predict(rgb_frame, threshold=threshold)
-
-
-def _detections_masks(detections) -> np.ndarray | None:
-    mask = getattr(detections, "mask", None)
-    if mask is None:
-        data = getattr(detections, "data", None)
-        if isinstance(data, dict):
-            mask = data.get("mask")
-    if mask is None:
-        return None
-    return np.asarray(mask)
-
-
-def _detections_xyxy(detections) -> np.ndarray:
-    xyxy = getattr(detections, "xyxy", None)
-    if xyxy is None:
-        raise RuntimeError("RF-DETR detections object does not expose xyxy boxes")
-    return np.asarray(xyxy)
-
-
-def _detections_class_id(detections) -> np.ndarray | None:
-    class_id = getattr(detections, "class_id", None)
-    if class_id is None:
-        return None
-    return np.asarray(class_id)
-
-
-def _detections_confidence(detections) -> np.ndarray | None:
-    confidence = getattr(detections, "confidence", None)
-    if confidence is None:
-        return None
-    return np.asarray(confidence)
 
 
 def _resize_mask(mask: np.ndarray, *, width: int, height: int) -> np.ndarray:
@@ -1166,7 +1087,7 @@ def render_rf_detr_redacted_clip(
         raise RuntimeError(f"Failed to create output clip: {output_path}")
 
     candidate_id = output_path.stem
-    model = _load_rf_detr_model(model_id)
+    model = _load_rf_detr_model(model_id, device=_default_rf_detr_device())
     stride = max(1, int(frame_stride))
     last_mask: np.ndarray | None = None
     last_mask_box: tuple[int, int, int, int] | None = None
@@ -1369,7 +1290,7 @@ def render_rf_detr_redacted_clip(
         "rf_detr_test_target_side": target_side,
         "rf_detr_missing_hold_frames": missing_hold_frames,
         "rf_detr_effect": effect,
-        "rf_detr_device": str(model.model.device),
+        "rf_detr_device": _rf_detr_model_device(model),
         "output_video_encoder": _shareable_h264_encoder_name(),
         "startup_mask_source_frame_index": startup_mask_source_frame_index,
         "trim_startup_from_output": trim_startup_from_output,

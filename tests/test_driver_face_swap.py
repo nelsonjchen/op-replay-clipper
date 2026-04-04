@@ -88,14 +88,14 @@ def test_hidden_passenger_redaction_preserves_startup_frames_for_backing_video(m
 
     def _fake_render_rf_detr_redacted_clip(**kwargs):
         captured.update(kwargs)
-        return {}
+        return {"rf_detr_device": "cuda", "rf_detr_model_id": "rfdetr-seg-preview"}
 
     monkeypatch.setattr(
         "core.driver_face_benchmark_worker.render_rf_detr_redacted_clip",
         _fake_render_rf_detr_redacted_clip,
     )
 
-    result_path, elapsed = driver_face_swap._run_hidden_passenger_redaction(
+    result_path, elapsed, report = driver_face_swap._run_hidden_passenger_redaction(
         sample_dir=tmp_path,
         source_path=source_path,
         output_path=output_path,
@@ -110,9 +110,42 @@ def test_hidden_passenger_redaction_preserves_startup_frames_for_backing_video(m
 
     assert result_path == output_path
     assert elapsed >= 0
+    assert report["rf_detr_device"] == "cuda"
     assert captured["trim_startup_from_output"] is False
     assert captured["effect"] == "blur"
     assert captured["banner_text"] == "PASSENGER BLURRED"
+
+
+def test_hidden_passenger_redaction_report_keeps_output_encoder(monkeypatch, tmp_path: Path) -> None:
+    track_path = tmp_path / "passenger-face-track.json"
+    track_path.write_text(json.dumps({"frames": []}))
+    source_path = tmp_path / "source.mp4"
+    source_path.write_bytes(b"source")
+    output_path = tmp_path / "output.mp4"
+
+    monkeypatch.setattr(
+        "core.driver_face_benchmark_worker.render_rf_detr_redacted_clip",
+        lambda **kwargs: {
+            "rf_detr_device": "cuda",
+            "rf_detr_model_id": "rfdetr-seg-preview",
+            "output_video_encoder": "h264_nvenc",
+        },
+    )
+
+    _, _, report = driver_face_swap._run_hidden_passenger_redaction(
+        sample_dir=tmp_path,
+        source_path=source_path,
+        output_path=output_path,
+        track_metadata=track_path,
+        options=driver_face_swap.DriverFaceSwapOptions(
+            mode="facefusion",
+            profile="driver_unchanged_passenger_hidden",
+            passenger_redaction_style="blur",
+        ),
+        banner_text="PASSENGER BLURRED",
+    )
+
+    assert report["output_video_encoder"] == "h264_nvenc"
 
 
 def test_facefusion_command_swaps_all_faces_in_crop(tmp_path: Path, monkeypatch) -> None:

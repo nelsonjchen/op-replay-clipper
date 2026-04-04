@@ -22,6 +22,9 @@ ACCEL="${SMOKE_ACCEL:-auto}"
 DRIVER_MODE="${SMOKE_DRIVER_MODE:-}"
 SYNC_REPO="${SMOKE_SYNC_REPO:-1}"
 OPENPILOT_DIR="${SMOKE_OPENPILOT_DIR:-${REPO_ROOT}/.cache/openpilot-local}"
+RF_DETR_DEVICE="${SMOKE_RF_DETR_DEVICE:-}"
+REQUIRE_RF_DETR_DEVICE="${SMOKE_REQUIRE_RF_DETR_DEVICE:-}"
+REQUIRE_OUTPUT_ENCODER="${SMOKE_REQUIRE_OUTPUT_ENCODER:-}"
 
 usage() {
   cat <<'EOF'
@@ -49,6 +52,9 @@ Options:
   --output-dir <dir>               Output directory for artifacts
   --accel <mode>                   Local accel mode: auto, cpu, videotoolbox, nvidia
   --driver-mode <unchanged|swap>   Driver seat mode for the smoke. Default: unchanged on local, swap on hosted
+  --rf-detr-device <auto|cpu|cuda|mps>
+  --require-rf-detr-device <device>
+  --require-output-encoder <name>
   --skip-sync-repo                 Skip the initial uv sync step for local smokes
   -h, --help                       Show this help text
 EOF
@@ -95,6 +101,18 @@ while [[ $# -gt 0 ]]; do
       ;;
     --driver-mode)
       DRIVER_MODE="$2"
+      shift 2
+      ;;
+    --rf-detr-device)
+      RF_DETR_DEVICE="$2"
+      shift 2
+      ;;
+    --require-rf-detr-device)
+      REQUIRE_RF_DETR_DEVICE="$2"
+      shift 2
+      ;;
+    --require-output-encoder)
+      REQUIRE_OUTPUT_ENCODER="$2"
       shift 2
       ;;
     --skip-sync-repo)
@@ -172,6 +190,10 @@ run_local_case() {
     openpilot_args+=(--skip-openpilot-update --skip-openpilot-bootstrap)
   fi
 
+  if [[ -n "${RF_DETR_DEVICE}" ]]; then
+    export DRIVER_FACE_BENCHMARK_RF_DETR_DEVICE="${RF_DETR_DEVICE}"
+  fi
+
   uv run python "${REPO_ROOT}/clip.py" \
     "${render_type}" \
     "${ROUTE_URL}" \
@@ -226,6 +248,37 @@ run_case() {
   if [[ ! -s "${output_path}" ]]; then
     echo "Expected non-empty output at ${output_path}" >&2
     exit 1
+  fi
+  if [[ -n "${REQUIRE_RF_DETR_DEVICE}" || -n "${REQUIRE_OUTPUT_ENCODER}" ]]; then
+    local selection_report="${output_path%.mp4}.driver-face-selection.json"
+    if [[ ! -s "${selection_report}" ]]; then
+      echo "Expected selection report at ${selection_report}" >&2
+      exit 1
+    fi
+    python - "${selection_report}" "${REQUIRE_RF_DETR_DEVICE}" "${REQUIRE_OUTPUT_ENCODER}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+report = json.loads(Path(sys.argv[1]).read_text())
+required_device = sys.argv[2]
+required_encoder = sys.argv[3]
+hidden = None
+for seat_report in report.get("seat_reports", []):
+    hidden = seat_report.get("hidden_redaction")
+    if hidden:
+        break
+if hidden is None:
+    raise SystemExit("Could not find hidden_redaction in selection report")
+actual_device = hidden.get("rf_detr_device")
+actual_encoder = hidden.get("output_video_encoder")
+print(f"hidden_redaction.rf_detr_device={actual_device}")
+print(f"hidden_redaction.output_video_encoder={actual_encoder}")
+if required_device and actual_device != required_device:
+    raise SystemExit(f"Expected rf_detr_device={required_device}, got {actual_device}")
+if required_encoder and actual_encoder != required_encoder:
+    raise SystemExit(f"Expected output_video_encoder={required_encoder}, got {actual_encoder}")
+PY
   fi
   run_ffprobe "${output_path}"
 }

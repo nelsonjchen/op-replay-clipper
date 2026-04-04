@@ -1,0 +1,8 @@
+build:
+  gpu: true
+  python_version: "3.12"
+  cuda: "12.4"
+  python_requirements: requirements-rfdetr-repro-cog.txt
+  run:
+    - "echo ENCODED_SCRIPT | base64 -d > bootstrap_image_env.sh && bash bootstrap_image_env.sh"
+predict: "cog_rfdetr_repro_predictor.py:Predictor"

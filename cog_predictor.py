@@ -1,7 +1,12 @@
+import json
 import os
 from pathlib import Path
 
 from cog import BasePredictor, Input, Path as CogPath
+
+from core.rf_detr_runtime import ensure_python_nvidia_libs_preferred, sync_python_nvidia_runtime_libs_to_system
+
+ensure_python_nvidia_libs_preferred()
 
 from core import route_inputs
 from core.clip_orchestrator import ClipRequest, is_smear_render_type, run_clip
@@ -43,12 +48,11 @@ def default_facefusion_root(repo_root: Path) -> Path:
 class Predictor(BasePredictor):
     def setup(self) -> None:
         repo_root = Path(__file__).resolve().parent
+        sync_python_nvidia_runtime_libs_to_system()
         os.environ["FACEFUSION_ROOT"] = str(default_facefusion_root(repo_root))
         os.environ.setdefault("DRIVER_FACE_SOURCE_IMAGE", str(repo_root / "assets/driver-face-donors/generic-donor-clean-shaven.jpg"))
         os.environ.setdefault("DRIVER_FACE_DONOR_BANK_DIR", str(repo_root / "assets/driver-face-donors"))
-        # RF-DETR on Replicate/Cog is more stable on CPU today, while video
-        # transcode can still use NVENC independently.
-        os.environ.setdefault("DRIVER_FACE_BENCHMARK_RF_DETR_DEVICE", "cpu")
+        os.environ.setdefault("DRIVER_FACE_BENCHMARK_RF_DETR_DEVICE", "auto")
 
     def predict(
         self,
@@ -136,4 +140,19 @@ class Predictor(BasePredictor):
                 driver_face_selection="auto_best_match",
             )
         )
+        if renderType in {"driver", "driver-debug"}:
+            selection_report_path = Path(result.output_path).with_name(f"{Path(result.output_path).stem}.driver-face-selection.json")
+            if selection_report_path.exists():
+                try:
+                    selection_report = json.loads(selection_report_path.read_text())
+                    hidden_summary = None
+                    for seat_report in selection_report.get("seat_reports", []):
+                        hidden_summary = seat_report.get("hidden_redaction")
+                        if hidden_summary:
+                            break
+                    if hidden_summary is not None:
+                        print("HIDDEN_REDACTION_SUMMARY:")
+                        print(json.dumps(hidden_summary, sort_keys=True))
+                except Exception as exc:
+                    print(f"Failed to read hidden redaction selection report: {exc}")
         return Path(result.output_path)
