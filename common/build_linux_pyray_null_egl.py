@@ -245,6 +245,17 @@ def patch_pyray_checkout(pyray_dir: Path) -> None:
 
 
 def build_and_install(*, python_bin: str, work_dir: Path | None) -> None:
+    try:
+        verify_installed_pyray(python_bin)
+        print("Existing null-EGL pyray install is already usable; skipping rebuild.", flush=True)
+        return
+    except subprocess.CalledProcessError:
+        pass
+    except AssertionError:
+        pass
+    except FileNotFoundError:
+        pass
+
     with tempfile.TemporaryDirectory(dir=str(work_dir) if work_dir else None, prefix="pyray-null-egl-") as tmp:
         tmpdir = Path(tmp)
         raylib_dir = tmpdir / "raylib"

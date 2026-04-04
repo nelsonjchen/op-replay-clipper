@@ -21,6 +21,7 @@ OUTPUT_DIR="${SMOKE_OUTPUT_DIR:-${REPO_ROOT}/shared/driver-redaction-smoke}"
 ACCEL="${SMOKE_ACCEL:-auto}"
 DRIVER_MODE="${SMOKE_DRIVER_MODE:-}"
 SYNC_REPO="${SMOKE_SYNC_REPO:-1}"
+OPENPILOT_DIR="${SMOKE_OPENPILOT_DIR:-${REPO_ROOT}/.cache/openpilot-local}"
 
 usage() {
   cat <<'EOF'
@@ -38,6 +39,7 @@ Environment:
   SMOKE_ACCEL                      Local acceleration mode. Default: auto
   SMOKE_DRIVER_MODE                unchanged or swap. Defaults to unchanged for local and swap for hosted.
   SMOKE_SYNC_REPO                  1 to run uv sync before local smokes. Default: 1
+  SMOKE_OPENPILOT_DIR              Openpilot checkout to reuse for local smokes.
 
 Options:
   --backend <local|hosted>         Smoke backend. Default: local
@@ -158,9 +160,16 @@ run_local_case() {
   local style="$3"
   local output_path="$4"
   local -a jwt_args=()
+  local -a openpilot_args=(
+    --openpilot-dir "${OPENPILOT_DIR}"
+  )
 
   if [[ -n "${JWT_TOKEN}" ]]; then
     jwt_args+=(--jwt-token "${JWT_TOKEN}")
+  fi
+
+  if [[ -x "${OPENPILOT_DIR}/.venv/bin/python" ]]; then
+    openpilot_args+=(--skip-openpilot-update --skip-openpilot-bootstrap)
   fi
 
   uv run python "${REPO_ROOT}/clip.py" \
@@ -172,6 +181,7 @@ run_local_case() {
     --driver-face-profile "${profile}" \
     --passenger-redaction-style "${style}" \
     --driver-face-selection auto_best_match \
+    "${openpilot_args[@]}" \
     "${jwt_args[@]}" \
     --output "${output_path}"
 }

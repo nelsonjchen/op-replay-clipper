@@ -5,11 +5,16 @@ description = "Local tooling for openpilot replay clipping"
 requires-python = ">=3.12"
 dependencies = [
   "attrs>=23.2,<24",
+  "numpy>=2.2,<3",
+  "opencv-python-headless>=4.11,<5",
   "parfive>=2.1,<3",
   "python-dotenv>=1.0,<2",
+  "rfdetr>=1.6,<2",
   "replicate>=1.0,<2",
   "requests>=2.32,<3",
   "spatialmedia @ git+https://github.com/google/spatial-media.git@57c85bb5691518406408b675e52f430e0c62798c",
+  "torch>=2.6,<3",
+  "torchvision>=0.21,<1",
 ]
 
 [dependency-groups]
