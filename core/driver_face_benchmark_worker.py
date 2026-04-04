@@ -59,6 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rf-detr-startup-hold-frames", type=int, default=6)
     parser.add_argument("--rf-detr-passenger-crop-margin-ratio", type=float, default=0.10)
     parser.add_argument("--rf-detr-missing-hold-frames", type=int, default=10)
+    parser.add_argument("--rf-detr-test-target-side", choices=("passenger", "driver"), default="passenger")
     return parser.parse_args()
 
 
@@ -185,11 +186,18 @@ def _telemetry(frame_row: dict[str, object], key: str, default):
     return telemetry.get(key, default)
 
 
-def _passenger_side_for_frame(frame_row: dict[str, object]) -> str:
+def _opposite_side(side: str) -> str:
+    return "right" if side == "left" else "left"
+
+
+def _target_side_for_frame(frame_row: dict[str, object], *, target_side: str = "passenger") -> str:
     selected_side = str(frame_row.get("selected_side") or "left").lower()
     # The prepared driver-source clip is mirrored like the stock driver camera
     # view, so the real passenger seat appears on the same image half as the
-    # telemetry-selected driver side.
+    # telemetry-selected driver side, while the visible driver appears on the
+    # opposite image half.
+    if target_side == "driver":
+        return _opposite_side(selected_side)
     return selected_side
 
 
@@ -329,8 +337,9 @@ def _passenger_crop_rect(
     frame_height: int,
     margin_ratio: float,
     device_type: object,
+    target_side: str = "passenger",
 ) -> tuple[int, int, int, int]:
-    passenger_side = _passenger_side_for_frame(frame_row)
+    target_image_side = _target_side_for_frame(frame_row, target_side=target_side)
     dm_x, dm_y, dm_width, dm_height = _driver_monitoring_input_crop_rect(
         frame_width=frame_width,
         frame_height=frame_height,
@@ -339,7 +348,7 @@ def _passenger_crop_rect(
     dm_x1 = dm_x + dm_width
     frame_mid_x = frame_width / 2.0
     overlap = int(round(dm_width * max(0.0, margin_ratio)))
-    if passenger_side == "left":
+    if target_image_side == "left":
         x0 = dm_x
         x1 = min(dm_x1, int(round(frame_mid_x)) + overlap)
     else:
@@ -416,8 +425,17 @@ def _inflate_rect(rect: tuple[int, int, int, int], *, scale: float, frame_width:
     return x0, y0, max(2, x1 - x0), max(2, y1 - y0)
 
 
-def _load_optional_passenger_anchor_rows(sample_dir: Path) -> dict[int, tuple[int, int, int, int]]:
-    anchor_path = sample_dir / "passenger-face-track.json"
+def _anchor_track_path(sample_dir: Path, *, target_side: str) -> Path:
+    if target_side == "driver":
+        return sample_dir / "face-track.json"
+    passenger_path = sample_dir / "passenger-face-track.json"
+    if passenger_path.exists():
+        return passenger_path
+    return sample_dir / "face-track.json"
+
+
+def _load_optional_anchor_rows(sample_dir: Path, *, target_side: str) -> dict[int, tuple[int, int, int, int]]:
+    anchor_path = _anchor_track_path(sample_dir, target_side=target_side)
     if not anchor_path.exists():
         return {}
     track = json.loads(anchor_path.read_text())
@@ -430,6 +448,114 @@ def _load_optional_passenger_anchor_rows(sample_dir: Path) -> dict[int, tuple[in
     return anchors
 
 
+def _rect_center(rect: tuple[int, int, int, int]) -> tuple[float, float]:
+    x, y, w, h = rect
+    return x + (w / 2.0), y + (h / 2.0)
+
+
+def _warp_mask_between_anchors(
+    mask: np.ndarray,
+    *,
+    from_anchor_rect: tuple[int, int, int, int],
+    to_anchor_rect: tuple[int, int, int, int],
+) -> np.ndarray:
+    from_cx, from_cy = _rect_center(from_anchor_rect)
+    to_cx, to_cy = _rect_center(to_anchor_rect)
+    from_scale = max(1.0, float(max(from_anchor_rect[2], from_anchor_rect[3])))
+    to_scale = max(1.0, float(max(to_anchor_rect[2], to_anchor_rect[3])))
+    scale = float(np.clip(to_scale / from_scale, 0.8, 1.25))
+    matrix = np.array(
+        [
+            [scale, 0.0, to_cx - (scale * from_cx)],
+            [0.0, scale, to_cy - (scale * from_cy)],
+        ],
+        dtype=np.float32,
+    )
+    warped = cv2.warpAffine(
+        mask.astype(np.uint8),
+        matrix,
+        (mask.shape[1], mask.shape[0]),
+        flags=cv2.INTER_NEAREST,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0,
+    )
+    return warped.astype(bool)
+
+
+def _anchor_body_mask(
+    anchor_rect: tuple[int, int, int, int],
+    *,
+    frame_width: int,
+    frame_height: int,
+) -> np.ndarray:
+    x, y, w, h = anchor_rect
+    cx = int(round(x + (w / 2.0)))
+    mask = np.zeros((frame_height, frame_width), dtype=np.uint8)
+
+    head_center = (cx, int(round(y + (h * 0.30))))
+    head_axes = (
+        max(12, int(round(w * 0.23))),
+        max(14, int(round(h * 0.24))),
+    )
+    torso_center = (cx, int(round(y + (h * 1.02))))
+    torso_axes = (
+        max(18, int(round(w * 0.44))),
+        max(30, int(round(h * 0.74))),
+    )
+    lower_center = (cx, int(round(y + (h * 1.72))))
+    lower_axes = (
+        max(20, int(round(w * 0.38))),
+        max(24, int(round(h * 0.48))),
+    )
+
+    cv2.ellipse(mask, head_center, head_axes, 0, 0, 360, 255, -1, cv2.LINE_8)
+    cv2.ellipse(mask, torso_center, torso_axes, 0, 0, 360, 255, -1, cv2.LINE_8)
+    cv2.ellipse(mask, lower_center, lower_axes, 0, 0, 360, 255, -1, cv2.LINE_8)
+
+    shoulder_y = int(round(y + (h * 0.62)))
+    hip_y = int(round(y + (h * 1.78)))
+    shoulder_half_w = int(round(w * 0.42))
+    hip_half_w = int(round(w * 0.28))
+    polygon = np.array(
+        [
+            (max(0, cx - shoulder_half_w), max(0, shoulder_y)),
+            (min(frame_width - 1, cx + shoulder_half_w), max(0, shoulder_y)),
+            (min(frame_width - 1, cx + hip_half_w), min(frame_height - 1, hip_y)),
+            (max(0, cx - hip_half_w), min(frame_height - 1, hip_y)),
+        ],
+        dtype=np.int32,
+    )
+    cv2.fillConvexPoly(mask, polygon, 255, cv2.LINE_8)
+
+    return _dilate_mask(mask.astype(bool), kernel_size=17)
+
+
+def _fallback_mask_from_anchor(
+    *,
+    anchor_rect: tuple[int, int, int, int] | None,
+    previous_mask: np.ndarray | None,
+    previous_anchor_rect: tuple[int, int, int, int] | None,
+    frame_width: int,
+    frame_height: int,
+) -> tuple[np.ndarray | None, str | None]:
+    if anchor_rect is None:
+        if previous_mask is None:
+            return None, None
+        return previous_mask.copy(), "held_previous_mask"
+
+    anchor_mask = _anchor_body_mask(anchor_rect, frame_width=frame_width, frame_height=frame_height)
+    if previous_mask is None or previous_anchor_rect is None:
+        return anchor_mask, "anchor_body_fallback"
+
+    shifted_previous = _warp_mask_between_anchors(
+        previous_mask,
+        from_anchor_rect=previous_anchor_rect,
+        to_anchor_rect=anchor_rect,
+    )
+    combined = shifted_previous | anchor_mask
+    return combined, "anchor_shifted_mask_fallback"
+
+
 def _choose_passenger_mask(
     detections,
     *,
@@ -438,6 +564,7 @@ def _choose_passenger_mask(
     frame_height: int,
     anchor_rect: tuple[int, int, int, int] | None = None,
     crop_rect: tuple[int, int, int, int] | None = None,
+    target_side: str = "passenger",
 ) -> tuple[np.ndarray | None, dict[str, object]]:
     masks = _detections_masks(detections)
     if masks is None or masks.size == 0:
@@ -446,10 +573,10 @@ def _choose_passenger_mask(
     xyxy = _detections_xyxy(detections)
     class_ids = _detections_class_id(detections)
     confidences = _detections_confidence(detections)
-    passenger_side = _passenger_side_for_frame(frame_row)
+    target_image_side = _target_side_for_frame(frame_row, target_side=target_side)
     frame_mid_x = frame_width / 2.0
     chosen_mask: np.ndarray | None = None
-    chosen_details: dict[str, object] = {"reason": "no_person_on_passenger_side"}
+    chosen_details: dict[str, object] = {"reason": f"no_person_on_{target_side}_side"}
     chosen_score = float("-inf")
     inflated_anchor = (
         _inflate_rect(anchor_rect, scale=0.18, frame_width=frame_width, frame_height=frame_height)
@@ -468,9 +595,9 @@ def _choose_passenger_mask(
             continue
         x, y, width, height = box
         center_x = x + (width / 2.0)
-        if passenger_side == "right" and center_x < frame_mid_x:
+        if target_image_side == "right" and center_x < frame_mid_x:
             continue
-        if passenger_side == "left" and center_x > frame_mid_x:
+        if target_image_side == "left" and center_x > frame_mid_x:
             continue
         area = int(mask.sum())
         area_fraction = area / max(1.0, frame_width * frame_height)
@@ -510,7 +637,8 @@ def _choose_passenger_mask(
                 "mask_area_fraction": round(area_fraction, 4),
                 "mask_crop_area_fraction": round(crop_area_fraction, 4),
                 "anchor_overlap": None if anchor_overlap is None else round(anchor_overlap, 4),
-                "passenger_side": passenger_side,
+                "target_side": target_side,
+                "target_image_side": target_image_side,
             }
     return chosen_mask, chosen_details
 
@@ -985,11 +1113,12 @@ def _run_rf_detr_passenger_effect(
     startup_hold_frames: int,
     passenger_crop_margin_ratio: float,
     missing_hold_frames: int,
+    test_target_side: str,
 ) -> dict[str, object]:
     source_path = sample_dir / "driver-source.mp4"
     frames = list(track["frames"])
     device_type = track.get("device_type")
-    passenger_anchor_rows = _load_optional_passenger_anchor_rows(sample_dir)
+    anchor_rows = _load_optional_anchor_rows(sample_dir, target_side=test_target_side)
     capture = cv2.VideoCapture(str(source_path))
     if not capture.isOpened():
         raise RuntimeError(f"Failed to open source clip: {source_path}")
@@ -1014,10 +1143,13 @@ def _run_rf_detr_passenger_effect(
     stride = max(1, int(frame_stride))
     last_mask: np.ndarray | None = None
     last_mask_box: tuple[int, int, int, int] | None = None
+    last_detected_mask: np.ndarray | None = None
+    last_detected_anchor_rect: tuple[int, int, int, int] | None = None
     missed_detections_since_last_mask = 0
     missing_hold_frames = max(0, int(missing_hold_frames))
     startup_mask_source_frame_index: int | None = None
     startup_hold = max(0, int(startup_hold_frames))
+    startup_trimmed_frames = 0
     redacted_frames = 0
     detector_frames = 0
     output_frames = 0
@@ -1030,13 +1162,16 @@ def _run_rf_detr_passenger_effect(
             if not ok:
                 raise RuntimeError(f"Video ended early at frame {frame_index}")
 
-            in_startup_hold = frame_index < startup_hold
+            anchor_rect = anchor_rows.get(frame_index)
+            should_extend_startup_trim = startup_mask_source_frame_index is None
+            in_startup_hold = frame_index < startup_hold or should_extend_startup_trim
             rerun_detector = in_startup_hold or frame_index % stride == 0 or last_mask is None
             detection_report: dict[str, object] = {
                 "frame_index": frame_index,
                 "used_detector": rerun_detector,
                 "selected_side": frame_row.get("selected_side"),
-                "passenger_side": _passenger_side_for_frame(frame_row),
+                "target_side": test_target_side,
+                "target_image_side": _target_side_for_frame(frame_row, target_side=test_target_side),
             }
 
             if rerun_detector:
@@ -1047,6 +1182,7 @@ def _run_rf_detr_passenger_effect(
                     frame_height=height,
                     margin_ratio=passenger_crop_margin_ratio,
                     device_type=device_type,
+                    target_side=test_target_side,
                 )
                 crop_x, crop_y, crop_width, crop_height = crop_rect
                 cropped_frame = frame[crop_y: crop_y + crop_height, crop_x: crop_x + crop_width]
@@ -1058,7 +1194,6 @@ def _run_rf_detr_passenger_effect(
                     frame_width=width,
                     frame_height=height,
                 )
-                anchor_rect = passenger_anchor_rows.get(frame_index)
                 selected_mask, selection_details = _choose_passenger_mask(
                     detections,
                     frame_row=frame_row,
@@ -1066,6 +1201,7 @@ def _run_rf_detr_passenger_effect(
                     frame_height=height,
                     anchor_rect=anchor_rect,
                     crop_rect=crop_rect,
+                    target_side=test_target_side,
                 )
                 detection_report.update(selection_details)
                 detection_report["crop_rect"] = {
@@ -1084,13 +1220,42 @@ def _run_rf_detr_passenger_effect(
                 if selected_mask is not None:
                     last_mask = _dilate_mask(selected_mask, kernel_size=mask_dilate)
                     last_mask_box = _box_from_mask(last_mask)
+                    last_detected_mask = last_mask.copy()
+                    last_detected_anchor_rect = anchor_rect
                     missed_detections_since_last_mask = 0
-                    if startup_mask_source_frame_index is None and in_startup_hold:
+                    if startup_mask_source_frame_index is None:
                         startup_mask_source_frame_index = frame_index
                 else:
                     missed_detections_since_last_mask += 1
-                    if missed_detections_since_last_mask > missing_hold_frames:
-                        last_mask = None
+                    fallback_mask: np.ndarray | None = None
+                    fallback_reason: str | None = None
+                    if last_detected_mask is not None and (anchor_rect is not None or missed_detections_since_last_mask <= missing_hold_frames):
+                        fallback_mask, fallback_reason = _fallback_mask_from_anchor(
+                            anchor_rect=anchor_rect,
+                            previous_mask=last_detected_mask,
+                            previous_anchor_rect=last_detected_anchor_rect,
+                            frame_width=width,
+                            frame_height=height,
+                        )
+                    if fallback_mask is not None:
+                        last_mask = _dilate_mask(fallback_mask, kernel_size=mask_dilate)
+                        last_mask_box = _box_from_mask(last_mask)
+                        detection_report["reason"] = fallback_reason
+                    elif anchor_rect is not None:
+                        fallback_mask, fallback_reason = _fallback_mask_from_anchor(
+                            anchor_rect=anchor_rect,
+                            previous_mask=None,
+                            previous_anchor_rect=None,
+                            frame_width=width,
+                            frame_height=height,
+                        )
+                        if fallback_mask is not None:
+                            last_mask = _dilate_mask(fallback_mask, kernel_size=mask_dilate)
+                            last_mask_box = _box_from_mask(last_mask)
+                            detection_report["reason"] = fallback_reason
+                            if startup_mask_source_frame_index is None:
+                                startup_mask_source_frame_index = frame_index
+                    elif last_mask is None:
                         last_mask_box = None
             elif last_mask_box is not None:
                 detection_report["reason"] = "reused_previous_mask"
@@ -1101,8 +1266,18 @@ def _run_rf_detr_passenger_effect(
                     "height": last_mask_box[3],
                 }
 
-            if in_startup_hold:
+            if last_mask_box is not None and detection_report.get("mask_box") is None:
+                detection_report["mask_box"] = {
+                    "x": last_mask_box[0],
+                    "y": last_mask_box[1],
+                    "width": last_mask_box[2],
+                    "height": last_mask_box[3],
+                }
+
+            should_trim_output = startup_mask_source_frame_index is None or frame_index < startup_hold
+            if should_trim_output:
                 detection_report["startup_hidden_trimmed"] = True
+                startup_trimmed_frames += 1
                 frame_reports.append(detection_report)
                 continue
 
@@ -1136,8 +1311,8 @@ def _run_rf_detr_passenger_effect(
         "rf_detr_frame_stride": stride,
         "rf_detr_mask_dilate": mask_dilate,
         "rf_detr_startup_hold_frames": startup_hold,
-        "rf_detr_startup_hold_applied": min(startup_hold, len(frames)),
-        "rf_detr_startup_hold_trimmed_from_output": min(startup_hold, len(frames)),
+        "rf_detr_startup_hold_applied": startup_trimmed_frames,
+        "rf_detr_startup_hold_trimmed_from_output": startup_trimmed_frames,
         "rf_detr_passenger_crop_margin_ratio": passenger_crop_margin_ratio,
         "rf_detr_passenger_crop_strategy": "driver_debug_dm_input_passenger_half",
         "rf_detr_driver_monitoring_device_type": _normalize_driver_monitoring_device_type(
@@ -1145,6 +1320,7 @@ def _run_rf_detr_passenger_effect(
             frame_width=width,
             frame_height=height,
         ),
+        "rf_detr_test_target_side": test_target_side,
         "rf_detr_missing_hold_frames": missing_hold_frames,
         "rf_detr_effect": effect,
         "rf_detr_device": str(model.model.device),
@@ -1239,6 +1415,7 @@ def main() -> int:
             startup_hold_frames=args.rf_detr_startup_hold_frames,
             passenger_crop_margin_ratio=args.rf_detr_passenger_crop_margin_ratio,
             missing_hold_frames=args.rf_detr_missing_hold_frames,
+            test_target_side=args.rf_detr_test_target_side,
         )
         report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
         _append_evaluation_markdown(

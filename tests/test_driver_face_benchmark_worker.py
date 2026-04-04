@@ -6,9 +6,14 @@ import numpy as np
 from core import driver_face_benchmark_worker
 
 
-def test_passenger_side_matches_selected_side_for_mirrored_driver_view() -> None:
-    assert driver_face_benchmark_worker._passenger_side_for_frame({"selected_side": "left"}) == "left"
-    assert driver_face_benchmark_worker._passenger_side_for_frame({"selected_side": "right"}) == "right"
+def test_target_side_defaults_to_passenger_side_for_mirrored_driver_view() -> None:
+    assert driver_face_benchmark_worker._target_side_for_frame({"selected_side": "left"}) == "left"
+    assert driver_face_benchmark_worker._target_side_for_frame({"selected_side": "right"}) == "right"
+
+
+def test_target_side_override_flips_to_driver_side_for_mirrored_driver_view() -> None:
+    assert driver_face_benchmark_worker._target_side_for_frame({"selected_side": "left"}, target_side="driver") == "right"
+    assert driver_face_benchmark_worker._target_side_for_frame({"selected_side": "right"}, target_side="driver") == "left"
 
 
 def test_normalize_driver_monitoring_device_type_maps_tizi_to_tici() -> None:
@@ -49,6 +54,7 @@ def test_parse_args_defaults_to_tighter_rf_detr_passenger_crop_margin() -> None:
     assert args.rf_detr_frame_stride == 5
     assert args.rf_detr_passenger_crop_margin_ratio == 0.10
     assert args.rf_detr_missing_hold_frames == 10
+    assert args.rf_detr_test_target_side == "passenger"
 
 
 def test_driver_monitoring_input_crop_rect_matches_driver_debug_tici_crop() -> None:
@@ -101,8 +107,41 @@ def test_choose_passenger_mask_prefers_person_on_passenger_side() -> None:
 
     assert selected_mask is not None
     assert bool(selected_mask[4, 6]) is True
-    assert report["passenger_side"] == "right"
+    assert report["target_side"] == "passenger"
+    assert report["target_image_side"] == "right"
     assert report["reason"] == "selected"
+
+
+def test_choose_passenger_mask_can_target_driver_side_for_internal_debugging() -> None:
+    left_mask = np.zeros((8, 8), dtype=bool)
+    left_mask[1:5, 0:3] = True
+    right_mask = np.zeros((8, 8), dtype=bool)
+    right_mask[2:7, 5:8] = True
+
+    detections = SimpleNamespace(
+        xyxy=np.array(
+            [
+                [0.0, 1.0, 3.0, 5.0],
+                [5.0, 2.0, 8.0, 7.0],
+            ]
+        ),
+        class_id=np.array([0, 0]),
+        confidence=np.array([0.88, 0.76]),
+        mask=np.stack([left_mask, right_mask]),
+    )
+
+    selected_mask, report = driver_face_benchmark_worker._choose_passenger_mask(
+        detections,
+        frame_row={"selected_side": "right"},
+        frame_width=8,
+        frame_height=8,
+        target_side="driver",
+    )
+
+    assert selected_mask is not None
+    assert bool(selected_mask[3, 1]) is True
+    assert report["target_side"] == "driver"
+    assert report["target_image_side"] == "left"
 
 
 def test_passenger_crop_rect_uses_dm_style_crop_for_tici_like_frames() -> None:
@@ -123,6 +162,19 @@ def test_passenger_crop_rect_uses_dm_style_crop_for_tici_like_frames() -> None:
 
     assert left_crop == (244, 248, 979, 960)
     assert right_crop == (705, 248, 979, 960)
+
+
+def test_passenger_crop_rect_can_target_driver_side_for_tici_like_frames() -> None:
+    driver_crop = driver_face_benchmark_worker._passenger_crop_rect(
+        frame_row={"selected_side": "left"},
+        frame_width=1928,
+        frame_height=1208,
+        margin_ratio=0.18,
+        device_type="tizi",
+        target_side="driver",
+    )
+
+    assert driver_crop == (705, 248, 979, 960)
 
 
 def test_passenger_crop_rect_uses_dm_style_crop_for_mici_frames() -> None:
@@ -229,6 +281,33 @@ def test_choose_passenger_mask_rejects_crop_filling_mask() -> None:
     assert bool(selected_mask[5, 5]) is True
     assert report["mask_box"] == {"x": 4, "y": 2, "width": 4, "height": 7}
     assert report["mask_crop_area_fraction"] < 0.82
+
+
+def test_anchor_body_mask_creates_nonempty_conservative_body_shape() -> None:
+    mask = driver_face_benchmark_worker._anchor_body_mask(
+        (40, 20, 60, 60),
+        frame_width=160,
+        frame_height=140,
+    )
+
+    assert mask.shape == (140, 160)
+    assert bool(mask.any()) is True
+    assert bool(mask[45, 70]) is True
+    assert bool(mask[100, 70]) is True
+
+
+def test_fallback_mask_from_anchor_uses_anchor_body_mask_without_previous_mask() -> None:
+    mask, reason = driver_face_benchmark_worker._fallback_mask_from_anchor(
+        anchor_rect=(40, 20, 60, 60),
+        previous_mask=None,
+        previous_anchor_rect=None,
+        frame_width=160,
+        frame_height=140,
+    )
+
+    assert mask is not None
+    assert reason == "anchor_body_fallback"
+    assert bool(mask[100, 70]) is True
 
 
 def test_rf_detr_effect_for_candidate_maps_expected_styles() -> None:

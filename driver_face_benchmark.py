@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rf-detr-startup-hold-frames", type=int, default=6)
     parser.add_argument("--rf-detr-passenger-crop-margin-ratio", type=float, default=0.10)
     parser.add_argument("--rf-detr-missing-hold-frames", type=int, default=10)
+    parser.add_argument("--rf-detr-test-target-side", choices=("passenger", "driver"), default="passenger")
     parser.add_argument("samples", nargs="*", help="Optional sample ids. Defaults to all samples under the eval root.")
     return parser
 
@@ -85,6 +86,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             str(args.rf_detr_passenger_crop_margin_ratio),
             "--rf-detr-missing-hold-frames",
             str(args.rf_detr_missing_hold_frames),
+            "--rf-detr-test-target-side",
+            args.rf_detr_test_target_side,
         ]
         subprocess.run(worker_cmd, check=True)
         print(f"Benchmarked {sample_dir.name}")
