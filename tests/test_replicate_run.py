@@ -15,6 +15,16 @@ class FakeFileOutput:
         return self._payload
 
 
+class FakePrediction:
+    def __init__(self, output=None, status: str = "succeeded", logs: str = "", error: str | None = None, web_url: str = "https://replicate.com/p/test") -> None:
+        self.output = output
+        self.status = status
+        self.logs = logs
+        self.error = error
+        self.urls = SimpleNamespace(web=web_url)
+        self.reload = Mock()
+
+
 class FakeSourcePath:
     def __init__(self, source: str, rendered_path: str = "/tmp/cog-input") -> None:
         self.source = source
@@ -112,6 +122,105 @@ def test_resolve_model_preserves_explicit_model() -> None:
     assert explicit is True
 
 
+def test_create_prediction_uses_model_alias_when_version_not_pinned(monkeypatch) -> None:
+    create = Mock(return_value="prediction")
+    monkeypatch.setattr(replicate_run.replicate.predictions, "create", create)
+    prediction = replicate_run.create_prediction("nelsonjchen/op-replay-clipper-beta", {"route": "x"})
+    assert prediction == "prediction"
+    create.assert_called_once_with(model="nelsonjchen/op-replay-clipper-beta", input={"route": "x"})
+
+
+def test_create_prediction_uses_version_hash_when_model_is_pinned(monkeypatch) -> None:
+    create = Mock(return_value="prediction")
+    monkeypatch.setattr(replicate_run.replicate.predictions, "create", create)
+    prediction = replicate_run.create_prediction("nelsonjchen/op-replay-clipper-beta:abc123", {"route": "x"})
+    assert prediction == "prediction"
+    create.assert_called_once_with(version="abc123", input={"route": "x"})
+
+
+def test_wait_for_prediction_returns_succeeded_prediction(capsys) -> None:
+    prediction = FakePrediction(output=FakeFileOutput(b"video"), status="succeeded", logs="done\n")
+    result = replicate_run.wait_for_prediction(prediction, poll_interval_seconds=0)
+    assert result is prediction
+    captured = capsys.readouterr()
+    assert "Prediction URL:" in captured.out
+    assert "Final status: succeeded" in captured.out
+
+
+def test_wait_for_prediction_raises_on_failure(capsys) -> None:
+    prediction = FakePrediction(status="failed", error="boom")
+    try:
+        replicate_run.wait_for_prediction(prediction, poll_interval_seconds=0)
+    except SystemExit as exc:
+        assert str(exc) == "boom"
+    else:
+        raise AssertionError("wait_for_prediction should fail failed predictions")
+    captured = capsys.readouterr()
+    assert "Final status: failed" in captured.out
+
+
+def test_wait_for_prediction_times_out(monkeypatch) -> None:
+    prediction = FakePrediction(status="starting")
+    monkeypatch.setattr(replicate_run.time, "sleep", lambda _: None)
+    times = iter([0.0, 10.0])
+    monkeypatch.setattr(replicate_run.time, "monotonic", lambda: next(times))
+    try:
+        replicate_run.wait_for_prediction(prediction, poll_interval_seconds=0, timeout_seconds=5)
+    except SystemExit as exc:
+        assert str(exc) == "Timed out waiting for Replicate prediction after 5s."
+    else:
+        raise AssertionError("wait_for_prediction should time out")
+
+
+def test_is_retryable_prediction_error_matches_transient_platform_failure() -> None:
+    assert replicate_run.is_retryable_prediction_error("Prediction interrupted; please retry (code: PA)")
+    assert replicate_run.is_retryable_prediction_error("Director: unexpected error handling prediction (E8765)")
+    assert not replicate_run.is_retryable_prediction_error("validation failed")
+
+
+def test_run_prediction_with_retries_retries_transient_failure(monkeypatch, capsys) -> None:
+    first_prediction = FakePrediction(status="failed", error="Prediction interrupted; please retry (code: PA)")
+    second_prediction = FakePrediction(output=FakeFileOutput(b"video"), status="succeeded")
+    create_prediction = Mock(side_effect=[first_prediction, second_prediction])
+    wait_for_prediction = Mock(side_effect=[SystemExit("Prediction interrupted; please retry (code: PA)"), second_prediction])
+    monkeypatch.setattr(replicate_run, "create_prediction", create_prediction)
+    monkeypatch.setattr(replicate_run, "wait_for_prediction", wait_for_prediction)
+
+    result = replicate_run.run_prediction_with_retries(
+        "nelsonjchen/op-replay-clipper-beta:abc123",
+        {"route": "x"},
+        retries=2,
+        poll_interval_seconds=1,
+        timeout_seconds=10,
+    )
+
+    assert result is second_prediction
+    assert create_prediction.call_count == 2
+    assert wait_for_prediction.call_count == 2
+    captured = capsys.readouterr()
+    assert "Transient hosted failure on attempt 1/3" in captured.out
+
+
+def test_run_prediction_with_retries_does_not_retry_permanent_failure(monkeypatch) -> None:
+    create_prediction = Mock(return_value=FakePrediction(status="failed", error="validation failed"))
+    wait_for_prediction = Mock(side_effect=SystemExit("validation failed"))
+    monkeypatch.setattr(replicate_run, "create_prediction", create_prediction)
+    monkeypatch.setattr(replicate_run, "wait_for_prediction", wait_for_prediction)
+
+    try:
+        replicate_run.run_prediction_with_retries(
+            "nelsonjchen/op-replay-clipper-beta:abc123",
+            {"route": "x"},
+            retries=2,
+            poll_interval_seconds=1,
+            timeout_seconds=10,
+        )
+    except SystemExit as exc:
+        assert str(exc) == "validation failed"
+    else:
+        raise AssertionError("run_prediction_with_retries should not retry permanent failures")
+
+
 def test_validate_connect_url_rejects_non_connect_hosts() -> None:
     try:
         replicate_run.validate_connect_url("https://example.com/not-connect")
@@ -153,15 +262,16 @@ def test_save_file_output_accepts_single_item_iterable(tmp_path) -> None:
 def test_main_warns_when_model_is_not_explicit(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.setattr(replicate_run, "require_api_token", lambda: "token")
     monkeypatch.setattr(replicate_run, "validate_connect_url", lambda url: url)
-    replicate_run_call = Mock(return_value=FakeFileOutput(b"video-bytes"))
-    monkeypatch.setattr(replicate_run.replicate, "run", replicate_run_call)
+    create_prediction = Mock(return_value=FakePrediction(output=FakeFileOutput(b"video-bytes")))
+    run_prediction_with_retries = Mock(return_value=FakePrediction(output=FakeFileOutput(b"video-bytes")))
+    monkeypatch.setattr(replicate_run, "run_prediction_with_retries", run_prediction_with_retries)
 
     output_path = tmp_path / "clip.mp4"
     exit_code = replicate_run.main(["--url", "https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496", "--output", str(output_path)])
 
     assert exit_code == 0
     assert output_path.read_bytes() == b"video-bytes"
-    replicate_run_call.assert_called_once()
+    run_prediction_with_retries.assert_called_once()
     captured = capsys.readouterr()
     assert "Warning: --model was not set; using latest beta alias" in captured.out
     assert replicate_run.DEFAULT_MODEL in captured.out

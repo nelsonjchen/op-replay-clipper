@@ -39,6 +39,9 @@ class Predictor(BasePredictor):
         os.environ["FACEFUSION_ROOT"] = str(default_facefusion_root(repo_root))
         os.environ.setdefault("DRIVER_FACE_SOURCE_IMAGE", str(repo_root / "assets/driver-face-donors/generic-donor-clean-shaven.jpg"))
         os.environ.setdefault("DRIVER_FACE_DONOR_BANK_DIR", str(repo_root / "assets/driver-face-donors"))
+        # RF-DETR on Replicate/Cog is more stable on CPU today, while video
+        # transcode can still use NVENC independently.
+        os.environ.setdefault("DRIVER_FACE_BENCHMARK_RF_DETR_DEVICE", "cpu")
 
     def predict(
         self,

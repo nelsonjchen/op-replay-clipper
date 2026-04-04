@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import time
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--file-size", type=int, default=9, help="Target output size in MB.")
     parser.add_argument("--file-format", choices=["auto", "h264", "hevc"], default="auto")
     parser.add_argument("--jwt-token", default="", help="Optional comma JWT token for private routes.")
+    parser.add_argument("--poll-interval", type=float, default=5.0, help="Seconds between hosted prediction status polls.")
+    parser.add_argument("--timeout-seconds", type=float, default=1800.0, help="Maximum time to wait for the hosted prediction before failing.")
+    parser.add_argument("--retries", type=int, default=2, help="How many times to retry transient hosted prediction failures.")
     parser.add_argument(
         "--anonymization-profile",
         choices=[
@@ -103,6 +107,87 @@ def resolve_model(model: str) -> tuple[str, bool]:
     return DEFAULT_MODEL, False
 
 
+def create_prediction(model_ref: str, payload: dict[str, Any]) -> Any:
+    if ":" in model_ref:
+        _, version = model_ref.rsplit(":", 1)
+        return replicate.predictions.create(version=version, input=payload)
+    return replicate.predictions.create(model=model_ref, input=payload)
+
+
+def wait_for_prediction(prediction: Any, poll_interval_seconds: float = 5.0, timeout_seconds: float | None = 1800.0) -> Any:
+    terminal_statuses = {"succeeded", "failed", "canceled"}
+    last_status: str | None = None
+    last_logs = ""
+    started_at = time.monotonic()
+
+    web_url = getattr(getattr(prediction, "urls", None), "web", None)
+    if web_url:
+        print(f"Prediction URL: {web_url}", flush=True)
+
+    while prediction.status not in terminal_statuses:
+        if prediction.status != last_status:
+            print(f"Status: {prediction.status}", flush=True)
+            last_status = prediction.status
+        if timeout_seconds is not None and time.monotonic() - started_at > timeout_seconds:
+            raise SystemExit(f"Timed out waiting for Replicate prediction after {timeout_seconds:.0f}s.")
+        time.sleep(poll_interval_seconds)
+        prediction.reload()
+        logs = getattr(prediction, "logs", "") or ""
+        if len(logs) > len(last_logs):
+            print(logs[len(last_logs):], end="", flush=True)
+            last_logs = logs
+
+    logs = getattr(prediction, "logs", "") or ""
+    if len(logs) > len(last_logs):
+        print(logs[len(last_logs):], end="", flush=True)
+
+    print(f"Final status: {prediction.status}", flush=True)
+    if prediction.status != "succeeded":
+        error = getattr(prediction, "error", None) or "Replicate prediction did not succeed."
+        raise SystemExit(error)
+    return prediction
+
+
+def is_retryable_prediction_error(message: str) -> bool:
+    lowered = message.lower()
+    return (
+        "code: pa" in lowered
+        or "prediction interrupted" in lowered
+        or "please retry" in lowered
+        or "director: unexpected error handling prediction" in lowered
+    )
+
+
+def run_prediction_with_retries(
+    model_ref: str,
+    payload: dict[str, Any],
+    *,
+    retries: int,
+    poll_interval_seconds: float,
+    timeout_seconds: float | None,
+) -> Any:
+    attempts = retries + 1
+    for attempt_index in range(attempts):
+        prediction = create_prediction(model_ref, payload)
+        try:
+            return wait_for_prediction(
+                prediction,
+                poll_interval_seconds=poll_interval_seconds,
+                timeout_seconds=timeout_seconds,
+            )
+        except SystemExit as exc:
+            message = str(exc)
+            is_last_attempt = attempt_index >= attempts - 1
+            if is_last_attempt or not is_retryable_prediction_error(message):
+                raise
+            print(
+                f"Transient hosted failure on attempt {attempt_index + 1}/{attempts}: {message}. "
+                f"Retrying attempt {attempt_index + 2}/{attempts}...",
+                flush=True,
+            )
+    raise SystemExit("Replicate prediction retry loop exhausted unexpectedly.")
+
+
 def unwrap_file_output(output: Any) -> Any:
     if hasattr(output, "read"):
         return output
@@ -134,7 +219,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Warning: --model was not set; using latest beta alias {args.model}", flush=True)
     print(f"Running {args.model}", flush=True)
     print(f"Saving output to {args.output}", flush=True)
-    output = replicate.run(args.model, input=payload)
+    prediction = run_prediction_with_retries(
+        args.model,
+        payload,
+        retries=args.retries,
+        poll_interval_seconds=args.poll_interval,
+        timeout_seconds=args.timeout_seconds,
+    )
+    output = prediction.output
 
     output_url = getattr(output, "url", None)
     if output_url:

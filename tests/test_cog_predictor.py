@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import sys
 import types
@@ -61,3 +62,15 @@ def test_gui_anonymization_profile_map_keeps_pixelize_aliases() -> None:
         "facefusion",
         "driver_face_swap_passenger_pixelize",
     )
+
+
+def test_predictor_setup_defaults_rf_detr_device_to_cpu(monkeypatch) -> None:
+    cog_predictor = _load_cog_predictor()
+    monkeypatch.delenv("DRIVER_FACE_BENCHMARK_RF_DETR_DEVICE", raising=False)
+    monkeypatch.delenv("DRIVER_FACE_SOURCE_IMAGE", raising=False)
+    monkeypatch.delenv("DRIVER_FACE_DONOR_BANK_DIR", raising=False)
+    predictor = cog_predictor.Predictor()
+
+    predictor.setup()
+
+    assert os.environ["DRIVER_FACE_BENCHMARK_RF_DETR_DEVICE"] == "cpu"
