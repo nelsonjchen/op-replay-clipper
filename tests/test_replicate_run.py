@@ -259,6 +259,21 @@ def test_save_file_output_accepts_single_item_iterable(tmp_path) -> None:
     assert output_path.read_bytes() == b"video-bytes"
 
 
+def test_save_file_output_downloads_string_url(monkeypatch, tmp_path) -> None:
+    output_path = tmp_path / "clip.mp4"
+    response = Mock()
+    response.content = b"video-bytes"
+    response.raise_for_status = Mock()
+    get = Mock(return_value=response)
+    monkeypatch.setattr(replicate_run.requests, "get", get)
+
+    written = replicate_run.save_file_output("https://example.com/test.mp4", output_path)
+
+    assert written == output_path.resolve()
+    assert output_path.read_bytes() == b"video-bytes"
+    get.assert_called_once_with("https://example.com/test.mp4", timeout=300)
+
+
 def test_main_warns_when_model_is_not_explicit(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.setattr(replicate_run, "require_api_token", lambda: "token")
     monkeypatch.setattr(replicate_run, "validate_connect_url", lambda url: url)

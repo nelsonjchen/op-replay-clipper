@@ -9,6 +9,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 import replicate
+import requests
 from core import route_inputs
 
 DEFAULT_MODEL = "nelsonjchen/op-replay-clipper-beta"
@@ -189,6 +190,10 @@ def run_prediction_with_retries(
 
 
 def unwrap_file_output(output: Any) -> Any:
+    if isinstance(output, str):
+        if output.startswith("http://") or output.startswith("https://"):
+            return output
+        raise TypeError(f"Expected a file-like Replicate output URL, got plain string: {output!r}.")
     if hasattr(output, "read"):
         return output
     if isinstance(output, Iterable) and not isinstance(output, (str, bytes, dict)):
@@ -203,6 +208,11 @@ def save_file_output(output: Any, output_path: Path) -> Path:
     file_output = unwrap_file_output(output)
     output_path = output_path.expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    if isinstance(file_output, str):
+        response = requests.get(file_output, timeout=300)
+        response.raise_for_status()
+        output_path.write_bytes(response.content)
+        return output_path
     output_path.write_bytes(file_output.read())
     return output_path
 
