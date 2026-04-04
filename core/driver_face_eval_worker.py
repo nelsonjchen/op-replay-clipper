@@ -9,7 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from core.driver_face_eval import FaceTrackConfig, build_face_track_manifest, write_face_crop_video, write_json
+from core.driver_face_eval import FaceTrackConfig, build_face_track_manifest, manifest_has_active_crop, write_face_crop_video, write_json
 from core.openpilot_integration import apply_openpilot_runtime_patches, build_openpilot_compatible_data_dir
 from renderers import video_renderer
 from renderers.big_ui_engine import IndexedFrameQueue, _add_openpilot_to_sys_path, load_route_metadata, load_segment_messages
@@ -87,19 +87,26 @@ def main() -> int:
                 "crop_clip": args.crop_clip,
             }
         )
-        write_face_crop_video(
-            frame_queue=frame_queue,
-            manifest=manifest,
-            output_path=Path(args.crop_clip),
-            target_mb=args.crop_target_mb,
-            length_seconds=args.length_seconds,
-            acceleration=args.accel,
-        )
+        crop_clip_written = manifest_has_active_crop(manifest)
+        manifest["has_active_crop"] = crop_clip_written
+        if crop_clip_written:
+            write_face_crop_video(
+                frame_queue=frame_queue,
+                manifest=manifest,
+                output_path=Path(args.crop_clip),
+                target_mb=args.crop_target_mb,
+                length_seconds=args.length_seconds,
+                acceleration=args.accel,
+            )
+        else:
+            crop_clip_path = Path(args.crop_clip)
+            if crop_clip_path.exists():
+                crop_clip_path.unlink()
     finally:
         frame_queue.stop()
 
     write_json(Path(args.track_metadata), manifest)
-    print(json.dumps({"track_metadata": args.track_metadata, "crop_clip": args.crop_clip}))
+    print(json.dumps({"track_metadata": args.track_metadata, "crop_clip": args.crop_clip, "crop_clip_written": manifest["has_active_crop"]}))
     return 0
 
 

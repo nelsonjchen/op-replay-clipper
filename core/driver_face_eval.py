@@ -493,6 +493,13 @@ def write_face_crop_video(
         raise subprocess.CalledProcessError(process.returncode, command, output=output)
 
 
+def manifest_has_active_crop(manifest: dict[str, Any]) -> bool:
+    for row in manifest.get("frames", []):
+        if row.get("crop_rect") is not None:
+            return True
+    return False
+
+
 def _dict_box_int_tuple(box: dict[str, float | int] | None) -> tuple[int, int, int, int] | None:
     if box is None:
         return None
