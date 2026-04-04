@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Shared bootstrap for Docker/Cog images that need a working openpilot clip environment.
-# CACHE_BUSTER: 2026-04-03-facefusion-rebuild
+# CACHE_BUSTER: 2026-04-03-facefusion-rebuild-v3
 
 APP_ROOT="${APP_ROOT:-$(pwd)}"
 OPENPILOT_ROOT="${OPENPILOT_ROOT:-/home/batman/openpilot}"
@@ -59,6 +59,12 @@ configure_build_tempdir() {
   export TMPDIR="${BUILD_TMPDIR}"
   export TMP="${BUILD_TMPDIR}"
   export TEMP="${BUILD_TMPDIR}"
+  export XDG_CACHE_HOME="${BUILD_TMPDIR}/xdg-cache"
+  export UV_CACHE_DIR="${BUILD_TMPDIR}/uv-cache"
+  export PIP_CACHE_DIR="${BUILD_TMPDIR}/pip-cache"
+  export PIP_NO_CACHE_DIR=1
+  export UV_NO_CACHE=1
+  mkdir -p "${XDG_CACHE_HOME}" "${UV_CACHE_DIR}" "${PIP_CACHE_DIR}"
 }
 
 redirect_system_tmp() {
@@ -75,8 +81,8 @@ install_system_packages() {
 }
 
 configure_git_lfs() {
-  log_step "Configuring git-lfs"
-  git lfs install
+  log_step "Checking git-lfs CLI"
+  git lfs version
 }
 
 clone_facefusion_checkout() {
@@ -201,6 +207,13 @@ prune_facefusion_checkout() {
   log_step "Pruning FaceFusion checkout"
   cd "${FACEFUSION_ROOT}"
   rm -rf .git .github tests
+}
+
+clean_transient_package_caches() {
+  log_step "Cleaning transient package caches"
+  rm -rf /root/.cache/uv /root/.cache/pip
+  rm -rf "${UV_CACHE_DIR}" "${PIP_CACHE_DIR}"
+  mkdir -p "${UV_CACHE_DIR}" "${PIP_CACHE_DIR}"
 }
 
 fix_vendored_tool_permissions() {
@@ -551,6 +564,7 @@ main() {
   prewarm_facefusion_models
   deactivate_facefusion_venv
   prune_facefusion_checkout
+  clean_transient_package_caches
   clone_openpilot_checkout
   install_openpilot_dependencies
   fix_vendored_tool_permissions
