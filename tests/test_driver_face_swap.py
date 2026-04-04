@@ -239,3 +239,84 @@ def test_facefusion_runtime_env_leaves_ld_library_path_alone_without_cuda(monkey
 
     assert env["SYSTEM_VERSION_COMPAT"] == "0"
     assert env["LD_LIBRARY_PATH"] == "/existing"
+
+
+def test_prepare_face_crop_artifacts_only_runs_full_worker_for_active_facefusion_seats(monkeypatch, tmp_path: Path) -> None:
+    sample_dir = tmp_path / "sample"
+    sample_dir.mkdir()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    openpilot_dir = tmp_path / "openpilot"
+    worker_python = openpilot_dir / ".venv/bin/python"
+    worker_python.parent.mkdir(parents=True)
+    worker_python.write_text("")
+
+    source_clip = sample_dir / "driver-source.mp4"
+
+    monkeypatch.setattr("core.route_downloader.downloadSegments", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        driver_face_swap.video_renderer,
+        "render_video_clip",
+        lambda _opts: source_clip.write_bytes(b"source"),
+    )
+
+    calls: list[tuple[str, bool]] = []
+
+    def _fake_run_face_eval_worker(worker_cmd: list[str], *, acceleration: str) -> dict[str, object]:
+        del acceleration
+        seat_side = worker_cmd[worker_cmd.index("--seat-side") + 1]
+        manifest_only = "--manifest-only" in worker_cmd
+        calls.append((seat_side, manifest_only))
+        track_metadata = Path(worker_cmd[worker_cmd.index("--track-metadata") + 1])
+        crop_clip = Path(worker_cmd[worker_cmd.index("--crop-clip") + 1])
+        selected_side = "left"
+        seat_role = "driver" if seat_side == selected_side else "passenger"
+        has_active_crop = seat_role == "driver"
+        track_metadata.write_text(
+            json.dumps(
+                {
+                    "frames": [
+                        {
+                            "frame_index": 0,
+                            "selected_side": selected_side,
+                            "crop_rect": {"x": 0, "y": 0, "width": 10, "height": 10} if has_active_crop else None,
+                        }
+                    ]
+                }
+            )
+        )
+        if not manifest_only and has_active_crop:
+            crop_clip.write_bytes(b"crop")
+        return {"has_active_crop": has_active_crop, "crop_clip_written": bool(has_active_crop and not manifest_only)}
+
+    monkeypatch.setattr(driver_face_swap, "_run_face_eval_worker", _fake_run_face_eval_worker)
+
+    source_path, seat_artifacts = driver_face_swap._prepare_face_crop_artifacts(
+        sample_dir=sample_dir,
+        route="dongle|route",
+        route_or_url="https://connect.comma.ai/dongle/route/0/1",
+        start_seconds=0,
+        length_seconds=1,
+        data_dir=data_dir,
+        openpilot_dir=openpilot_dir,
+        acceleration="cpu",
+        backing_target_mb=12,
+        options=driver_face_swap.DriverFaceSwapOptions(
+            mode="facefusion",
+            profile="driver_face_swap_passenger_hidden",
+        ),
+        jwt_token=None,
+    )
+
+    assert source_path == source_clip
+    assert [(artifact.seat_side, artifact.seat_role) for artifact in seat_artifacts] == [
+        ("left", "driver"),
+        ("right", "passenger"),
+    ]
+    assert calls == [
+        ("left", True),
+        ("left", False),
+        ("right", True),
+    ]
+    assert (sample_dir / "left-face-crop.mp4").exists() is True
+    assert (sample_dir / "right-face-crop.mp4").exists() is False

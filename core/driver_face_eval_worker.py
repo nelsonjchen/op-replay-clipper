@@ -33,6 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seat-side", choices=["selected", "left", "right"], default="selected")
     parser.add_argument("--crop-target-mb", type=int, default=4)
     parser.add_argument("--accel", choices=["auto", "cpu", "videotoolbox", "nvidia"], default="auto")
+    parser.add_argument("--manifest-only", action="store_true")
     return parser.parse_args()
 
 
@@ -89,7 +90,7 @@ def main() -> int:
         )
         crop_clip_written = manifest_has_active_crop(manifest)
         manifest["has_active_crop"] = crop_clip_written
-        if crop_clip_written:
+        if crop_clip_written and not args.manifest_only:
             write_face_crop_video(
                 frame_queue=frame_queue,
                 manifest=manifest,
@@ -106,7 +107,17 @@ def main() -> int:
         frame_queue.stop()
 
     write_json(Path(args.track_metadata), manifest)
-    print(json.dumps({"track_metadata": args.track_metadata, "crop_clip": args.crop_clip, "crop_clip_written": manifest["has_active_crop"]}))
+    print(
+        json.dumps(
+            {
+                "track_metadata": args.track_metadata,
+                "crop_clip": args.crop_clip,
+                "crop_clip_written": bool(manifest["has_active_crop"] and not args.manifest_only),
+                "has_active_crop": manifest["has_active_crop"],
+                "manifest_only": args.manifest_only,
+            }
+        )
+    )
     return 0
 
 

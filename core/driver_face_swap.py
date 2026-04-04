@@ -625,6 +625,7 @@ def _prepare_face_crop_artifacts(
     openpilot_dir: Path,
     acceleration: video_renderer.AccelerationPolicy,
     backing_target_mb: int,
+    options: DriverFaceSwapOptions,
     jwt_token: str | None = None,
 ) -> tuple[Path, list[PreparedSeatArtifacts]]:
     source_clip = sample_dir / "driver-source.mp4"
@@ -709,8 +710,12 @@ def _prepare_face_crop_artifacts(
             "--accel",
             acceleration,
         ]
-        _run_face_eval_worker(worker_cmd, acceleration=acceleration)
+        manifest_payload = _run_face_eval_worker([*worker_cmd, "--manifest-only"], acceleration=acceleration)
         seat_role = _seat_role_from_manifest(track_metadata, seat_side=seat_side)
+        seat_mode = _seat_mode_for_role(options, seat_role)
+        has_active_crop = bool(manifest_payload.get("has_active_crop"))
+        if seat_mode == "facefusion" and has_active_crop:
+            _run_face_eval_worker(worker_cmd, acceleration=acceleration)
         seat_artifacts.append(
             PreparedSeatArtifacts(
                 seat_side=seat_side,
@@ -722,7 +727,7 @@ def _prepare_face_crop_artifacts(
     return source_clip, seat_artifacts
 
 
-def _run_face_eval_worker(worker_cmd: list[str], *, acceleration: video_renderer.AccelerationPolicy) -> None:
+def _run_face_eval_worker(worker_cmd: list[str], *, acceleration: video_renderer.AccelerationPolicy) -> dict[str, Any]:
     accel_index = worker_cmd.index("--accel") + 1
     attempts: list[video_renderer.AccelerationPolicy] = [acceleration]
     if acceleration in ("auto", "nvidia"):
@@ -733,7 +738,13 @@ def _run_face_eval_worker(worker_cmd: list[str], *, acceleration: video_renderer
         cmd[accel_index] = attempt_accel
         completed = subprocess.run(cmd, check=False, capture_output=True, text=True)
         if completed.returncode == 0:
-            return
+            stdout_lines = [line for line in completed.stdout.splitlines() if line.strip()]
+            if stdout_lines:
+                try:
+                    return json.loads(stdout_lines[-1])
+                except json.JSONDecodeError:
+                    pass
+            return {}
         if completed.stdout.strip():
             print(completed.stdout.rstrip())
         if completed.stderr.strip():
@@ -747,6 +758,7 @@ def _run_face_eval_worker(worker_cmd: list[str], *, acceleration: video_renderer
         )
     if last_error is not None:
         raise last_error
+    return {}
 
 
 def _seat_role_from_manifest(
@@ -884,6 +896,7 @@ def render_anonymized_driver_backing_video(
             openpilot_dir=openpilot_root,
             acceleration=acceleration,
             backing_target_mb=backing_target_mb,
+            options=options,
             jwt_token=jwt_token,
         )
         selection_report: dict[str, Any] = {

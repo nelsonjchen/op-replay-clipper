@@ -42,6 +42,7 @@ def test_worker_skips_crop_clip_encode_when_manifest_has_no_active_crop(monkeypa
         seat_side="right",
         crop_target_mb=4,
         accel="cpu",
+        manifest_only=False,
     )
 
     monkeypatch.setattr(driver_face_eval_worker, "parse_args", lambda: args)
@@ -111,4 +112,3 @@ def test_worker_skips_crop_clip_encode_when_manifest_has_no_active_crop(monkeypa
 
     written_manifest = json.loads(track_metadata.read_text())
     assert written_manifest["has_active_crop"] is False
-
