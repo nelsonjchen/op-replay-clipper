@@ -47,6 +47,30 @@ export JWT_TOKEN='<valid jwt>'
 Use the staging model for the full smoke matrix first. Promote only after that
 passes, then spot-check the production model with the same core cases.
 
+For the three passenger-redaction cases below, you can also use the helper:
+
+```bash
+set -a
+source .env
+set +a
+
+./scripts/smoke_driver_redaction.sh --backend hosted
+```
+
+For Linux/NVIDIA validation on a local checkout or GCE VM, use:
+
+```bash
+set -a
+source .env
+set +a
+
+./scripts/smoke_driver_redaction.sh --backend local --accel nvidia
+```
+
+The helper defaults to `--driver-mode swap` on hosted and `--driver-mode unchanged`
+on local so the local Linux smoke focuses on the passenger-hiding path without
+requiring a FaceFusion checkout.
+
 ## Smoke Matrix
 
 ### 1. BIG UI raw URL

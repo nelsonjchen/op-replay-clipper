@@ -2,12 +2,23 @@
 
 set -euo pipefail
 
-PROJECT="cowboy-471001"
-ZONE="us-central1-a"
-INSTANCE="op-clipper-nvidia-probe-17802-1"
-RETRY_SECONDS=600
-STATUS_POLL_SECONDS=20
-TIMEOUT_SECONDS=$((6 * 60 * 60))
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+DOTENV_PATH="${REPO_ROOT}/.env"
+
+if [[ -f "${DOTENV_PATH}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${DOTENV_PATH}"
+  set +a
+fi
+
+PROJECT="${GCE_PROJECT:-${GCLOUD_PROJECT:-${GOOGLE_CLOUD_PROJECT:-}}}"
+ZONE="${GCE_ZONE:-}"
+INSTANCE="${GCE_INSTANCE:-}"
+RETRY_SECONDS="${GCE_RETRY_SECONDS:-600}"
+STATUS_POLL_SECONDS="${GCE_STATUS_POLL_SECONDS:-20}"
+TIMEOUT_SECONDS="${GCE_TIMEOUT_SECONDS:-$((6 * 60 * 60))}"
 
 usage() {
   cat <<'EOF'
@@ -16,10 +27,20 @@ Wait for a GCE VM to start, retrying through temporary GPU stockouts.
 Usage:
   wait_for_gce_instance_start.sh [options]
 
+Environment:
+  GCE_PROJECT                     GCP project id.
+  GCE_ZONE                        GCE zone.
+  GCE_INSTANCE                    Instance name.
+  GCE_RETRY_SECONDS               Delay between retry attempts after stockout.
+  GCE_STATUS_POLL_SECONDS         Poll interval while waiting for RUNNING.
+  GCE_TIMEOUT_SECONDS             Total time budget before giving up.
+  GCLOUD_PROJECT                  Fallback project id if GCE_PROJECT is unset.
+  GOOGLE_CLOUD_PROJECT            Fallback project id if GCE_PROJECT is unset.
+
 Options:
-  --project <project>              GCP project id. Default: cowboy-471001
-  --zone <zone>                    GCE zone. Default: us-central1-a
-  --instance <name>                Instance name. Default: op-clipper-nvidia-probe-17802-1
+  --project <project>              GCP project id.
+  --zone <zone>                    GCE zone.
+  --instance <name>                Instance name.
   --retry-seconds <seconds>        Delay between retry attempts after stockout. Default: 600
   --status-poll-seconds <seconds>  Poll interval while waiting for RUNNING after a successful start call. Default: 20
   --timeout-seconds <seconds>      Total time budget before giving up. Default: 21600
@@ -44,6 +65,15 @@ instance_status() {
     --project "$PROJECT" \
     --zone "$ZONE" \
     --format='get(status)'
+}
+
+require_value() {
+  local name="$1"
+  local value="$2"
+  if [[ -z "$value" ]]; then
+    echo "Missing required configuration for ${name}. Set it in .env or pass a flag." >&2
+    exit 2
+  fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -83,6 +113,14 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -z "${PROJECT}" ]]; then
+  PROJECT="$(gcloud config get-value project 2>/dev/null || true)"
+fi
+
+require_value "GCE_PROJECT/--project" "$PROJECT"
+require_value "GCE_ZONE/--zone" "$ZONE"
+require_value "GCE_INSTANCE/--instance" "$INSTANCE"
 
 deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
 

@@ -150,32 +150,45 @@ GCE is especially useful for checking:
 - NVENC behavior
 - whether a new runtime or bootstrap change behaves correctly before pushing to
   Replicate
+- the passenger redaction product path via
+  `./scripts/smoke_driver_redaction.sh --backend local --accel nvidia`
 
-For this repo's current Linux/NVIDIA validation target, use the Cowboy project
-GPU VM:
+For this repo's current Linux/NVIDIA validation target, use your Cowboy project
+GPU VM and keep the details in local environment config rather than committing
+them into the repo.
 
-- project: `cowboy-471001`
-- instance: `op-clipper-nvidia-probe-17802-1`
-- zone: `us-central1-a`
-- machine type: `g2-standard-4`
-- GPU: `1x nvidia-l4`
+Add these to your local `.env`:
+
+```bash
+export GCE_PROJECT=your-gcp-project
+export GCE_ZONE=your-gce-zone
+export GCE_INSTANCE=your-gpu-vm-name
+```
 
 Typical start/stop flow:
 
 ```bash
-gcloud compute instances start op-clipper-nvidia-probe-17802-1 \
-  --project cowboy-471001 \
-  --zone us-central1-a
+set -a
+source .env
+set +a
 
-gcloud compute ssh op-clipper-nvidia-probe-17802-1 \
-  --project cowboy-471001 \
-  --zone us-central1-a
+gcloud compute instances start "$GCE_INSTANCE" \
+  --project "$GCE_PROJECT" \
+  --zone "$GCE_ZONE"
+
+gcloud compute ssh "$GCE_INSTANCE" \
+  --project "$GCE_PROJECT" \
+  --zone "$GCE_ZONE"
 ```
 
 If the zone is temporarily out of L4 capacity, use the retry helper instead of
 manually re-running `gcloud compute instances start`:
 
 ```bash
+set -a
+source .env
+set +a
+
 ./scripts/wait_for_gce_instance_start.sh
 ```
 

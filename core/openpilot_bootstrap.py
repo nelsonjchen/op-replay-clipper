@@ -105,9 +105,16 @@ def _resolve_openpilot_python(openpilot_dir: Path) -> str | None:
         return _capture([uv_bin, "python", "find", major_minor], cwd=openpilot_dir)
 
 
+def _ensure_git_lfs_cli(cwd: Path | None = None) -> None:
+    # We explicitly run `git lfs pull` after checkout/update, so we only need
+    # the CLI to exist here; mutating user git hooks via `git lfs install`
+    # breaks local dev setups that already customize post-checkout hooks.
+    _run(["git", "lfs", "version"], cwd=cwd)
+
+
 def _clone_checkout(openpilot_dir: Path, branch: str, repo_url: str) -> None:
     openpilot_dir.parent.mkdir(parents=True, exist_ok=True)
-    _run(["git", "lfs", "install"])
+    _ensure_git_lfs_cli()
     _run(
         [
             "git",
@@ -137,7 +144,7 @@ def ensure_openpilot_checkout(
         return
 
     try:
-        _run(["git", "lfs", "install"], cwd=openpilot_dir)
+        _ensure_git_lfs_cli(openpilot_dir)
         _run(["git", "remote", "set-url", "origin", repo_url], cwd=openpilot_dir)
         _run(["git", "fetch", *GIT_FETCH_FLAGS, "origin", branch], cwd=openpilot_dir)
         _run(["git", "checkout", branch], cwd=openpilot_dir)
