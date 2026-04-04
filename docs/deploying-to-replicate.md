@@ -172,6 +172,16 @@ gcloud compute ssh op-clipper-nvidia-probe-17802-1 \
   --zone us-central1-a
 ```
 
+If the zone is temporarily out of L4 capacity, use the retry helper instead of
+manually re-running `gcloud compute instances start`:
+
+```bash
+./scripts/wait_for_gce_instance_start.sh
+```
+
+It retries through `ZONE_RESOURCE_POOL_EXHAUSTED` / stockout errors every 10
+minutes by default and exits as soon as the instance reaches `RUNNING`.
+
 ## Step 1: Regenerate Cog build artifacts
 
 The push helper does this for you, but the underlying command is:
