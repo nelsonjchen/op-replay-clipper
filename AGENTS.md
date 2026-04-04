@@ -6,3 +6,4 @@
   - a public demo route
   - the private passenger route with `COMMA_JWT`
 - The no-X hosted path still needs the RF-DETR weights baked into the image if we want to avoid runtime model downloads.
+- On Linux/T4 UI debugging, the null-EGL failure was caused by missing NVIDIA GL/EGL userland in the container, not missing Xorg runtime packages. With patched `pyray` present, `renderType=ui` still failed EGL init until `libnvidia-gl-580-server` was added; the same no-X-runtime image then rendered successfully. Treat this as a narrow T4/driver-580 finding until proven on other GPU hosts.

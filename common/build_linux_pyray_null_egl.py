@@ -44,13 +44,17 @@ def ensure_pip(python_bin: str) -> None:
 def verify_installed_pyray(python_bin: str) -> None:
     check = (
         "from pathlib import Path\n"
+        "import subprocess\n"
         "import raylib\n"
         "base = Path(raylib.__file__).resolve().parent\n"
         "build = (base / 'build.py').read_text()\n"
+        "so = next(base.glob('_raylib_cffi*.so'))\n"
         "version = (base / 'version.py').read_text().strip()\n"
+        "binary_strings = subprocess.run(['strings', str(so)], check=True, capture_output=True, text=True).stdout\n"
         "print(version)\n"
         "assert \"os.path.join(get_the_lib_path(), 'libraylib.a')\" in build\n"
         "assert \"'-lEGL'\" in build\n"
+        "assert 'GLFW forced null connect' in binary_strings\n"
     )
     run([python_bin, "-c", check])
 

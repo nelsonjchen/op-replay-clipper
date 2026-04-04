@@ -18,6 +18,8 @@ FACEFUSION_PREWARM_MODELS="${FACEFUSION_PREWARM_MODELS:-1}"
 FACEFUSION_PRUNE_VENV="${FACEFUSION_PRUNE_VENV:-1}"
 FACEFUSION_HARDLINK_DEDUPE="${FACEFUSION_HARDLINK_DEDUPE:-1}"
 OPENPILOT_BUILD_UI_ASSETS="${OPENPILOT_BUILD_UI_ASSETS:-0}"
+OPENPILOT_INSTALL_X_RUNTIME_PACKAGES="${OPENPILOT_INSTALL_X_RUNTIME_PACKAGES:-0}"
+OPENPILOT_NVIDIA_GL_PACKAGE="${OPENPILOT_NVIDIA_GL_PACKAGE:-libnvidia-gl-580-server}"
 SCONS_JOBS="${SCONS_JOBS:-$(command -v nproc >/dev/null 2>&1 && nproc || echo 8)}"
 BUILD_TMPDIR="${BUILD_TMPDIR:-/var/tmp/op-clipper-build}"
 export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
@@ -42,10 +44,13 @@ APT_PACKAGES=(
   git
 )
 
-UI_APT_PACKAGES=(
+UI_RUNTIME_APT_PACKAGES=(
   xserver-xorg-core
   mesa-utils
   xserver-xorg-video-nvidia-525
+)
+
+UI_APT_PACKAGES=(
   libxrandr-dev
   libxinerama-dev
   libxcursor-dev
@@ -53,6 +58,10 @@ UI_APT_PACKAGES=(
   libxext-dev
   libegl1-mesa-dev
   xorg-dev
+)
+
+UI_GPU_RUNTIME_APT_PACKAGES=(
+  "${OPENPILOT_NVIDIA_GL_PACKAGE}"
 )
 
 log_step() {
@@ -87,6 +96,10 @@ install_system_packages() {
   apt-get install -y "${APT_PACKAGES[@]}"
   if [[ "${OPENPILOT_BUILD_UI_ASSETS}" == "1" ]]; then
     apt-get install -y "${UI_APT_PACKAGES[@]}"
+    apt-get install -y "${UI_GPU_RUNTIME_APT_PACKAGES[@]}"
+    if [[ "${OPENPILOT_INSTALL_X_RUNTIME_PACKAGES}" == "1" ]]; then
+      apt-get install -y "${UI_RUNTIME_APT_PACKAGES[@]}"
+    fi
   fi
 }
 
@@ -450,13 +463,17 @@ def ensure_pip(python_bin: str) -> None:
 def verify_installed_pyray(python_bin: str) -> None:
     check = (
         "from pathlib import Path\n"
+        "import subprocess\n"
         "import raylib\n"
         "base = Path(raylib.__file__).resolve().parent\n"
         "build = (base / 'build.py').read_text()\n"
+        "so = next(base.glob('_raylib_cffi*.so'))\n"
         "version = (base / 'version.py').read_text().strip()\n"
+        "binary_strings = subprocess.run(['strings', str(so)], check=True, capture_output=True, text=True).stdout\n"
         "print(version)\n"
         "assert \"os.path.join(get_the_lib_path(), 'libraylib.a')\" in build\n"
         "assert \"'-lEGL'\" in build\n"
+        "assert 'GLFW forced null connect' in binary_strings\n"
     )
     run([python_bin, "-c", check])
 
