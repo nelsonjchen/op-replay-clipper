@@ -20,6 +20,7 @@ JWT_TOKEN="${SMOKE_JWT_TOKEN:-${JWT_TOKEN:-${COMMA_JWT:-}}}"
 OUTPUT_DIR="${SMOKE_OUTPUT_DIR:-${REPO_ROOT}/shared/driver-redaction-smoke}"
 ACCEL="${SMOKE_ACCEL:-auto}"
 DRIVER_MODE="${SMOKE_DRIVER_MODE:-}"
+SYNC_REPO="${SMOKE_SYNC_REPO:-1}"
 
 usage() {
   cat <<'EOF'
@@ -36,6 +37,7 @@ Environment:
   SMOKE_OUTPUT_DIR                 Output directory for artifacts
   SMOKE_ACCEL                      Local acceleration mode. Default: auto
   SMOKE_DRIVER_MODE                unchanged or swap. Defaults to unchanged for local and swap for hosted.
+  SMOKE_SYNC_REPO                  1 to run uv sync before local smokes. Default: 1
 
 Options:
   --backend <local|hosted>         Smoke backend. Default: local
@@ -45,6 +47,7 @@ Options:
   --output-dir <dir>               Output directory for artifacts
   --accel <mode>                   Local accel mode: auto, cpu, videotoolbox, nvidia
   --driver-mode <unchanged|swap>   Driver seat mode for the smoke. Default: unchanged on local, swap on hosted
+  --skip-sync-repo                 Skip the initial uv sync step for local smokes
   -h, --help                       Show this help text
 EOF
 }
@@ -92,6 +95,10 @@ while [[ $# -gt 0 ]]; do
       DRIVER_MODE="$2"
       shift 2
       ;;
+    --skip-sync-repo)
+      SYNC_REPO="0"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -128,6 +135,11 @@ if [[ "${BACKEND}" == "hosted" ]]; then
 fi
 
 mkdir -p "${OUTPUT_DIR}"
+
+if [[ "${BACKEND}" == "local" && "${SYNC_REPO}" != "0" ]]; then
+  log "Syncing repo environment with uv"
+  uv sync
+fi
 
 run_ffprobe() {
   local output_path="$1"
