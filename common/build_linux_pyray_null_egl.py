@@ -275,18 +275,19 @@ def build_and_install(*, python_bin: str, work_dir: Path | None) -> None:
         patch_raylib_checkout(raylib_dir)
 
         run(
-            [
-                "cmake",
-                "-S",
-                str(raylib_dir),
-                "-B",
-                str(raylib_dir / "build"),
-                "-DPLATFORM=Desktop",
-                "-DGLFW_BUILD_WAYLAND=OFF",
-                "-DGLFW_BUILD_X11=ON",
-                "-DBUILD_SHARED_LIBS=OFF",
-                "-DCMAKE_BUILD_TYPE=Release",
-                "-DWITH_PIC=ON",
+        [
+            "cmake",
+            "-S",
+            str(raylib_dir),
+            "-B",
+            str(raylib_dir / "build"),
+            "-DPLATFORM=Desktop",
+            "-DGLFW_BUILD_NULL=ON",
+            "-DGLFW_BUILD_WAYLAND=OFF",
+            "-DGLFW_BUILD_X11=ON",
+            "-DBUILD_SHARED_LIBS=OFF",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DWITH_PIC=ON",
                 "-DBUILD_EXAMPLES=OFF",
                 "-DBUILD_GAMES=OFF",
             ]
