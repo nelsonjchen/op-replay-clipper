@@ -17,6 +17,7 @@ FACEFUSION_PYTHON_VERSION="${FACEFUSION_PYTHON_VERSION:-3.12}"
 FACEFUSION_PREWARM_MODELS="${FACEFUSION_PREWARM_MODELS:-1}"
 FACEFUSION_PRUNE_VENV="${FACEFUSION_PRUNE_VENV:-1}"
 FACEFUSION_HARDLINK_DEDUPE="${FACEFUSION_HARDLINK_DEDUPE:-1}"
+OPENPILOT_BUILD_UI_ASSETS="${OPENPILOT_BUILD_UI_ASSETS:-0}"
 SCONS_JOBS="${SCONS_JOBS:-$(command -v nproc >/dev/null 2>&1 && nproc || echo 8)}"
 BUILD_TMPDIR="${BUILD_TMPDIR:-/var/tmp/op-clipper-build}"
 export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
@@ -25,13 +26,10 @@ APT_PACKAGES=(
   build-essential
   cmake
   jq
-  xserver-xorg-core
   ffmpeg
   faketime
   eatmydata
   htop
-  mesa-utils
-  xserver-xorg-video-nvidia-525
   bc
   net-tools
   sudo
@@ -42,6 +40,12 @@ APT_PACKAGES=(
   tzdata
   zstd
   git
+)
+
+UI_APT_PACKAGES=(
+  xserver-xorg-core
+  mesa-utils
+  xserver-xorg-video-nvidia-525
   libxrandr-dev
   libxinerama-dev
   libxcursor-dev
@@ -81,6 +85,9 @@ install_system_packages() {
   log_step "Installing system packages"
   apt-get update -y
   apt-get install -y "${APT_PACKAGES[@]}"
+  if [[ "${OPENPILOT_BUILD_UI_ASSETS}" == "1" ]]; then
+    apt-get install -y "${UI_APT_PACKAGES[@]}"
+  fi
 }
 
 sync_python_nvidia_runtime_libs() {
@@ -726,8 +733,10 @@ main() {
   install_openpilot_dependencies
   fix_vendored_tool_permissions
   build_openpilot_clip_dependencies
-  install_accelerated_linux_pyray
-  generate_ui_fonts
+  if [[ "${OPENPILOT_BUILD_UI_ASSETS}" == "1" ]]; then
+    install_accelerated_linux_pyray
+    generate_ui_fonts
+  fi
   record_checkout_commit
   clean_image_artifacts
 }
