@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 
 API_URL = "https://api.comma.ai"
 ATHENA_URL = "https://athena.comma.ai"
-DEFAULT_FILE_TYPES = ("cameras", "dcameras", "ecameras", "logs")
+DEFAULT_FILE_TYPES = ("cameras", "logs", "ecameras", "dcameras")
 ONLINE_DEVICE_WINDOW_SECONDS = 120
 FILE_TYPE_NAMES = {
     "cameras": ("fcamera.hevc",),
@@ -28,6 +28,8 @@ FILE_TYPE_NAMES = {
     "logs": ("rlog.bz2", "rlog.zst"),
 }
 BOOKMARK_EVENT_TYPES = {"user_flag", "user_bookmark", "bookmark"}
+USER_PROMPT_ALERT_STATUSES = {1, "1", "userPrompt", "user_prompt"}
+OVERRIDE_STATES = {"overriding", "preEnabled"}
 
 
 @dataclass(frozen=True)
@@ -56,10 +58,17 @@ class UploadFile:
 
 @dataclass(frozen=True)
 class ScanOutcome:
-    bookmarks_found: bool
+    targets_found: bool
     uploads_queued: bool
-    all_bookmarked_files_satisfied: bool
+    all_target_files_satisfied: bool
     queue_cleared: bool
+
+
+@dataclass(frozen=True)
+class PrioritySegments:
+    bookmark_segments: list[int]
+    alert_segments: list[int]
+    override_segments: list[int]
 
 
 class CommaApi:
@@ -135,7 +144,7 @@ class CommaApi:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Watch Comma routes for bookmark flags and queue high-quality uploads around them."
+        description="Watch Comma routes for bookmarks, alerts, and overrides and queue high-quality uploads."
     )
     parser.add_argument(
         "--device-alias",
@@ -189,7 +198,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--exclusive-bookmark-priority",
         action="store_true",
-        help="Keep the upload queue clear until bookmarks exist, then keep only bookmark-related uploads queued.",
+        help="Keep the upload queue clear until bookmarks/alerts/overrides exist, then keep only those uploads queued.",
     )
     return parser.parse_args()
 
@@ -272,16 +281,60 @@ def parsed_segment_upper_bound(route: Route) -> int:
     return max(0, min(route.procqlog, route.maxqlog))
 
 
-def bookmarked_segments(api: CommaApi, route: Route) -> list[int]:
-    segments: set[int] = set()
+def segment_from_event(event: dict[str, Any], *, default_segment: int, max_segment: int) -> int:
+    route_offset_millis = event.get("route_offset_millis")
+    if route_offset_millis is None:
+        return default_segment
+    try:
+        segment = int(route_offset_millis) // 60000
+    except (TypeError, ValueError):
+        return default_segment
+    return max(0, min(max_segment, segment))
+
+
+def categorize_segment_events(
+    events: Iterable[dict[str, Any]], *, segment: int, max_segment: int
+) -> tuple[set[int], set[int], set[int]]:
+    bookmarks: set[int] = set()
+    alerts: set[int] = set()
+    overrides: set[int] = set()
+
+    for event in events:
+        target_segment = segment_from_event(event, default_segment=segment, max_segment=max_segment)
+        event_type = event.get("type")
+        data = event.get("data") or {}
+
+        if event_type in BOOKMARK_EVENT_TYPES:
+            bookmarks.add(target_segment)
+        if data.get("alertStatus") in USER_PROMPT_ALERT_STATUSES:
+            alerts.add(target_segment)
+        if event_type == "overriding" or data.get("state") in OVERRIDE_STATES:
+            overrides.add(target_segment)
+
+    return bookmarks, alerts, overrides
+
+
+def collect_priority_segments(api: CommaApi, route: Route) -> PrioritySegments:
+    bookmark_segments: set[int] = set()
+    alert_segments: set[int] = set()
+    override_segments: set[int] = set()
+
     for seg in range(parsed_segment_upper_bound(route) + 1):
-        events = api.get_events(route.url, seg)
-        for event in events:
-            if event.get("type") not in BOOKMARK_EVENT_TYPES:
-                continue
-            route_offset_millis = int(event["route_offset_millis"])
-            segments.add(route_offset_millis // 60000)
-    return sorted(segments)
+        try:
+            events = api.get_events(route.url, seg)
+        except requests.RequestException as exc:
+            print(f"Skipping events for {route.route_id} seg={seg}: {exc}")
+            continue
+        bookmarks, alerts, overrides = categorize_segment_events(events, segment=seg, max_segment=route.maxqlog)
+        bookmark_segments.update(bookmarks)
+        alert_segments.update(alerts)
+        override_segments.update(overrides)
+
+    return PrioritySegments(
+        bookmark_segments=sorted(bookmark_segments),
+        alert_segments=sorted(alert_segments),
+        override_segments=sorted(override_segments),
+    )
 
 
 def expand_segments(bookmarked: Iterable[int], *, previous_segments: int, next_segments: int, max_segment: int) -> list[int]:
@@ -313,6 +366,47 @@ def prioritize_segments(bookmarked: Iterable[int], *, previous_segments: int, ne
             ordered.append(candidate)
 
     return ordered
+
+
+def combine_priority_segments(
+    *,
+    bookmark_segments: Iterable[int],
+    alert_segments: Iterable[int],
+    override_segments: Iterable[int],
+    previous_segments: int,
+    next_segments: int,
+    max_segment: int,
+) -> tuple[list[int], list[list[int]]]:
+    bookmark_window = expand_segments(
+        bookmark_segments,
+        previous_segments=previous_segments,
+        next_segments=next_segments,
+        max_segment=max_segment,
+    )
+    seen: set[int] = set()
+    grouped_segments: list[list[int]] = []
+
+    bookmark_order = prioritize_segments(
+        bookmark_segments,
+        previous_segments=previous_segments,
+        next_segments=next_segments,
+        max_segment=max_segment,
+    )
+    grouped_segments.append([])
+    for segment in bookmark_order:
+        if segment not in seen:
+            seen.add(segment)
+            grouped_segments[-1].append(segment)
+
+    for bucket in (alert_segments, override_segments):
+        grouped_segments.append([])
+        for segment in bucket:
+            if segment < 0 or segment > max_segment or segment in seen:
+                continue
+            seen.add(segment)
+            grouped_segments[-1].append(segment)
+
+    return bookmark_window, grouped_segments
 
 
 def normalize_uploaded_paths(filelist: dict[str, list[str]]) -> set[str]:
@@ -377,6 +471,23 @@ def generate_candidate_paths(route: Route, segments: Iterable[int], file_types: 
     return candidates
 
 
+def generate_candidate_paths_by_priority(
+    route: Route, segment_groups: Iterable[Iterable[int]], file_types: Iterable[str]
+) -> list[str]:
+    candidates: list[str] = []
+    for segments in segment_groups:
+        segment_list = list(segments)
+        for file_type in file_types:
+            if file_type == "logs":
+                for segment in segment_list:
+                    candidates.append(f"{route.route_id}--{segment}/rlog.zst")
+                continue
+            for segment in segment_list:
+                for filename in FILE_TYPE_NAMES[file_type]:
+                    candidates.append(f"{route.route_id}--{segment}/{filename}")
+    return candidates
+
+
 def request_uploads(api: CommaApi, dongle_id: str, paths: list[str]) -> dict[str, Any]:
     upload_metadata = api.request_upload_urls(dongle_id, paths)
     files = [
@@ -409,9 +520,9 @@ def scan_once(
     file_types: list[str],
     exclusive_bookmark_priority: bool,
 ) -> ScanOutcome:
-    bookmarks_found = False
+    targets_found = False
     uploads_queued = False
-    all_bookmarked_files_satisfied = True
+    all_target_files_satisfied = True
     queue_cleared = False
     devices = select_devices(api.get_devices(), device_alias or None)
     now_local = datetime.now(tz)
@@ -421,7 +532,7 @@ def scan_once(
         f"since {window_start.isoformat()}"
     )
     if not devices:
-        return ScanOutcome(bookmarks_found=False, uploads_queued=False, all_bookmarked_files_satisfied=False, queue_cleared=False)
+        return ScanOutcome(targets_found=False, uploads_queued=False, all_target_files_satisfied=False, queue_cleared=False)
 
     any_routes_found = False
     for device in devices:
@@ -437,7 +548,7 @@ def scan_once(
         queued_paths = normalize_queue_paths(online_queue, offline_queue)
         target_paths: set[str] = set()
 
-        device_bookmarks_found = False
+        device_targets_found = False
         for route in routes:
             route_detail = api.get_route(route.fullname)
             hydrated_route = Route(
@@ -459,37 +570,40 @@ def scan_once(
             )
             if parsed_upper_bound < hydrated_route.maxqlog:
                 print(f"Waiting for parsed qlogs: scanning segments 0..{parsed_upper_bound} so far")
-            bookmark_segments = bookmarked_segments(api, hydrated_route)
-            print(f"Bookmarked segments: {bookmark_segments}")
-            if not bookmark_segments:
+            priority_segments = collect_priority_segments(api, hydrated_route)
+            print(f"Bookmarked segments: {priority_segments.bookmark_segments}")
+            print(f"Alert segments: {priority_segments.alert_segments}")
+            print(f"Override segments: {priority_segments.override_segments}")
+            if not (
+                priority_segments.bookmark_segments
+                or priority_segments.alert_segments
+                or priority_segments.override_segments
+            ):
                 continue
 
-            bookmarks_found = True
-            device_bookmarks_found = True
-            target_segments = expand_segments(
-                bookmark_segments,
+            targets_found = True
+            device_targets_found = True
+            bookmark_window, prioritized_segment_groups = combine_priority_segments(
+                bookmark_segments=priority_segments.bookmark_segments,
+                alert_segments=priority_segments.alert_segments,
+                override_segments=priority_segments.override_segments,
                 previous_segments=previous_segments,
                 next_segments=next_segments,
                 max_segment=hydrated_route.maxqlog,
             )
-            prioritized_segments = prioritize_segments(
-                bookmark_segments,
-                previous_segments=previous_segments,
-                next_segments=next_segments,
-                max_segment=hydrated_route.maxqlog,
-            )
-            print(f"Expanded segment window: {target_segments}")
+            prioritized_segments = [segment for group in prioritized_segment_groups for segment in group]
+            print(f"Expanded bookmark window: {bookmark_window}")
             print(f"Upload priority order: {prioritized_segments}")
 
             uploaded_paths = normalize_uploaded_paths(route_files)
-            desired_paths = generate_candidate_paths(hydrated_route, prioritized_segments, file_types)
+            desired_paths = generate_candidate_paths_by_priority(hydrated_route, prioritized_segment_groups, file_types)
             target_paths.update(desired_paths)
             missing_paths = [path for path in desired_paths if path not in uploaded_paths and path not in queued_paths]
             print(
                 f"Desired files={len(desired_paths)} uploaded={len(uploaded_paths)} queued={len(queued_paths)} missing={len(missing_paths)}"
             )
             if not missing_paths:
-                print("Bookmarked route is already uploaded or queued.")
+                print("Priority route files are already uploaded or queued.")
                 continue
 
             response = request_uploads(api, device.dongle_id, missing_paths)
@@ -497,10 +611,10 @@ def scan_once(
             print(json.dumps(response, indent=2))
             queued_paths.update(missing_paths)
             uploads_queued = True
-            all_bookmarked_files_satisfied = False
+            all_target_files_satisfied = False
 
         if exclusive_bookmark_priority:
-            if device_bookmarks_found:
+            if device_targets_found:
                 cancel_ids = [
                     item["id"]
                     for item in online_queue
@@ -508,23 +622,23 @@ def scan_once(
                 ]
                 if cancel_ids:
                     response = api.cancel_uploads(device.dongle_id, cancel_ids)
-                    print(f"Canceled {len(cancel_ids)} non-bookmark queue item(s):")
+                    print(f"Canceled {len(cancel_ids)} non-priority queue item(s):")
                     print(json.dumps(response, indent=2))
                     queue_cleared = True
             else:
                 cancel_ids = [item["id"] for item in online_queue if item.get("id")]
                 if cancel_ids:
                     response = api.cancel_uploads(device.dongle_id, cancel_ids)
-                    print(f"Canceled {len(cancel_ids)} queue item(s) while waiting for bookmarks:")
+                    print(f"Canceled {len(cancel_ids)} queue item(s) while waiting for priority segments:")
                     print(json.dumps(response, indent=2))
                     queue_cleared = True
 
-    if not any_routes_found or not bookmarks_found:
-        all_bookmarked_files_satisfied = False
+    if not any_routes_found or not targets_found:
+        all_target_files_satisfied = False
     return ScanOutcome(
-        bookmarks_found=bookmarks_found,
+        targets_found=targets_found,
         uploads_queued=uploads_queued,
-        all_bookmarked_files_satisfied=all_bookmarked_files_satisfied,
+        all_target_files_satisfied=all_target_files_satisfied,
         queue_cleared=queue_cleared,
     )
 
@@ -539,7 +653,7 @@ def main() -> int:
     api = CommaApi(args.jwt_token)
 
     start_time = time.monotonic()
-    outcome = ScanOutcome(bookmarks_found=False, uploads_queued=False, all_bookmarked_files_satisfied=False, queue_cleared=False)
+    outcome = ScanOutcome(targets_found=False, uploads_queued=False, all_target_files_satisfied=False, queue_cleared=False)
     while True:
         try:
             outcome = scan_once(
@@ -552,18 +666,18 @@ def main() -> int:
                 file_types=args.file_types,
                 exclusive_bookmark_priority=args.exclusive_bookmark_priority,
             )
-            if args.exit_when_satisfied and outcome.bookmarks_found and (
-                outcome.uploads_queued or outcome.all_bookmarked_files_satisfied
+            if args.exit_when_satisfied and outcome.targets_found and (
+                outcome.uploads_queued or outcome.all_target_files_satisfied
             ):
-                print("Bookmarks found and upload work is queued or already complete. Exiting watcher.")
+                print("Priority segments found and upload work is queued or already complete. Exiting watcher.")
                 return 0
         except Exception as exc:
             print(f"Watcher error: {exc}")
 
         if args.once:
-            return 0 if outcome.bookmarks_found and (outcome.uploads_queued or outcome.all_bookmarked_files_satisfied) else 1
+            return 0 if outcome.targets_found and (outcome.uploads_queued or outcome.all_target_files_satisfied) else 1
         if args.timeout_seconds > 0 and time.monotonic() - start_time >= args.timeout_seconds:
-            print("Timed out waiting for bookmarked segments.")
+            print("Timed out waiting for priority segments.")
             return 1
         print(f"Sleeping for {args.poll_seconds} seconds")
         time.sleep(args.poll_seconds)

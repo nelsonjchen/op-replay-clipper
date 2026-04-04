@@ -1,6 +1,9 @@
 from comma_watch import (
+    categorize_segment_events,
+    combine_priority_segments,
     Device,
     generate_candidate_paths,
+    generate_candidate_paths_by_priority,
     is_owned_online_device,
     prioritize_segments,
     Route,
@@ -19,6 +22,28 @@ def test_expand_segments_clamps_route_bounds() -> None:
 
 def test_prioritize_segments_radiates_out_from_bookmark() -> None:
     assert prioritize_segments([5], previous_segments=3, next_segments=1, max_segment=6) == [5, 4, 6, 3, 2]
+
+
+def test_categorize_segment_events_splits_bookmark_alert_and_override() -> None:
+    events = [
+        {"type": "user_bookmark", "route_offset_millis": 301000, "data": {}},
+        {"type": "state", "route_offset_millis": 361000, "data": {"alertStatus": 1, "state": "enabled"}},
+        {"type": "state", "route_offset_millis": 421000, "data": {"alertStatus": 0, "state": "overriding"}},
+    ]
+    assert categorize_segment_events(events, segment=5, max_segment=10) == ({5}, {6}, {7})
+
+
+def test_combine_priority_segments_orders_bookmarks_then_alerts_then_overrides() -> None:
+    bookmark_window, prioritized_groups = combine_priority_segments(
+        bookmark_segments=[5],
+        alert_segments=[8, 4],
+        override_segments=[7, 3],
+        previous_segments=3,
+        next_segments=1,
+        max_segment=10,
+    )
+    assert bookmark_window == [2, 3, 4, 5, 6]
+    assert prioritized_groups == [[5, 4, 6, 3, 2], [8], [7]]
 
 
 def test_normalize_uploaded_paths_extracts_route_segment_and_filename() -> None:
@@ -83,6 +108,32 @@ def test_generate_candidate_paths_requests_rlog_zst_only() -> None:
     assert generate_candidate_paths(route, [2], ["cameras", "logs"]) == [
         "0000026f--c5469f881d--2/fcamera.hevc",
         "0000026f--c5469f881d--2/rlog.zst",
+    ]
+
+
+def test_generate_candidate_paths_by_priority_orders_file_types_within_each_tier() -> None:
+    route = Route(
+        fullname="fde53c3c109fb4c0|0000026f--c5469f881d",
+        route_id="0000026f--c5469f881d",
+        start_time="2026-03-28T04:59:16",
+        end_time="2026-03-28T05:19:16",
+        maxqlog=20,
+        procqlog=20,
+        url="https://example.test/route",
+    )
+    assert generate_candidate_paths_by_priority(route, [[5, 4], [8]], ["cameras", "logs", "ecameras", "dcameras"]) == [
+        "0000026f--c5469f881d--5/fcamera.hevc",
+        "0000026f--c5469f881d--4/fcamera.hevc",
+        "0000026f--c5469f881d--5/rlog.zst",
+        "0000026f--c5469f881d--4/rlog.zst",
+        "0000026f--c5469f881d--5/ecamera.hevc",
+        "0000026f--c5469f881d--4/ecamera.hevc",
+        "0000026f--c5469f881d--5/dcamera.hevc",
+        "0000026f--c5469f881d--4/dcamera.hevc",
+        "0000026f--c5469f881d--8/fcamera.hevc",
+        "0000026f--c5469f881d--8/rlog.zst",
+        "0000026f--c5469f881d--8/ecamera.hevc",
+        "0000026f--c5469f881d--8/dcamera.hevc",
     ]
 
 
