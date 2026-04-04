@@ -9,6 +9,13 @@ from core.openpilot_config import default_image_openpilot_root
 
 MIN_LENGTH_SECONDS = 5
 MAX_LENGTH_SECONDS = 300
+HOSTED_ANONYMIZATION_PROFILE_CHOICES = [
+    "none",
+    "driver unchanged, passenger hidden",
+    "driver unchanged, passenger face swap",
+    "driver face swap, passenger hidden",
+    "driver face swap, passenger face swap",
+]
 
 GUI_ANONYMIZATION_PROFILE_MAP = {
     "none": ("none", "driver_face_swap_passenger_face_swap"),
@@ -82,6 +89,7 @@ class Predictor(BasePredictor):
         ),
         anonymizationProfile: str = Input(
             description="Seat anonymization strategy for driver-camera renders. Recommended values are: none, driver unchanged/passenger hidden, driver unchanged/passenger face swap, driver face swap/passenger hidden, driver face swap/passenger face swap.",
+            choices=HOSTED_ANONYMIZATION_PROFILE_CHOICES,
             default="none",
         ),
         passengerRedactionStyle: str = Input(

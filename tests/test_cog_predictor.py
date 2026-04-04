@@ -64,6 +64,18 @@ def test_gui_anonymization_profile_map_keeps_pixelize_aliases() -> None:
     )
 
 
+def test_hosted_anonymization_profile_choices_are_canonical() -> None:
+    cog_predictor = _load_cog_predictor()
+
+    assert cog_predictor.HOSTED_ANONYMIZATION_PROFILE_CHOICES == [
+        "none",
+        "driver unchanged, passenger hidden",
+        "driver unchanged, passenger face swap",
+        "driver face swap, passenger hidden",
+        "driver face swap, passenger face swap",
+    ]
+
+
 def test_predictor_setup_defaults_rf_detr_device_to_cpu(monkeypatch) -> None:
     cog_predictor = _load_cog_predictor()
     monkeypatch.delenv("DRIVER_FACE_BENCHMARK_RF_DETR_DEVICE", raising=False)
