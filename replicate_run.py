@@ -13,6 +13,15 @@ from core import route_inputs
 DEFAULT_MODEL = "nelsonjchen/op-replay-clipper-beta"
 DEFAULT_URL = "https://connect.comma.ai/5beb9b58bd12b691/0000010a--a51155e496/90/105"
 DEFAULT_OUTPUT = Path("./shared/replicate-run-output.mp4")
+_ANONYMIZATION_PROFILE_LABEL_ALIASES = {
+    "driver unchanged, passenger pixelize": "driver unchanged, passenger hidden",
+    "driver face swap, passenger pixelize": "driver face swap, passenger hidden",
+}
+
+
+def normalize_anonymization_profile_label(value: str) -> str:
+    cleaned = value.strip().lower()
+    return _ANONYMIZATION_PROFILE_LABEL_ALIASES.get(cleaned, cleaned)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -30,6 +39,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--file-size", type=int, default=9, help="Target output size in MB.")
     parser.add_argument("--file-format", choices=["auto", "h264", "hevc"], default="auto")
     parser.add_argument("--jwt-token", default="", help="Optional comma JWT token for private routes.")
+    parser.add_argument(
+        "--anonymization-profile",
+        choices=[
+            "none",
+            "driver unchanged, passenger hidden",
+            "driver unchanged, passenger face swap",
+            "driver face swap, passenger hidden",
+            "driver face swap, passenger face swap",
+        ],
+        type=normalize_anonymization_profile_label,
+        default="none",
+        help="Seat anonymization strategy for driver-camera renders on the hosted model.",
+    )
+    parser.add_argument(
+        "--passenger-redaction-style",
+        choices=["blur", "silhouette"],
+        default="blur",
+        help="How to hide the passenger when the selected anonymization profile uses passenger hidden mode.",
+    )
     parser.add_argument("--notes", default="", help="Optional notes string.")
     return parser
 
@@ -51,6 +79,8 @@ def build_input(args: argparse.Namespace) -> dict[str, Any]:
         "fileFormat": args.file_format,
         "renderType": args.render_type,
         "smearAmount": args.smear_amount,
+        "anonymizationProfile": args.anonymization_profile,
+        "passengerRedactionStyle": args.passenger_redaction_style,
     }
 
 

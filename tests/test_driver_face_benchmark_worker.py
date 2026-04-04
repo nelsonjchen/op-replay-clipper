@@ -1,9 +1,77 @@
 from __future__ import annotations
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 
 from core import driver_face_benchmark_worker
+
+
+def test_resolve_preferred_source_clip_falls_back_to_prepared_eval_clip(tmp_path) -> None:
+    sample_dir = tmp_path / "sample"
+    sample_dir.mkdir()
+    prepared = sample_dir / "driver-source.mp4"
+    prepared.write_bytes(b"clip")
+
+    source_path, source_kind = driver_face_benchmark_worker._resolve_preferred_source_clip(
+        sample_dir,
+        {
+            "route": "missing-route-format",
+            "start_seconds": 0,
+            "length_seconds": 26,
+        },
+    )
+
+    assert source_path == prepared
+    assert source_kind == "prepared_eval_h264_clip"
+
+
+def test_resolve_preferred_source_clip_prefers_raw_hevc_derived_clip(monkeypatch, tmp_path) -> None:
+    sample_dir = tmp_path / "sample"
+    sample_dir.mkdir()
+    data_root = tmp_path / "data-root"
+    raw_segment = data_root / "dongle" / "2026-04-03--12-00-00--4" / "dcamera.hevc"
+    raw_segment.parent.mkdir(parents=True)
+    raw_segment.write_bytes(b"hevc")
+
+    render_calls: list[object] = []
+
+    class _FakeVideoRenderOptions:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    def _fake_render_video_clip(options):
+        render_calls.append(options)
+        Path(options.output_path).write_bytes(b"hq")
+        return SimpleNamespace(output_path=Path(options.output_path), acceleration="cpu")
+
+    monkeypatch.setenv("DRIVER_FACE_BENCHMARK_DATA_ROOT", str(data_root))
+    monkeypatch.setattr(
+        "renderers.video_renderer.VideoRenderOptions",
+        _FakeVideoRenderOptions,
+    )
+    monkeypatch.setattr(
+        "renderers.video_renderer.render_video_clip",
+        _fake_render_video_clip,
+    )
+
+    source_path, source_kind = driver_face_benchmark_worker._resolve_preferred_source_clip(
+        sample_dir,
+        {
+            "route": "dongle|2026-04-03--12-00-00",
+            "start_seconds": 289,
+            "length_seconds": 26,
+        },
+    )
+
+    assert source_path == sample_dir / "driver-source-hq-hevc.mp4"
+    assert source_kind == "raw_hevc_derived_working_clip"
+    assert source_path.exists()
+    assert len(render_calls) == 1
+    assert render_calls[0].file_format == "hevc"
+    assert render_calls[0].route_or_segment == "dongle|2026-04-03--12-00-00"
+    assert render_calls[0].start_seconds == 289
+    assert render_calls[0].target_mb >= 24
 
 
 def test_target_side_defaults_to_passenger_side_for_mirrored_driver_view() -> None:
@@ -283,20 +351,7 @@ def test_choose_passenger_mask_rejects_crop_filling_mask() -> None:
     assert report["mask_crop_area_fraction"] < 0.82
 
 
-def test_anchor_body_mask_creates_nonempty_conservative_body_shape() -> None:
-    mask = driver_face_benchmark_worker._anchor_body_mask(
-        (40, 20, 60, 60),
-        frame_width=160,
-        frame_height=140,
-    )
-
-    assert mask.shape == (140, 160)
-    assert bool(mask.any()) is True
-    assert bool(mask[45, 70]) is True
-    assert bool(mask[100, 70]) is True
-
-
-def test_fallback_mask_from_anchor_uses_anchor_body_mask_without_previous_mask() -> None:
+def test_fallback_mask_from_anchor_requires_previous_real_mask() -> None:
     mask, reason = driver_face_benchmark_worker._fallback_mask_from_anchor(
         anchor_rect=(40, 20, 60, 60),
         previous_mask=None,
@@ -305,9 +360,27 @@ def test_fallback_mask_from_anchor_uses_anchor_body_mask_without_previous_mask()
         frame_height=140,
     )
 
+    assert mask is None
+    assert reason is None
+
+
+def test_fallback_mask_from_anchor_warps_previous_mask_shape() -> None:
+    previous_mask = np.zeros((100, 120), dtype=bool)
+    previous_mask[30:80, 40:70] = True
+
+    mask, reason = driver_face_benchmark_worker._fallback_mask_from_anchor(
+        anchor_rect=(50, 10, 40, 40),
+        previous_mask=previous_mask,
+        previous_anchor_rect=(20, 20, 40, 40),
+        frame_width=120,
+        frame_height=100,
+    )
+
     assert mask is not None
-    assert reason == "anchor_body_fallback"
-    assert bool(mask[100, 70]) is True
+    assert reason == "anchor_shifted_mask_fallback"
+    box = driver_face_benchmark_worker._box_from_mask(mask)
+    assert box is not None
+    assert box[0] > 40
 
 
 def test_rf_detr_effect_for_candidate_maps_expected_styles() -> None:

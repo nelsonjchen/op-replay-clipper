@@ -151,6 +151,27 @@ GCE is especially useful for checking:
 - whether a new runtime or bootstrap change behaves correctly before pushing to
   Replicate
 
+For this repo's current Linux/NVIDIA validation target, use the Cowboy project
+GPU VM:
+
+- project: `cowboy-471001`
+- instance: `op-clipper-nvidia-probe-17802-1`
+- zone: `us-central1-a`
+- machine type: `g2-standard-4`
+- GPU: `1x nvidia-l4`
+
+Typical start/stop flow:
+
+```bash
+gcloud compute instances start op-clipper-nvidia-probe-17802-1 \
+  --project cowboy-471001 \
+  --zone us-central1-a
+
+gcloud compute ssh op-clipper-nvidia-probe-17802-1 \
+  --project cowboy-471001 \
+  --zone us-central1-a
+```
+
 ## Step 1: Regenerate Cog build artifacts
 
 The push helper does this for you, but the underlying command is:

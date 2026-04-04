@@ -567,7 +567,7 @@ def materialize_eval_sample(
     overwrite: bool,
     acceleration: video_renderer.AccelerationPolicy,
     jwt_token: str | None = None,
-    source_target_mb: int = 3,
+    source_target_mb: int = 24,
     crop_target_mb: int = 4,
     analysis_target_mb: int = 6,
     config: FaceTrackConfig | None = None,
@@ -608,7 +608,7 @@ def materialize_eval_sample(
                 start_seconds=parsed.start_seconds,
                 length_seconds=parsed.length_seconds,
                 target_mb=source_target_mb,
-                file_format="h264",
+                file_format="hevc",
                 acceleration=acceleration,
                 output_path=str(source_clip),
             )

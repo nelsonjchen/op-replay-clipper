@@ -14,6 +14,7 @@ from core.clip_orchestrator import (
     run_clip,
 )
 from core.driver_face_swap import (
+    canonical_driver_face_profile,
     default_driver_face_donor_bank_dir,
     default_driver_face_source_image,
     default_facefusion_model,
@@ -75,13 +76,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--driver-face-profile",
         choices=[
+            "driver_unchanged_passenger_hidden",
             "driver_unchanged_passenger_face_swap",
-            "driver_unchanged_passenger_pixelize",
+            "driver_face_swap_passenger_hidden",
             "driver_face_swap_passenger_face_swap",
-            "driver_face_swap_passenger_pixelize",
         ],
+        type=canonical_driver_face_profile,
         default="driver_face_swap_passenger_face_swap",
         help="Seat strategy when driver face anonymization is enabled.",
+    )
+    parser.add_argument(
+        "--passenger-redaction-style",
+        choices=["blur", "silhouette"],
+        default="blur",
+        help="How to hide the passenger when the selected anonymization profile uses passenger hidden mode.",
     )
     parser.add_argument(
         "--driver-face-source-image",
@@ -189,6 +197,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 skip_download=args.skip_download,
                 driver_face_anonymization=args.driver_face_anonymization,
                 driver_face_profile=args.driver_face_profile,
+                passenger_redaction_style=args.passenger_redaction_style,
                 driver_face_source_image=args.driver_face_source_image,
                 driver_face_preset=args.driver_face_preset,
                 facefusion_root=args.facefusion_root,

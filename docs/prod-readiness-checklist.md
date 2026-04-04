@@ -155,6 +155,66 @@ Pass criteria:
 - the JWT field does not break the raw URL input path
 - the output matches the normal UI smoke
 
+### 7. Driver Hidden Passenger Blur
+
+```bash
+uv run python replicate_run.py \
+  --model "$STAGING_MODEL" \
+  --url "$ROUTE_URL" \
+  --render-type driver \
+  --anonymization-profile 'driver face swap, passenger hidden' \
+  --passenger-redaction-style blur \
+  --jwt-token "$JWT_TOKEN" \
+  --output ./shared/prod-check-driver-hidden-blur.mp4
+```
+
+Pass criteria:
+
+- the prediction succeeds
+- the output is playable
+- the driver banner reads `DRIVER SWAPPED, PASSENGER BLURRED`
+- the hidden passenger region uses the RF-DETR body mask instead of the old coarse pixel box
+
+### 8. Driver Hidden Passenger Silhouette
+
+```bash
+uv run python replicate_run.py \
+  --model "$STAGING_MODEL" \
+  --url "$ROUTE_URL" \
+  --render-type driver \
+  --anonymization-profile 'driver face swap, passenger hidden' \
+  --passenger-redaction-style silhouette \
+  --jwt-token "$JWT_TOKEN" \
+  --output ./shared/prod-check-driver-hidden-silhouette.mp4
+```
+
+Pass criteria:
+
+- the prediction succeeds
+- the output is playable
+- the driver banner reads `DRIVER SWAPPED, PASSENGER SILHOUETTED`
+- the hidden passenger region is fully opaque white with the dashed cutout outline
+
+### 9. Driver Debug Hidden Passenger Blur
+
+```bash
+uv run python replicate_run.py \
+  --model "$STAGING_MODEL" \
+  --url "$ROUTE_URL" \
+  --render-type driver-debug \
+  --anonymization-profile 'driver unchanged, passenger hidden' \
+  --passenger-redaction-style blur \
+  --jwt-token "$JWT_TOKEN" \
+  --output ./shared/prod-check-driver-debug-hidden-blur.mp4
+```
+
+Pass criteria:
+
+- the prediction succeeds
+- the output is playable
+- the driver-debug footer still renders correctly
+- the hidden passenger region is blurred for the full delivered clip with no exposed frames
+
 ## Runtime Assumptions To Verify
 
 These are not separate smokes, but they should be true when the matrix passes.
@@ -162,6 +222,10 @@ These are not separate smokes, but they should be true when the matrix passes.
 - The hosted Replicate model version was built with stock `cog 0.17.2+`.
 - The runtime still accepts plain raw `https://connect.comma.ai/...` URLs on
   the hosted surface.
+- The hosted `anonymizationProfile` surface accepts the new hidden-passenger
+  labels and still accepts old pixelize labels as compatibility aliases.
+- The hosted `passengerRedactionStyle` surface accepts `blur` and
+  `silhouette`, defaulting to `blur`.
 - BIG UI unit detection should come from the logged route `IsMetric` param
   when present, and imperial should remain the fallback when it is missing.
 - The 360 renderer should no longer assume older fixed camera dimensions on

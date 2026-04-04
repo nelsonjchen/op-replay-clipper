@@ -36,10 +36,14 @@ def test_build_input_uses_cog_field_names() -> None:
         file_format="auto",
         render_type="ui",
         smear_amount=3,
+        anonymization_profile="none",
+        passenger_redaction_style="blur",
     )
     payload = replicate_run.build_input(args)
     assert payload["renderType"] == "ui"
     assert payload["fileSize"] == 9
+    assert payload["anonymizationProfile"] == "none"
+    assert payload["passengerRedactionStyle"] == "blur"
     assert payload["route"].startswith("https://connect.comma.ai/")
     assert "metric" not in payload
 
@@ -53,6 +57,8 @@ def test_build_input_allows_ui_alt_render_type() -> None:
         file_format="auto",
         render_type="ui-alt",
         smear_amount=3,
+        anonymization_profile="none",
+        passenger_redaction_style="blur",
     )
 
     payload = replicate_run.build_input(args)
@@ -69,10 +75,14 @@ def test_build_input_allows_driver_debug_render_type() -> None:
         render_type="driver-debug",
         smear_amount=3,
         forward_upon_wide_h=2.2,
+        anonymization_profile="driver unchanged, passenger hidden",
+        passenger_redaction_style="silhouette",
     )
 
     payload = replicate_run.build_input(args)
     assert payload["renderType"] == "driver-debug"
+    assert payload["anonymizationProfile"] == "driver unchanged, passenger hidden"
+    assert payload["passengerRedactionStyle"] == "silhouette"
 
 
 def test_encode_replicate_route_input_preserves_existing_literal_prefix() -> None:
@@ -83,6 +93,11 @@ def test_encode_replicate_route_input_preserves_existing_literal_prefix() -> Non
 def test_encode_replicate_route_input_wraps_plain_connect_url() -> None:
     url = "https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496"
     assert replicate_run.encode_replicate_route_input(url) == url
+
+
+def test_normalize_anonymization_profile_label_maps_pixelize_aliases() -> None:
+    assert replicate_run.normalize_anonymization_profile_label("driver unchanged, passenger pixelize") == "driver unchanged, passenger hidden"
+    assert replicate_run.normalize_anonymization_profile_label("driver face swap, passenger pixelize") == "driver face swap, passenger hidden"
 
 
 def test_resolve_model_defaults_to_latest_beta_alias() -> None:

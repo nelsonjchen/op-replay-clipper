@@ -13,6 +13,18 @@ uv export \
   --no-group test \
   --output-file "${ROOT_DIR}/requirements-cog.txt"
 
+# The hosted predictor imports the shared RF-DETR passenger-redaction path
+# directly, so the image needs the same core vision/runtime stack that exists
+# in the local dev environment.
+cat >>"${ROOT_DIR}/requirements-cog.txt" <<'EOF'
+numpy==2.4.4
+opencv-python-headless==4.13.0.92
+torch==2.11.0
+torchvision==0.26.0
+rfdetr==1.6.3
+supervision==0.27.0.post2
+EOF
+
 python3 "${SCRIPT_DIR}/render_config.py" \
   --template "${SCRIPT_DIR}/cog.template.yaml" \
   --setup-script "${ROOT_DIR}/common/bootstrap_image_env.sh" \

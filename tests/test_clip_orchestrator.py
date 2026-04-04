@@ -194,7 +194,9 @@ def test_driver_face_anonymization_flags_flow_into_clip_request(
             "--driver-face-anonymization",
             "facefusion",
             "--driver-face-profile",
-            "driver_face_swap_passenger_pixelize",
+            "driver_face_swap_passenger_hidden",
+            "--passenger-redaction-style",
+            "silhouette",
             "--driver-face-source-image",
             "/tmp/donor.png",
             "--driver-face-selection",
@@ -215,7 +217,8 @@ def test_driver_face_anonymization_flags_flow_into_clip_request(
     request = run_clip.call_args.args[0]
     assert request.render_type == "driver"
     assert request.driver_face_anonymization == "facefusion"
-    assert request.driver_face_profile == "driver_face_swap_passenger_pixelize"
+    assert request.driver_face_profile == "driver_face_swap_passenger_hidden"
+    assert request.passenger_redaction_style == "silhouette"
     assert request.driver_face_source_image == "/tmp/donor.png"
     assert request.driver_face_selection == "auto_best_match"
     assert request.driver_face_donor_bank_dir == "/tmp/donor-bank"
@@ -233,12 +236,14 @@ def test_build_plan_preserves_driver_face_profile() -> None:
             length_seconds=5,
             target_mb=9,
             driver_face_anonymization="facefusion",
-            driver_face_profile="driver_face_swap_passenger_pixelize",
+            driver_face_profile="driver_face_swap_passenger_hidden",
+            passenger_redaction_style="silhouette",
         )
     )
 
     assert plan.driver_face_swap.mode == "facefusion"
-    assert plan.driver_face_swap.profile == "driver_face_swap_passenger_pixelize"
+    assert plan.driver_face_swap.profile == "driver_face_swap_passenger_hidden"
+    assert plan.driver_face_swap.passenger_redaction_style == "silhouette"
 
 
 def test_build_plan_preserves_driver_unchanged_passenger_pixelize_profile() -> None:
@@ -255,7 +260,7 @@ def test_build_plan_preserves_driver_unchanged_passenger_pixelize_profile() -> N
     )
 
     assert plan.driver_face_swap.mode == "facefusion"
-    assert plan.driver_face_swap.profile == "driver_unchanged_passenger_pixelize"
+    assert plan.driver_face_swap.profile == "driver_unchanged_passenger_hidden"
 
 
 def test_build_plan_preserves_driver_unchanged_passenger_face_swap_profile() -> None:

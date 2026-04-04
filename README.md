@@ -215,19 +215,25 @@ Driver backing-video face anonymization:
 ```bash
 uv run python clip.py driver --demo --length-seconds 20 \
   --driver-face-anonymization facefusion \
+  --driver-face-profile driver_face_swap_passenger_hidden \
+  --passenger-redaction-style blur \
   --driver-face-source-image ./assets/driver-face-donors/generic-donor-clean-shaven.jpg \
   --driver-face-preset fast \
   --output ./shared/driver-facefusion.mp4
 
 uv run python clip.py driver --demo --length-seconds 20 \
   --driver-face-anonymization facefusion \
+  --driver-face-profile driver_face_swap_passenger_hidden \
+  --passenger-redaction-style silhouette \
   --driver-face-selection auto_best_match \
   --driver-face-donor-bank-dir ./assets/driver-face-donors \
   --driver-face-preset fast \
-  --output ./shared/driver-facefusion-auto.mp4
+  --output ./shared/driver-facefusion-silhouette.mp4
 
 uv run python clip.py driver-debug --demo --length-seconds 20 \
   --driver-face-anonymization facefusion \
+  --driver-face-profile driver_unchanged_passenger_hidden \
+  --passenger-redaction-style blur \
   --driver-face-source-image ./assets/driver-face-donors/generic-donor-clean-shaven.jpg \
   --driver-face-preset fast \
   --output ./shared/driver-debug-facefusion.mp4
@@ -265,9 +271,11 @@ Notes:
 * `clip.py` is the primary local CLI for UI and non-UI renders
 * `driver-debug` is an openpilot-backed render type like `ui` and `ui-alt`, but it only needs `dcameras` and `logs`
 * `driver` and `driver-debug` can optionally anonymize the backing driver video with `--driver-face-anonymization facefusion`
-* `--driver-face-profile` controls the seat strategy, with `driver_unchanged_passenger_face_swap` for “show my real driver face, swap the passenger”, `driver_unchanged_passenger_pixelize` for “show my real driver face, hide the passenger”, `driver_face_swap_passenger_pixelize` as the cheaper mixed mode, and `driver_face_swap_passenger_face_swap` for swapping both front seats
-* That anonymization path reuses the repo-owned DM face track, swaps the prepared face crop with FaceFusion, then composites the swapped crop back into the full driver backing video before the final render
-* Every anonymized output now burns a bright mode-specific banner into the driver video, for example `PASSENGER PIXELIZED` or `DRIVER SWAPPED, PASSENGER PIXELIZED`, so viewers can tell what was actually changed
+* `--driver-face-profile` controls who is swapped versus hidden: `driver_unchanged_passenger_hidden`, `driver_unchanged_passenger_face_swap`, `driver_face_swap_passenger_hidden`, and `driver_face_swap_passenger_face_swap`
+* `--passenger-redaction-style` controls how hidden passengers are rendered and currently supports `blur` and `silhouette`
+* Old `...passenger_pixelize` profile slugs are still accepted as compatibility aliases, but they now map to hidden-passenger + `blur`
+* That anonymization path reuses the repo-owned DM face track, uses FaceFusion for swapped seats, and uses the shared RF-DETR full-body redaction path for hidden passengers before the final driver-video render
+* Every anonymized output now burns a bright mode-specific banner into the driver video, for example `PASSENGER BLURRED`, `PASSENGER SILHOUETTED`, or `DRIVER SWAPPED, PASSENGER BLURRED`, so viewers can tell what was actually changed
 * `--driver-face-preset fast` is the practical default for short clips, while `quality` trades more time for cleaner masking and higher-resolution swapping
 * `--driver-face-selection auto_best_match` runs a short same-tone donor search against the donor bank, writes a `<output>.driver-face-selection.json` sidecar report, then uses the selected donor for the final swap
 * `driver` anonymization also needs `logs`, because the face crop is driven by driver-monitoring telemetry rather than a fresh detector pass

@@ -12,8 +12,10 @@ MAX_LENGTH_SECONDS = 300
 
 GUI_ANONYMIZATION_PROFILE_MAP = {
     "none": ("none", "driver_face_swap_passenger_face_swap"),
+    "driver unchanged, passenger hidden": ("facefusion", "driver_unchanged_passenger_hidden"),
     "driver unchanged, passenger face swap": ("facefusion", "driver_unchanged_passenger_face_swap"),
     "driver unchanged, passenger pixelize": ("facefusion", "driver_unchanged_passenger_pixelize"),
+    "driver face swap, passenger hidden": ("facefusion", "driver_face_swap_passenger_hidden"),
     "driver face swap, passenger pixelize": ("facefusion", "driver_face_swap_passenger_pixelize"),
     "driver face swap, passenger face swap": ("facefusion", "driver_face_swap_passenger_face_swap"),
 }
@@ -76,15 +78,13 @@ class Predictor(BasePredictor):
             default="",
         ),
         anonymizationProfile: str = Input(
-            description="Seat anonymization strategy for driver-camera renders.",
-            choices=[
-                "none",
-                "driver unchanged, passenger face swap",
-                "driver unchanged, passenger pixelize",
-                "driver face swap, passenger pixelize",
-                "driver face swap, passenger face swap",
-            ],
+            description="Seat anonymization strategy for driver-camera renders. Recommended values are: none, driver unchanged/passenger hidden, driver unchanged/passenger face swap, driver face swap/passenger hidden, driver face swap/passenger face swap.",
             default="none",
+        ),
+        passengerRedactionStyle: str = Input(
+            description="How to hide the passenger when the chosen anonymization profile uses passenger hidden mode.",
+            choices=["blur", "silhouette"],
+            default="blur",
         ),
         notes: str = Input(description="Optional notes for your own reference. Does not affect output.", default=""),
     ) -> CogPath:
@@ -96,7 +96,10 @@ class Predictor(BasePredictor):
             error_message="Replicate/Cog route input must be a full https://connect.comma.ai/... clip URL.",
         )
 
-        driver_face_anonymization, driver_face_profile = GUI_ANONYMIZATION_PROFILE_MAP[anonymizationProfile]
+        try:
+            driver_face_anonymization, driver_face_profile = GUI_ANONYMIZATION_PROFILE_MAP[anonymizationProfile]
+        except KeyError as exc:
+            raise ValueError(f"Unsupported anonymization profile: {anonymizationProfile}") from exc
         result = run_clip(
             ClipRequest(
                 render_type=renderType,  # type: ignore[arg-type]
@@ -118,6 +121,7 @@ class Predictor(BasePredictor):
                 headless=True,
                 driver_face_anonymization=driver_face_anonymization,  # type: ignore[arg-type]
                 driver_face_profile=driver_face_profile,  # type: ignore[arg-type]
+                passenger_redaction_style=passengerRedactionStyle,  # type: ignore[arg-type]
                 driver_face_selection="auto_best_match",
             )
         )

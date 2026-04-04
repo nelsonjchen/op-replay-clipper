@@ -19,20 +19,23 @@ from renderers import video_renderer
 
 DriverFaceAnonymizationMode = Literal["none", "facefusion"]
 DriverFaceAnonymizationProfile = Literal[
+    "driver_unchanged_passenger_hidden",
     "driver_unchanged_passenger_face_swap",
     "driver_unchanged_passenger_pixelize",
+    "driver_face_swap_passenger_hidden",
     "driver_face_swap_passenger_face_swap",
     "driver_face_swap_passenger_pixelize",
 ]
 DriverFaceSwapPreset = Literal["fast", "quality"]
 DriverFaceSelectionMode = Literal["manual", "auto_best_match"]
-SeatAnonymizationMode = Literal["none", "facefusion", "pixelize"]
+PassengerRedactionStyle = Literal["blur", "silhouette"]
+SeatAnonymizationMode = Literal["none", "facefusion", "hidden"]
 
 DEFAULT_FACEFUSION_ROOT = "./.cache/facefusion"
 DEFAULT_DRIVER_FACE_SOURCE_IMAGE = "./assets/driver-face-donors/generic-donor-clean-shaven.jpg"
 DEFAULT_FACEFUSION_MODEL = "hyperswap_1b_256"
 DEFAULT_DRIVER_FACE_DONOR_BANK_DIR = "./assets/driver-face-donors"
-BACKING_CACHE_SCHEMA_VERSION = "driver-face-cache-v3"
+BACKING_CACHE_SCHEMA_VERSION = "driver-face-cache-v5"
 _CUDA_LIBRARY_SUBDIRS = (
     "cublas/lib",
     "cudnn/lib",
@@ -49,12 +52,17 @@ _SYSTEM_CUDA_LIBRARY_DIRS = (
     "/usr/local/nvidia/lib",
     "/usr/lib/x86_64-linux-gnu",
 )
+_PROFILE_COMPAT_ALIASES: dict[str, str] = {
+    "driver_unchanged_passenger_pixelize": "driver_unchanged_passenger_hidden",
+    "driver_face_swap_passenger_pixelize": "driver_face_swap_passenger_hidden",
+}
 
 
 @dataclass(frozen=True)
 class DriverFaceSwapOptions:
     mode: DriverFaceAnonymizationMode = "none"
     profile: DriverFaceAnonymizationProfile = "driver_face_swap_passenger_face_swap"
+    passenger_redaction_style: PassengerRedactionStyle = "blur"
     source_image: str = DEFAULT_DRIVER_FACE_SOURCE_IMAGE
     facefusion_root: str = DEFAULT_FACEFUSION_ROOT
     facefusion_model: str = DEFAULT_FACEFUSION_MODEL
@@ -85,6 +93,11 @@ def default_facefusion_model() -> str:
 
 def default_driver_face_donor_bank_dir() -> str:
     return os.environ.get("DRIVER_FACE_DONOR_BANK_DIR", DEFAULT_DRIVER_FACE_DONOR_BANK_DIR)
+
+
+def canonical_driver_face_profile(profile: str) -> DriverFaceAnonymizationProfile:
+    normalized = _PROFILE_COMPAT_ALIASES.get(profile, profile)
+    return normalized  # type: ignore[return-value]
 
 
 @lru_cache(maxsize=1)
@@ -219,10 +232,10 @@ def has_driver_face_anonymization(opts: DriverFaceSwapOptions) -> bool:
 def _seat_modes_for_profile(profile: DriverFaceAnonymizationProfile) -> tuple[SeatAnonymizationMode, SeatAnonymizationMode]:
     if profile == "driver_unchanged_passenger_face_swap":
         return "none", "facefusion"
-    if profile == "driver_unchanged_passenger_pixelize":
-        return "none", "pixelize"
-    if profile == "driver_face_swap_passenger_pixelize":
-        return "facefusion", "pixelize"
+    if profile in {"driver_unchanged_passenger_hidden", "driver_unchanged_passenger_pixelize"}:
+        return "none", "hidden"
+    if profile in {"driver_face_swap_passenger_hidden", "driver_face_swap_passenger_pixelize"}:
+        return "facefusion", "hidden"
     return "facefusion", "facefusion"
 
 
@@ -255,6 +268,7 @@ def _cache_paths(
         "length_seconds": length_seconds,
         "mode": options.mode,
         "profile": options.profile,
+        "passenger_redaction_style": options.passenger_redaction_style,
         "selection_mode": options.selection_mode,
         "preset": options.preset,
         "facefusion_model": options.facefusion_model,
@@ -285,7 +299,7 @@ def _seat_mode_counts(
     counts: dict[SeatAnonymizationMode, int] = {
         "none": 0,
         "facefusion": 0,
-        "pixelize": 0,
+        "hidden": 0,
     }
     for artifact in active_seats:
         counts[_seat_mode_for_role(options, artifact.seat_role)] += 1
@@ -305,18 +319,20 @@ def _banner_text_for_active_seats(
         else:
             active_passenger_mode = seat_mode
 
+    hidden_label = "BLURRED" if options.passenger_redaction_style == "blur" else "SILHOUETTED"
+
     if active_driver_mode == "facefusion" and active_passenger_mode == "facefusion":
         return "DRIVER/PASSENGER FACE SWAPPED"
-    if active_driver_mode == "facefusion" and active_passenger_mode == "pixelize":
-        return "DRIVER SWAPPED, PASSENGER PIXELIZED"
-    if active_driver_mode == "none" and active_passenger_mode == "pixelize":
-        return "PASSENGER PIXELIZED"
+    if active_driver_mode == "facefusion" and active_passenger_mode == "hidden":
+        return f"DRIVER SWAPPED, PASSENGER {hidden_label}"
+    if active_driver_mode == "none" and active_passenger_mode == "hidden":
+        return f"PASSENGER {hidden_label}"
     if active_driver_mode == "facefusion":
         return "DRIVER FACE SWAPPED"
     if active_passenger_mode == "facefusion":
         return "PASSENGER FACE SWAPPED"
-    if active_passenger_mode == "pixelize":
-        return "PASSENGER PIXELIZED"
+    if active_passenger_mode == "hidden":
+        return f"PASSENGER {hidden_label}"
     return "FACE ANONYMIZED"
 
 
@@ -758,6 +774,62 @@ def _manifest_has_active_crop(track_metadata: Path) -> bool:
     return False
 
 
+def _seat_processing_order(
+    artifact: PreparedSeatArtifacts,
+    *,
+    options: DriverFaceSwapOptions,
+) -> tuple[int, int]:
+    seat_mode = _seat_mode_for_role(options, artifact.seat_role)
+    if seat_mode == "hidden":
+        return (1, 0)
+    if artifact.seat_role == "driver":
+        return (0, 0)
+    return (0, 1)
+
+
+def _write_track_aliases(sample_dir: Path, seat_artifacts: list[PreparedSeatArtifacts]) -> None:
+    for artifact in seat_artifacts:
+        if artifact.seat_role == "driver":
+            shutil.copy2(artifact.track_metadata, sample_dir / "face-track.json")
+        elif artifact.seat_role == "passenger":
+            shutil.copy2(artifact.track_metadata, sample_dir / "passenger-face-track.json")
+
+
+def _run_hidden_passenger_redaction(
+    *,
+    sample_dir: Path,
+    source_path: Path,
+    output_path: Path,
+    track_metadata: Path,
+    options: DriverFaceSwapOptions,
+    banner_text: str,
+) -> tuple[Path, float]:
+    from core import driver_face_benchmark_worker
+
+    track = json.loads(track_metadata.read_text())
+    started = time.perf_counter()
+    driver_face_benchmark_worker.render_rf_detr_redacted_clip(
+        sample_dir=sample_dir,
+        output_path=output_path,
+        source_path=source_path,
+        source_kind="driver_face_swap_backing_video",
+        track=track,
+        model_id=driver_face_benchmark_worker.DEFAULT_RF_DETR_MODEL_ID,
+        threshold=driver_face_benchmark_worker.DEFAULT_RF_DETR_THRESHOLD,
+        frame_stride=driver_face_benchmark_worker.DEFAULT_RF_DETR_FRAME_STRIDE,
+        mask_dilate=driver_face_benchmark_worker.DEFAULT_RF_DETR_MASK_DILATE,
+        startup_hold_frames=driver_face_benchmark_worker.DEFAULT_RF_DETR_STARTUP_HOLD_FRAMES,
+        passenger_crop_margin_ratio=driver_face_benchmark_worker.DEFAULT_RF_DETR_PASSENGER_CROP_MARGIN_RATIO,
+        missing_hold_frames=driver_face_benchmark_worker.DEFAULT_RF_DETR_MISSING_HOLD_FRAMES,
+        target_side="passenger",
+        effect=options.passenger_redaction_style,
+        banner_text=banner_text,
+        source_clip_description="driver_face_swap_backing_video",
+        trim_startup_from_output=False,
+    )
+    return output_path, time.perf_counter() - started
+
+
 def render_anonymized_driver_backing_video(
     *,
     route: str,
@@ -828,21 +900,26 @@ def render_anonymized_driver_backing_video(
         if selection_report_path.exists():
             selection_report_path.unlink()
 
-        active_seats = [artifact for artifact in seat_artifacts if _manifest_has_active_crop(artifact.track_metadata)]
+        active_seats = [
+            artifact
+            for artifact in seat_artifacts
+            if _manifest_has_active_crop(artifact.track_metadata)
+            and _seat_mode_for_role(options, artifact.seat_role) != "none"
+        ]
         if not active_seats:
             output.write_bytes(source_clip.read_bytes())
             shutil.copy2(output, cache_video_path)
             return output
+        _write_track_aliases(sample_dir, seat_artifacts)
+        active_seats = sorted(active_seats, key=lambda artifact: _seat_processing_order(artifact, options=options))
         seat_mode_counts = _seat_mode_counts(active_seats, options)
         banner_text = _banner_text_for_active_seats(active_seats, options)
 
         facefusion_python = Path(options.facefusion_root).expanduser().resolve() / ".venv/bin/python"
-        if not facefusion_python.exists():
-            raise FileNotFoundError(f"FaceFusion interpreter not found at {facefusion_python}")
         current_source = source_clip
         total_transform_seconds = 0.0
         total_facefusion_seconds = 0.0
-        total_pixelize_seconds = 0.0
+        total_hidden_seconds = 0.0
         total_reintegrate_seconds = 0.0
 
         for seat_index, artifact in enumerate(active_seats):
@@ -875,11 +952,8 @@ def render_anonymized_driver_backing_video(
             swap_started = time.perf_counter()
             if seat_mode == "none":
                 swapped_crop = artifact.crop_clip
-            elif seat_mode == "pixelize":
-                swapped_crop = _run_pixelize_swap(
-                    target_path=artifact.crop_clip,
-                    output_path=sample_dir / f"{seat_key}-pixelized.mp4",
-                )
+            elif seat_mode == "hidden":
+                swapped_crop = current_source
             else:
                 swapped_crop = _run_facefusion_swap(
                     working_dir=sample_dir / f"{seat_key}-facefusion",
@@ -900,42 +974,53 @@ def render_anonymized_driver_backing_video(
             total_transform_seconds += seat_swap_seconds
             if seat_mode == "facefusion":
                 total_facefusion_seconds += seat_swap_seconds
-            elif seat_mode == "pixelize":
-                total_pixelize_seconds += seat_swap_seconds
-
-            reintegrate_started = time.perf_counter()
             intermediate_output = output if seat_index == len(active_seats) - 1 else sample_dir / f"composited-{seat_key}.mp4"
-            reintegrate_cmd = [
-                str(facefusion_python),
-                str((Path(__file__).resolve().parent / "driver_face_reintegrate.py").resolve()),
-                "--sample-dir",
-                str(sample_dir),
-                "--source-video",
-                str(current_source),
-                "--track-metadata",
-                str(artifact.track_metadata),
-                "--swapped-crop",
-                str(swapped_crop),
-                "--output-path",
-                str(intermediate_output),
-                "--mask-box",
-                "padded_box",
-                "--mask-expand",
-                "1.12",
-                "--feather-ratio",
-                "0.18",
-                "--banner-text",
-                banner_text if seat_index == len(active_seats) - 1 else "",
-            ]
-            subprocess.run(reintegrate_cmd, check=True)
-            seat_reintegrate_seconds = time.perf_counter() - reintegrate_started
+            if seat_mode == "hidden":
+                current_source, seat_reintegrate_seconds = _run_hidden_passenger_redaction(
+                    sample_dir=sample_dir,
+                    source_path=current_source,
+                    output_path=intermediate_output,
+                    track_metadata=artifact.track_metadata,
+                    options=options,
+                    banner_text=banner_text if seat_index == len(active_seats) - 1 else "",
+                )
+                total_hidden_seconds += seat_reintegrate_seconds
+                total_transform_seconds += seat_reintegrate_seconds
+            else:
+                reintegrate_started = time.perf_counter()
+                reintegrate_cmd = [
+                    str(facefusion_python),
+                    str((Path(__file__).resolve().parent / "driver_face_reintegrate.py").resolve()),
+                    "--sample-dir",
+                    str(sample_dir),
+                    "--source-video",
+                    str(current_source),
+                    "--track-metadata",
+                    str(artifact.track_metadata),
+                    "--swapped-crop",
+                    str(swapped_crop),
+                    "--output-path",
+                    str(intermediate_output),
+                    "--mask-box",
+                    "padded_box",
+                    "--mask-expand",
+                    "1.12",
+                    "--feather-ratio",
+                    "0.18",
+                    "--banner-text",
+                    banner_text if seat_index == len(active_seats) - 1 else "",
+                ]
+                subprocess.run(reintegrate_cmd, check=True)
+                seat_reintegrate_seconds = time.perf_counter() - reintegrate_started
+                current_source = intermediate_output
             total_reintegrate_seconds += seat_reintegrate_seconds
-            current_source = intermediate_output
 
             timings = seat_report.setdefault("timings", {})
             assert isinstance(timings, dict)
             timings["final_video_swap_seconds"] = seat_swap_seconds
             timings["reintegrate_seconds"] = seat_reintegrate_seconds
+            if seat_mode == "hidden":
+                timings["hidden_redaction_seconds"] = seat_reintegrate_seconds
             if seat_mode == "facefusion":
                 seat_report["selected_donor_image"] = str(selected_source_image)
             seat_report["output_video"] = str(current_source)
@@ -946,11 +1031,11 @@ def render_anonymized_driver_backing_video(
         assert isinstance(timings, dict)
         timings["active_seats"] = len(active_seats)
         timings["facefusion_seats"] = seat_mode_counts["facefusion"]
-        timings["pixelized_seats"] = seat_mode_counts["pixelize"]
+        timings["hidden_seats"] = seat_mode_counts["hidden"]
         timings["unchanged_seats"] = seat_mode_counts["none"]
         timings["transform_seconds"] = total_transform_seconds
         timings["facefusion_seconds"] = total_facefusion_seconds
-        timings["pixelize_seconds"] = total_pixelize_seconds
+        timings["hidden_seconds"] = total_hidden_seconds
         timings["final_video_swap_seconds"] = total_facefusion_seconds
         timings["reintegrate_seconds"] = total_reintegrate_seconds
         timings["total_request_seconds"] = total_seconds
@@ -961,10 +1046,10 @@ def render_anonymized_driver_backing_video(
             "Driver face anonymization timings: "
             f"active_seats={len(active_seats)}, "
             f"swapped_seats={seat_mode_counts['facefusion']}, "
-            f"pixelized_seats={seat_mode_counts['pixelize']}, "
+            f"hidden_seats={seat_mode_counts['hidden']}, "
             f"unchanged_seats={seat_mode_counts['none']}, "
             f"face_swap={total_facefusion_seconds:.2f}s, "
-            f"pixelize={total_pixelize_seconds:.2f}s, "
+            f"hidden={total_hidden_seconds:.2f}s, "
             f"reintegrate={total_reintegrate_seconds:.2f}s, "
             f"total={total_seconds:.2f}s"
         )

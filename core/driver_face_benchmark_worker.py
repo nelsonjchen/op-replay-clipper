@@ -33,6 +33,13 @@ RF_DETR_CANDIDATE_IDS = {
     "rf-detr-passenger-blur",
     "rf-detr-passenger-silhouette",
 }
+DEFAULT_RF_DETR_MODEL_ID = "rfdetr-seg-preview"
+DEFAULT_RF_DETR_THRESHOLD = 0.4
+DEFAULT_RF_DETR_FRAME_STRIDE = 5
+DEFAULT_RF_DETR_MASK_DILATE = 15
+DEFAULT_RF_DETR_STARTUP_HOLD_FRAMES = 6
+DEFAULT_RF_DETR_PASSENGER_CROP_MARGIN_RATIO = 0.10
+DEFAULT_RF_DETR_MISSING_HOLD_FRAMES = 10
 
 DM_INPUT_SIZE = (1440.0, 960.0)
 AR_OX_DRIVER_FRAME = (1928.0, 1208.0)
@@ -52,13 +59,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--facefusion-source-image")
     parser.add_argument("--facefusion-model", default="hyperswap_1b_256")
     parser.add_argument("--driver-face-donor-bank-dir", default="./assets/driver-face-donors")
-    parser.add_argument("--rf-detr-model-id", default="rfdetr-seg-preview")
-    parser.add_argument("--rf-detr-threshold", type=float, default=0.4)
-    parser.add_argument("--rf-detr-frame-stride", type=int, default=5)
-    parser.add_argument("--rf-detr-mask-dilate", type=int, default=15)
-    parser.add_argument("--rf-detr-startup-hold-frames", type=int, default=6)
-    parser.add_argument("--rf-detr-passenger-crop-margin-ratio", type=float, default=0.10)
-    parser.add_argument("--rf-detr-missing-hold-frames", type=int, default=10)
+    parser.add_argument("--rf-detr-model-id", default=DEFAULT_RF_DETR_MODEL_ID)
+    parser.add_argument("--rf-detr-threshold", type=float, default=DEFAULT_RF_DETR_THRESHOLD)
+    parser.add_argument("--rf-detr-frame-stride", type=int, default=DEFAULT_RF_DETR_FRAME_STRIDE)
+    parser.add_argument("--rf-detr-mask-dilate", type=int, default=DEFAULT_RF_DETR_MASK_DILATE)
+    parser.add_argument("--rf-detr-startup-hold-frames", type=int, default=DEFAULT_RF_DETR_STARTUP_HOLD_FRAMES)
+    parser.add_argument("--rf-detr-passenger-crop-margin-ratio", type=float, default=DEFAULT_RF_DETR_PASSENGER_CROP_MARGIN_RATIO)
+    parser.add_argument("--rf-detr-missing-hold-frames", type=int, default=DEFAULT_RF_DETR_MISSING_HOLD_FRAMES)
     parser.add_argument("--rf-detr-test-target-side", choices=("passenger", "driver"), default="passenger")
     return parser.parse_args()
 
@@ -79,6 +86,79 @@ def _pixelize_roi(frame, rect: tuple[int, int, int, int], *, block_size: int) ->
 
 def _intermediate_output_path(output_path: Path) -> Path:
     return output_path.with_name(f"{output_path.stem}.intermediate{output_path.suffix}")
+
+
+def _default_benchmark_data_root() -> Path:
+    override = os.environ.get("DRIVER_FACE_BENCHMARK_DATA_ROOT", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return (REPO_ROOT / "shared/data_dir").resolve()
+
+
+def _preferred_source_target_mb(length_seconds: int) -> int:
+    override = os.environ.get("DRIVER_FACE_BENCHMARK_SOURCE_TARGET_MB", "").strip()
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:
+            pass
+    # Aim closer to the underlying raw driver-camera data rate than the tiny
+    # convenience eval clip, while keeping the working clip size bounded.
+    return max(24, min(128, int(np.ceil(max(1, length_seconds) * 1.25))))
+
+
+def _route_data_dir_from_track(track: dict[str, object]) -> Path | None:
+    route = str(track.get("route") or "").strip()
+    if "|" not in route:
+        return None
+    dongle_id = route.split("|", 1)[0]
+    return (_default_benchmark_data_root() / dongle_id).resolve()
+
+
+def _raw_driver_segment_path_from_track(track: dict[str, object]) -> Path | None:
+    route = str(track.get("route") or "").strip()
+    if "|" not in route:
+        return None
+    _, route_date = route.split("|", 1)
+    data_dir = _route_data_dir_from_track(track)
+    if data_dir is None:
+        return None
+    start_seconds = int(track.get("start_seconds") or 0)
+    segment = max(0, start_seconds // 60)
+    candidate = data_dir / f"{route_date}--{segment}" / "dcamera.hevc"
+    if candidate.exists():
+        return candidate
+    return None
+
+
+def _resolve_preferred_source_clip(sample_dir: Path, track: dict[str, object]) -> tuple[Path, str]:
+    prepared_clip = sample_dir / "driver-source.mp4"
+    raw_driver_segment = _raw_driver_segment_path_from_track(track)
+    route = str(track.get("route") or "").strip()
+    start_seconds = int(track.get("start_seconds") or 0)
+    length_seconds = int(track.get("length_seconds") or 0)
+
+    if raw_driver_segment is None or not route or length_seconds <= 0:
+        return prepared_clip, "prepared_eval_h264_clip"
+
+    hq_clip = sample_dir / "driver-source-hq-hevc.mp4"
+    if not hq_clip.exists():
+        from renderers import video_renderer
+
+        video_renderer.render_video_clip(
+            video_renderer.VideoRenderOptions(
+                render_type="driver",
+                data_dir=str(raw_driver_segment.parent.parent),
+                route_or_segment=route,
+                start_seconds=start_seconds,
+                length_seconds=length_seconds,
+                target_mb=_preferred_source_target_mb(length_seconds),
+                file_format="hevc",
+                acceleration="auto",
+                output_path=str(hq_clip),
+            )
+        )
+    return hq_clip, "raw_hevc_derived_working_clip"
 
 
 def _default_rf_detr_device() -> str:
@@ -482,54 +562,6 @@ def _warp_mask_between_anchors(
     return warped.astype(bool)
 
 
-def _anchor_body_mask(
-    anchor_rect: tuple[int, int, int, int],
-    *,
-    frame_width: int,
-    frame_height: int,
-) -> np.ndarray:
-    x, y, w, h = anchor_rect
-    cx = int(round(x + (w / 2.0)))
-    mask = np.zeros((frame_height, frame_width), dtype=np.uint8)
-
-    head_center = (cx, int(round(y + (h * 0.30))))
-    head_axes = (
-        max(12, int(round(w * 0.23))),
-        max(14, int(round(h * 0.24))),
-    )
-    torso_center = (cx, int(round(y + (h * 1.02))))
-    torso_axes = (
-        max(18, int(round(w * 0.44))),
-        max(30, int(round(h * 0.74))),
-    )
-    lower_center = (cx, int(round(y + (h * 1.72))))
-    lower_axes = (
-        max(20, int(round(w * 0.38))),
-        max(24, int(round(h * 0.48))),
-    )
-
-    cv2.ellipse(mask, head_center, head_axes, 0, 0, 360, 255, -1, cv2.LINE_8)
-    cv2.ellipse(mask, torso_center, torso_axes, 0, 0, 360, 255, -1, cv2.LINE_8)
-    cv2.ellipse(mask, lower_center, lower_axes, 0, 0, 360, 255, -1, cv2.LINE_8)
-
-    shoulder_y = int(round(y + (h * 0.62)))
-    hip_y = int(round(y + (h * 1.78)))
-    shoulder_half_w = int(round(w * 0.42))
-    hip_half_w = int(round(w * 0.28))
-    polygon = np.array(
-        [
-            (max(0, cx - shoulder_half_w), max(0, shoulder_y)),
-            (min(frame_width - 1, cx + shoulder_half_w), max(0, shoulder_y)),
-            (min(frame_width - 1, cx + hip_half_w), min(frame_height - 1, hip_y)),
-            (max(0, cx - hip_half_w), min(frame_height - 1, hip_y)),
-        ],
-        dtype=np.int32,
-    )
-    cv2.fillConvexPoly(mask, polygon, 255, cv2.LINE_8)
-
-    return _dilate_mask(mask.astype(bool), kernel_size=17)
-
-
 def _fallback_mask_from_anchor(
     *,
     anchor_rect: tuple[int, int, int, int] | None,
@@ -538,22 +570,17 @@ def _fallback_mask_from_anchor(
     frame_width: int,
     frame_height: int,
 ) -> tuple[np.ndarray | None, str | None]:
-    if anchor_rect is None:
-        if previous_mask is None:
-            return None, None
+    del frame_width, frame_height
+    if previous_mask is None:
+        return None, None
+    if anchor_rect is None or previous_anchor_rect is None:
         return previous_mask.copy(), "held_previous_mask"
-
-    anchor_mask = _anchor_body_mask(anchor_rect, frame_width=frame_width, frame_height=frame_height)
-    if previous_mask is None or previous_anchor_rect is None:
-        return anchor_mask, "anchor_body_fallback"
-
     shifted_previous = _warp_mask_between_anchors(
         previous_mask,
         from_anchor_rect=previous_anchor_rect,
         to_anchor_rect=anchor_rect,
     )
-    combined = shifted_previous | anchor_mask
-    return combined, "anchor_shifted_mask_fallback"
+    return shifted_previous, "anchor_shifted_mask_fallback"
 
 
 def _choose_passenger_mask(
@@ -740,11 +767,7 @@ def _silhouette_mask(frame: np.ndarray, mask: np.ndarray, *, frame_index: int) -
     interior = mask.astype(np.uint8) * 255
     interior_alpha = cv2.GaussianBlur(interior, (0, 0), sigmaX=2.4, sigmaY=2.4).astype(np.float32) / 255.0
     interior_alpha[mask] = 1.0
-
-    luminance = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    luminance = cv2.GaussianBlur(luminance, (0, 0), sigmaX=8.0, sigmaY=8.0)
-    silhouette_fill = np.repeat(luminance[:, :, None], 3, axis=2).astype(np.float32)
-    silhouette_fill = silhouette_fill * 0.08 + 242.0 * 0.92
+    silhouette_fill = np.full_like(original, 252.0, dtype=np.float32)
 
     output = original.copy()
     inner_halo = _dilate_mask(mask, kernel_size=9) & ~mask
@@ -1101,10 +1124,12 @@ def _append_evaluation_markdown(path: Path, *, candidate_id: str, report: dict[s
         )
 
 
-def _run_rf_detr_passenger_effect(
+def render_rf_detr_redacted_clip(
     *,
     sample_dir: Path,
     output_path: Path,
+    source_path: Path,
+    source_kind: str,
     track: dict[str, object],
     model_id: str,
     threshold: float,
@@ -1113,12 +1138,15 @@ def _run_rf_detr_passenger_effect(
     startup_hold_frames: int,
     passenger_crop_margin_ratio: float,
     missing_hold_frames: int,
-    test_target_side: str,
+    target_side: str,
+    effect: str,
+    banner_text: str = "",
+    source_clip_description: str = "",
+    trim_startup_from_output: bool = True,
 ) -> dict[str, object]:
-    source_path = sample_dir / "driver-source.mp4"
     frames = list(track["frames"])
     device_type = track.get("device_type")
-    anchor_rows = _load_optional_anchor_rows(sample_dir, target_side=test_target_side)
+    anchor_rows = _load_optional_anchor_rows(sample_dir, target_side=target_side)
     capture = cv2.VideoCapture(str(source_path))
     if not capture.isOpened():
         raise RuntimeError(f"Failed to open source clip: {source_path}")
@@ -1138,7 +1166,6 @@ def _run_rf_detr_passenger_effect(
         raise RuntimeError(f"Failed to create output clip: {output_path}")
 
     candidate_id = output_path.stem
-    effect = _rf_detr_effect_for_candidate(candidate_id)
     model = _load_rf_detr_model(model_id)
     stride = max(1, int(frame_stride))
     last_mask: np.ndarray | None = None
@@ -1150,11 +1177,25 @@ def _run_rf_detr_passenger_effect(
     startup_mask_source_frame_index: int | None = None
     startup_hold = max(0, int(startup_hold_frames))
     startup_trimmed_frames = 0
+    startup_buffer: list[tuple[np.ndarray, dict[str, object]]] = []
     redacted_frames = 0
     detector_frames = 0
     output_frames = 0
     frame_reports: list[dict[str, object]] = []
     started = time.perf_counter()
+
+    def _emit_output_frame(frame_to_write: np.ndarray, detection_report: dict[str, object]) -> None:
+        nonlocal output_frames, redacted_frames
+        if last_mask is not None:
+            _apply_rf_detr_effect(frame_to_write, last_mask, effect=effect, frame_index=int(detection_report["frame_index"]))
+            redacted_frames += 1
+        if banner_text:
+            from core.driver_face_reintegrate import _draw_banner
+
+            _draw_banner(frame_to_write, banner_text)
+        writer.write(frame_to_write)
+        output_frames += 1
+        frame_reports.append(detection_report)
 
     try:
         for frame_index, frame_row in enumerate(frames):
@@ -1170,8 +1211,8 @@ def _run_rf_detr_passenger_effect(
                 "frame_index": frame_index,
                 "used_detector": rerun_detector,
                 "selected_side": frame_row.get("selected_side"),
-                "target_side": test_target_side,
-                "target_image_side": _target_side_for_frame(frame_row, target_side=test_target_side),
+                "target_side": target_side,
+                "target_image_side": _target_side_for_frame(frame_row, target_side=target_side),
             }
 
             if rerun_detector:
@@ -1182,7 +1223,7 @@ def _run_rf_detr_passenger_effect(
                     frame_height=height,
                     margin_ratio=passenger_crop_margin_ratio,
                     device_type=device_type,
-                    target_side=test_target_side,
+                    target_side=target_side,
                 )
                 crop_x, crop_y, crop_width, crop_height = crop_rect
                 cropped_frame = frame[crop_y: crop_y + crop_height, crop_x: crop_x + crop_width]
@@ -1201,7 +1242,7 @@ def _run_rf_detr_passenger_effect(
                     frame_height=height,
                     anchor_rect=anchor_rect,
                     crop_rect=crop_rect,
-                    target_side=test_target_side,
+                    target_side=target_side,
                 )
                 detection_report.update(selection_details)
                 detection_report["crop_rect"] = {
@@ -1276,18 +1317,21 @@ def _run_rf_detr_passenger_effect(
 
             should_trim_output = startup_mask_source_frame_index is None or frame_index < startup_hold
             if should_trim_output:
-                detection_report["startup_hidden_trimmed"] = True
+                detection_report["startup_hidden_trimmed"] = trim_startup_from_output
+                detection_report["startup_hidden_buffered"] = not trim_startup_from_output
                 startup_trimmed_frames += 1
+                if not trim_startup_from_output:
+                    startup_buffer.append((frame.copy(), detection_report))
+                    continue
                 frame_reports.append(detection_report)
                 continue
 
-            if last_mask is not None:
-                _apply_rf_detr_effect(frame, last_mask, effect=effect, frame_index=frame_index)
-                redacted_frames += 1
+            if startup_buffer:
+                for buffered_frame, buffered_report in startup_buffer:
+                    _emit_output_frame(buffered_frame, buffered_report)
+                startup_buffer.clear()
 
-            writer.write(frame)
-            output_frames += 1
-            frame_reports.append(detection_report)
+            _emit_output_frame(frame, detection_report)
     finally:
         capture.release()
         writer.release()
@@ -1299,6 +1343,7 @@ def _run_rf_detr_passenger_effect(
         "candidate_id": candidate_id,
         "sample_dir": str(sample_dir),
         "source_clip": str(source_path),
+        "source_clip_kind": source_kind,
         "output_clip": str(output_path),
         "source_frames_processed": len(frames),
         "frames_processed": output_frames,
@@ -1312,7 +1357,8 @@ def _run_rf_detr_passenger_effect(
         "rf_detr_mask_dilate": mask_dilate,
         "rf_detr_startup_hold_frames": startup_hold,
         "rf_detr_startup_hold_applied": startup_trimmed_frames,
-        "rf_detr_startup_hold_trimmed_from_output": startup_trimmed_frames,
+        "rf_detr_startup_hold_trimmed_from_output": startup_trimmed_frames if trim_startup_from_output else 0,
+        "rf_detr_startup_hold_buffered_in_output": startup_trimmed_frames if not trim_startup_from_output else 0,
         "rf_detr_passenger_crop_margin_ratio": passenger_crop_margin_ratio,
         "rf_detr_passenger_crop_strategy": "driver_debug_dm_input_passenger_half",
         "rf_detr_driver_monitoring_device_type": _normalize_driver_monitoring_device_type(
@@ -1320,26 +1366,62 @@ def _run_rf_detr_passenger_effect(
             frame_width=width,
             frame_height=height,
         ),
-        "rf_detr_test_target_side": test_target_side,
+        "rf_detr_test_target_side": target_side,
         "rf_detr_missing_hold_frames": missing_hold_frames,
         "rf_detr_effect": effect,
         "rf_detr_device": str(model.model.device),
         "output_video_encoder": _shareable_h264_encoder_name(),
         "startup_mask_source_frame_index": startup_mask_source_frame_index,
+        "trim_startup_from_output": trim_startup_from_output,
+        "source_clip_description": source_clip_description or source_kind,
         "frame_reports": frame_reports,
     }
+
+
+def _run_rf_detr_passenger_effect(
+    *,
+    sample_dir: Path,
+    output_path: Path,
+    source_path: Path,
+    source_kind: str,
+    track: dict[str, object],
+    model_id: str,
+    threshold: float,
+    frame_stride: int,
+    mask_dilate: int,
+    startup_hold_frames: int,
+    passenger_crop_margin_ratio: float,
+    missing_hold_frames: int,
+    test_target_side: str,
+) -> dict[str, object]:
+    return render_rf_detr_redacted_clip(
+        sample_dir=sample_dir,
+        output_path=output_path,
+        source_path=source_path,
+        source_kind=source_kind,
+        track=track,
+        model_id=model_id,
+        threshold=threshold,
+        frame_stride=frame_stride,
+        mask_dilate=mask_dilate,
+        startup_hold_frames=startup_hold_frames,
+        passenger_crop_margin_ratio=passenger_crop_margin_ratio,
+        missing_hold_frames=missing_hold_frames,
+        target_side=test_target_side,
+        effect=_rf_detr_effect_for_candidate(output_path.stem),
+    )
 
 
 def main() -> int:
     args = parse_args()
     sample_dir = Path(args.sample_dir).resolve()
     track_path = sample_dir / "face-track.json"
-    source_path = sample_dir / "driver-source.mp4"
     evaluation_path = sample_dir / "evaluation.md"
     output_path = sample_dir / f"{args.candidate_id}.mp4"
     report_path = sample_dir / f"{args.candidate_id}.json"
 
     track = json.loads(track_path.read_text())
+    source_path, source_kind = _resolve_preferred_source_clip(sample_dir, track)
     frames = list(track["frames"])
 
     if args.candidate_id in {"facefusion-hyperswap", "facefusion-auto-best-match"}:
@@ -1407,6 +1489,8 @@ def main() -> int:
         report = _run_rf_detr_passenger_effect(
             sample_dir=sample_dir,
             output_path=output_path,
+            source_path=source_path,
+            source_kind=source_kind,
             track=track,
             model_id=args.rf_detr_model_id,
             threshold=args.rf_detr_threshold,
@@ -1471,6 +1555,7 @@ def main() -> int:
         "candidate_id": args.candidate_id,
         "sample_dir": str(sample_dir),
         "source_clip": str(source_path),
+        "source_clip_kind": source_kind,
         "output_clip": str(output_path),
         "frames_processed": frame_count,
         "runtime_seconds": runtime_seconds,

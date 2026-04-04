@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
 from core import driver_face_swap
 
 
-def test_driver_unchanged_passenger_pixelize_profile_maps_to_expected_seat_modes() -> None:
+def test_driver_unchanged_passenger_hidden_profile_maps_to_expected_seat_modes() -> None:
+    driver_mode, passenger_mode = driver_face_swap._seat_modes_for_profile("driver_unchanged_passenger_hidden")
+
+    assert driver_mode == "none"
+    assert passenger_mode == "hidden"
+
+
+def test_driver_unchanged_passenger_pixelize_alias_maps_to_hidden_seat_mode() -> None:
     driver_mode, passenger_mode = driver_face_swap._seat_modes_for_profile("driver_unchanged_passenger_pixelize")
 
     assert driver_mode == "none"
-    assert passenger_mode == "pixelize"
+    assert passenger_mode == "hidden"
 
 
 def test_driver_unchanged_passenger_face_swap_profile_maps_to_expected_seat_modes() -> None:
@@ -20,11 +28,18 @@ def test_driver_unchanged_passenger_face_swap_profile_maps_to_expected_seat_mode
     assert passenger_mode == "facefusion"
 
 
-def test_driver_face_swap_passenger_pixelize_profile_maps_to_expected_seat_modes() -> None:
+def test_driver_face_swap_passenger_hidden_profile_maps_to_expected_seat_modes() -> None:
+    driver_mode, passenger_mode = driver_face_swap._seat_modes_for_profile("driver_face_swap_passenger_hidden")
+
+    assert driver_mode == "facefusion"
+    assert passenger_mode == "hidden"
+
+
+def test_driver_face_swap_passenger_pixelize_alias_maps_to_hidden_seat_mode() -> None:
     driver_mode, passenger_mode = driver_face_swap._seat_modes_for_profile("driver_face_swap_passenger_pixelize")
 
     assert driver_mode == "facefusion"
-    assert passenger_mode == "pixelize"
+    assert passenger_mode == "hidden"
 
 
 def test_seat_mode_counts_reflect_mixed_profile(tmp_path: Path) -> None:
@@ -47,15 +62,57 @@ def test_seat_mode_counts_reflect_mixed_profile(tmp_path: Path) -> None:
         active_seats,
         driver_face_swap.DriverFaceSwapOptions(
             mode="facefusion",
-            profile="driver_face_swap_passenger_pixelize",
+            profile="driver_face_swap_passenger_hidden",
         ),
     )
 
     assert counts == {
         "none": 0,
         "facefusion": 1,
-        "pixelize": 1,
+        "hidden": 1,
     }
+
+
+def test_canonical_driver_face_profile_normalizes_pixelize_aliases() -> None:
+    assert driver_face_swap.canonical_driver_face_profile("driver_unchanged_passenger_pixelize") == "driver_unchanged_passenger_hidden"
+    assert driver_face_swap.canonical_driver_face_profile("driver_face_swap_passenger_pixelize") == "driver_face_swap_passenger_hidden"
+
+
+def test_hidden_passenger_redaction_preserves_startup_frames_for_backing_video(monkeypatch, tmp_path: Path) -> None:
+    track_path = tmp_path / "passenger-face-track.json"
+    track_path.write_text(json.dumps({"frames": []}))
+    source_path = tmp_path / "source.mp4"
+    source_path.write_bytes(b"source")
+    output_path = tmp_path / "output.mp4"
+    captured: dict[str, object] = {}
+
+    def _fake_render_rf_detr_redacted_clip(**kwargs):
+        captured.update(kwargs)
+        return {}
+
+    monkeypatch.setattr(
+        "core.driver_face_benchmark_worker.render_rf_detr_redacted_clip",
+        _fake_render_rf_detr_redacted_clip,
+    )
+
+    result_path, elapsed = driver_face_swap._run_hidden_passenger_redaction(
+        sample_dir=tmp_path,
+        source_path=source_path,
+        output_path=output_path,
+        track_metadata=track_path,
+        options=driver_face_swap.DriverFaceSwapOptions(
+            mode="facefusion",
+            profile="driver_unchanged_passenger_hidden",
+            passenger_redaction_style="blur",
+        ),
+        banner_text="PASSENGER BLURRED",
+    )
+
+    assert result_path == output_path
+    assert elapsed >= 0
+    assert captured["trim_startup_from_output"] is False
+    assert captured["effect"] == "blur"
+    assert captured["banner_text"] == "PASSENGER BLURRED"
 
 
 def test_facefusion_command_swaps_all_faces_in_crop(tmp_path: Path, monkeypatch) -> None:

@@ -35,3 +35,29 @@ def test_default_facefusion_root_prefers_explicit_env(tmp_path, monkeypatch) -> 
     monkeypatch.setenv("FACEFUSION_ROOT", str(explicit))
 
     assert cog_predictor.default_facefusion_root(repo_root) == explicit.resolve()
+
+
+def test_gui_anonymization_profile_map_includes_hidden_profiles() -> None:
+    cog_predictor = _load_cog_predictor()
+
+    assert cog_predictor.GUI_ANONYMIZATION_PROFILE_MAP["driver unchanged, passenger hidden"] == (
+        "facefusion",
+        "driver_unchanged_passenger_hidden",
+    )
+    assert cog_predictor.GUI_ANONYMIZATION_PROFILE_MAP["driver face swap, passenger hidden"] == (
+        "facefusion",
+        "driver_face_swap_passenger_hidden",
+    )
+
+
+def test_gui_anonymization_profile_map_keeps_pixelize_aliases() -> None:
+    cog_predictor = _load_cog_predictor()
+
+    assert cog_predictor.GUI_ANONYMIZATION_PROFILE_MAP["driver unchanged, passenger pixelize"] == (
+        "facefusion",
+        "driver_unchanged_passenger_pixelize",
+    )
+    assert cog_predictor.GUI_ANONYMIZATION_PROFILE_MAP["driver face swap, passenger pixelize"] == (
+        "facefusion",
+        "driver_face_swap_passenger_pixelize",
+    )
