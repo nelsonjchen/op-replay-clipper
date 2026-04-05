@@ -428,6 +428,12 @@ def test_rf_detr_blur_backend_candidates_honors_cpu_override(monkeypatch) -> Non
     assert driver_face_benchmark_worker._rf_detr_blur_backend_candidates() == ["cpu"]
 
 
+def test_rf_detr_progress_interval_honors_override(monkeypatch) -> None:
+    monkeypatch.setenv("DRIVER_FACE_BENCHMARK_RF_DETR_PROGRESS_INTERVAL_SECONDS", "1.25")
+
+    assert driver_face_benchmark_worker._rf_detr_progress_interval_seconds() == 1.25
+
+
 def test_render_rf_detr_redacted_clip_logs_requested_and_actual_device(monkeypatch, tmp_path, capsys) -> None:
     frames = [np.zeros((4, 4, 3), dtype=np.uint8)]
     capture_state = {"index": 0}
@@ -488,6 +494,7 @@ def test_render_rf_detr_redacted_clip_logs_requested_and_actual_device(monkeypat
     monkeypatch.setattr(driver_face_benchmark_worker, "_finalize_shareable_mp4", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(driver_face_benchmark_worker, "_score_rf_detr_sample", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(driver_face_benchmark_worker, "_shareable_h264_encoder_name", lambda: "h264_nvenc")
+    monkeypatch.setenv("DRIVER_FACE_BENCHMARK_RF_DETR_PROGRESS_INTERVAL_SECONDS", "0")
 
     report = driver_face_benchmark_worker.render_rf_detr_redacted_clip(
         sample_dir=tmp_path,
@@ -509,6 +516,7 @@ def test_render_rf_detr_redacted_clip_logs_requested_and_actual_device(monkeypat
 
     stdout = capsys.readouterr().out
     assert "RF-DETR acceleration:" in stdout
+    assert "RF-DETR progress:" in stdout
     assert "RF-DETR runtime breakdown:" in stdout
     assert "requested_device=cuda" in stdout
     assert "actual_model_device=cuda" in stdout

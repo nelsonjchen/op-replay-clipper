@@ -51,6 +51,7 @@ DEFAULT_RF_DETR_PASSENGER_CROP_MARGIN_RATIO = 0.10
 DEFAULT_RF_DETR_MISSING_HOLD_FRAMES = 10
 DEFAULT_RF_DETR_BLUR_SIZE = 151
 DEFAULT_RF_DETR_BLUR_MASK_DILATE = 27
+DEFAULT_RF_DETR_PROGRESS_INTERVAL_SECONDS = 5.0
 
 DM_INPUT_SIZE = (1440.0, 960.0)
 AR_OX_DRIVER_FRAME = (1928.0, 1208.0)
@@ -314,6 +315,16 @@ def _rf_detr_blur_mask_dilate() -> int:
         except ValueError:
             pass
     return DEFAULT_RF_DETR_BLUR_MASK_DILATE
+
+
+def _rf_detr_progress_interval_seconds() -> float:
+    raw = os.environ.get("DRIVER_FACE_BENCHMARK_RF_DETR_PROGRESS_INTERVAL_SECONDS", "").strip()
+    if raw:
+        try:
+            return max(0.0, float(raw))
+        except ValueError:
+            pass
+    return DEFAULT_RF_DETR_PROGRESS_INTERVAL_SECONDS
 
 
 def _rf_detr_blur_filter_graph(*, backend: str, blur_size: int | None = None) -> str:
@@ -1203,6 +1214,29 @@ def render_rf_detr_redacted_clip(
     writer_seconds = 0.0
     finalize_seconds = 0.0
     started = time.perf_counter()
+    total_frames = len(frames)
+    progress_interval_seconds = _rf_detr_progress_interval_seconds()
+    last_progress_log_at = started
+
+    def _log_rf_detr_progress(*, frame_index: int, force: bool = False) -> None:
+        nonlocal last_progress_log_at
+        now = time.perf_counter()
+        if not force and progress_interval_seconds > 0.0 and now - last_progress_log_at < progress_interval_seconds:
+            return
+        last_progress_log_at = now
+        processed_frames = min(total_frames, frame_index + 1)
+        percent_complete = (processed_frames / total_frames) * 100.0 if total_frames else 100.0
+        print(
+            "RF-DETR progress: "
+            f"frame={processed_frames}/{total_frames} ({percent_complete:.1f}%), "
+            f"output={output_frames}, "
+            f"detector={detector_frames}, "
+            f"redacted={redacted_frames}, "
+            f"elapsed={now - started:.2f}s, "
+            f"detector_time={detector_seconds:.2f}s, "
+            f"effect_time={effect_seconds:.2f}s, "
+            f"writer_time={writer_seconds:.2f}s"
+        )
 
     def _emit_output_frame(frame_to_write: np.ndarray, detection_report: dict[str, object]) -> None:
         nonlocal output_frames, redacted_frames, effect_seconds, writer_seconds
@@ -1364,8 +1398,10 @@ def render_rf_detr_redacted_clip(
                 startup_trimmed_frames += 1
                 if not trim_startup_from_output:
                     startup_buffer.append((frame.copy(), detection_report))
+                    _log_rf_detr_progress(frame_index=frame_index)
                     continue
                 frame_reports.append(detection_report)
+                _log_rf_detr_progress(frame_index=frame_index)
                 continue
 
             if startup_buffer:
@@ -1374,6 +1410,7 @@ def render_rf_detr_redacted_clip(
                 startup_buffer.clear()
 
             _emit_output_frame(frame, detection_report)
+            _log_rf_detr_progress(frame_index=frame_index)
     finally:
         capture.release()
         writer.release()
@@ -1410,6 +1447,7 @@ def render_rf_detr_redacted_clip(
         "avg_effect_ms": round((effect_seconds / output_frames) * 1000.0, 2) if output_frames else 0.0,
         "avg_writer_ms": round((writer_seconds / output_frames) * 1000.0, 2) if output_frames else 0.0,
     }
+    _log_rf_detr_progress(frame_index=max(0, total_frames - 1), force=True)
     print(
         "RF-DETR runtime breakdown: "
         f"detector={detector_seconds:.2f}s/{detector_frames} frames, "
