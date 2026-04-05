@@ -6,6 +6,11 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
+from core.rf_detr_runtime import ensure_python_nvidia_libs_preferred, sync_python_nvidia_runtime_libs_to_system
+
+ensure_python_nvidia_libs_preferred()
+sync_python_nvidia_runtime_libs_to_system()
+
 from core.clip_orchestrator import (
     ClipRequest,
     RenderType,

@@ -17,6 +17,7 @@ FACEFUSION_PYTHON_VERSION="${FACEFUSION_PYTHON_VERSION:-3.12}"
 FACEFUSION_PREWARM_MODELS="${FACEFUSION_PREWARM_MODELS:-1}"
 FACEFUSION_PRUNE_VENV="${FACEFUSION_PRUNE_VENV:-1}"
 FACEFUSION_HARDLINK_DEDUPE="${FACEFUSION_HARDLINK_DEDUPE:-1}"
+FACEFUSION_PRUNE_UNUSED_PACKAGES="${FACEFUSION_PRUNE_UNUSED_PACKAGES:-1}"
 RF_DETR_PREWARM_WEIGHTS="${RF_DETR_PREWARM_WEIGHTS:-1}"
 RF_DETR_PREWARM_MODEL_IDS="${RF_DETR_PREWARM_MODEL_IDS:-rfdetr-seg-preview}"
 export RF_DETR_PREWARM_WEIGHTS RF_DETR_PREWARM_MODEL_IDS
@@ -406,6 +407,27 @@ PY
 
 dedupe_facefusion_venv_files() {
   dedupe_python_env_against_main_site_packages "${FACEFUSION_ROOT}" "FaceFusion virtualenv"
+}
+
+prune_facefusion_unused_runtime_packages() {
+  if [[ "${FACEFUSION_PRUNE_UNUSED_PACKAGES}" != "1" ]]; then
+    log_step "Skipping FaceFusion unused package pruning"
+    return
+  fi
+
+  log_step "Pruning FaceFusion web UI packages not used by hosted clip paths"
+  cd "${FACEFUSION_ROOT}"
+  . .venv/bin/activate
+  python -m pip uninstall -y \
+    gradio \
+    gradio_client \
+    gradio_rangeslider \
+    pandas \
+    fastapi \
+    starlette \
+    uvicorn \
+    websockets \
+    orjson || true
 }
 
 dedupe_openpilot_venv_files() {
@@ -844,6 +866,7 @@ main() {
   install_facefusion_runtime
   prewarm_facefusion_models
   dedupe_facefusion_venv_files
+  prune_facefusion_unused_runtime_packages
   prune_facefusion_venv
   deactivate_facefusion_venv
   prune_facefusion_checkout

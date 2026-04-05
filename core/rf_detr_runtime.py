@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import stat
 import warnings
 from collections.abc import Iterable
 from functools import lru_cache
@@ -84,15 +85,24 @@ def sync_python_nvidia_runtime_libs_to_system(system_lib_dir: str = "/usr/lib/x8
     target_root = Path(system_lib_dir)
     if os.name != "posix" or not target_root.exists():
         return ()
+    try:
+        target_mode = target_root.stat().st_mode
+    except OSError:
+        return ()
+    if not (target_mode & stat.S_IWUSR):
+        return ()
     linked: list[str] = []
     for lib_dir in _python_nvidia_lib_dirs():
         for lib_file in sorted(Path(lib_dir).glob("lib*.so*")):
             if lib_file.is_dir():
                 continue
             target = target_root / lib_file.name
-            if target.exists() or target.is_symlink():
-                target.unlink()
-            target.symlink_to(lib_file)
+            try:
+                if target.exists() or target.is_symlink():
+                    target.unlink()
+                target.symlink_to(lib_file)
+            except OSError:
+                continue
             linked.append(str(target))
     return tuple(linked)
 
