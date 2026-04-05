@@ -49,6 +49,8 @@ DEFAULT_RF_DETR_MASK_DILATE = 15
 DEFAULT_RF_DETR_STARTUP_HOLD_FRAMES = 6
 DEFAULT_RF_DETR_PASSENGER_CROP_MARGIN_RATIO = 0.10
 DEFAULT_RF_DETR_MISSING_HOLD_FRAMES = 10
+DEFAULT_RF_DETR_BLUR_SIZE = 71
+DEFAULT_RF_DETR_BLUR_MASK_DILATE = 11
 
 DM_INPUT_SIZE = (1440.0, 960.0)
 AR_OX_DRIVER_FRAME = (1928.0, 1208.0)
@@ -294,7 +296,28 @@ def _rf_detr_blur_backend_candidates() -> list[str]:
     return ["cpu"]
 
 
-def _rf_detr_blur_filter_graph(*, backend: str, blur_size: int = 37) -> str:
+def _rf_detr_blur_size() -> int:
+    raw = os.environ.get("DRIVER_FACE_BENCHMARK_RF_DETR_BLUR_SIZE", "").strip()
+    if raw:
+        try:
+            return max(3, min(255, int(raw)))
+        except ValueError:
+            pass
+    return DEFAULT_RF_DETR_BLUR_SIZE
+
+
+def _rf_detr_blur_mask_dilate() -> int:
+    raw = os.environ.get("DRIVER_FACE_BENCHMARK_RF_DETR_BLUR_MASK_DILATE", "").strip()
+    if raw:
+        try:
+            return max(0, min(255, int(raw)))
+        except ValueError:
+            pass
+    return DEFAULT_RF_DETR_BLUR_MASK_DILATE
+
+
+def _rf_detr_blur_filter_graph(*, backend: str, blur_size: int | None = None) -> str:
+    blur_size = _rf_detr_blur_size() if blur_size is None else blur_size
     if backend == "opencl":
         return (
             f"[0:v]format=yuv420p,split=2[base][to_blur];"
@@ -738,8 +761,9 @@ def _dilate_mask(mask: np.ndarray, *, kernel_size: int) -> np.ndarray:
 
 
 def _blur_mask(frame: np.ndarray, mask: np.ndarray) -> None:
-    blurred = cv2.GaussianBlur(frame, (0, 0), sigmaX=18, sigmaY=18)
-    frame[mask] = blurred[mask]
+    blur_mask = _dilate_mask(mask, kernel_size=_rf_detr_blur_mask_dilate())
+    blurred = cv2.GaussianBlur(frame, (0, 0), sigmaX=28, sigmaY=28)
+    frame[blur_mask] = blurred[blur_mask]
 
 
 def _silhouette_mask(frame: np.ndarray, mask: np.ndarray, *, frame_index: int) -> None:
@@ -1190,7 +1214,8 @@ def render_rf_detr_redacted_clip(
         if effect == "blur" and mask_writer is not None:
             mask_frame = np.zeros_like(frame_to_write)
             if last_mask is not None:
-                mask_frame[last_mask] = 255
+                blur_mask = _dilate_mask(last_mask, kernel_size=_rf_detr_blur_mask_dilate())
+                mask_frame[blur_mask] = 255
                 redacted_frames += 1
             effect_seconds += time.perf_counter() - effect_started
             writer_started = time.perf_counter()
