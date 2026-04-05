@@ -495,10 +495,13 @@ def test_render_rf_detr_redacted_clip_logs_requested_and_actual_device(monkeypat
 
     stdout = capsys.readouterr().out
     assert "RF-DETR acceleration:" in stdout
+    assert "RF-DETR runtime breakdown:" in stdout
     assert "requested_device=cuda" in stdout
     assert "actual_model_device=cuda" in stdout
     assert report["rf_detr_requested_device"] == "cuda"
     assert report["rf_detr_device"] == "cuda"
+    assert report["runtime_breakdown"]["detector_frames"] == 1
+    assert report["runtime_breakdown"]["output_frames"] == 1
 
 
 def test_silhouette_mask_replaces_masked_region_with_bright_silhouette() -> None:
@@ -521,7 +524,4 @@ def test_silhouette_mask_border_is_static_for_cutout_effect() -> None:
     driver_face_benchmark_worker._silhouette_mask(frame_a, mask, frame_index=0)
     driver_face_benchmark_worker._silhouette_mask(frame_b, mask, frame_index=4)
 
-    border_alpha = driver_face_benchmark_worker._dashed_contour_alpha(mask, offset_kernel=7, dash_length=12.0, gap_length=7.0, thickness=2, scale=3)
-    border = border_alpha > 0.05
-    assert np.any(border)
-    assert np.all(frame_a[border] == frame_b[border])
+    assert np.array_equal(frame_a, frame_b)

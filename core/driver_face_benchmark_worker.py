@@ -604,118 +604,26 @@ def _blur_mask(frame: np.ndarray, mask: np.ndarray) -> None:
     frame[mask] = blurred[mask]
 
 
-def _shift_mask(mask: np.ndarray, *, x: int = 0, y: int = 0) -> np.ndarray:
-    shifted = np.zeros_like(mask)
-    src_y_start = max(0, -y)
-    src_y_end = mask.shape[0] - max(0, y)
-    dst_y_start = max(0, y)
-    dst_y_end = dst_y_start + max(0, src_y_end - src_y_start)
-    src_x_start = max(0, -x)
-    src_x_end = mask.shape[1] - max(0, x)
-    dst_x_start = max(0, x)
-    dst_x_end = dst_x_start + max(0, src_x_end - src_x_start)
-    if src_y_start >= src_y_end or src_x_start >= src_x_end:
-        return shifted
-    shifted[dst_y_start:dst_y_end, dst_x_start:dst_x_end] = mask[src_y_start:src_y_end, src_x_start:src_x_end]
-    return shifted
-
-
-def _dashed_contour_alpha(
-    mask: np.ndarray,
-    *,
-    offset_kernel: int = 7,
-    dash_length: float = 12.0,
-    gap_length: float = 7.0,
-    thickness: int = 2,
-    scale: int = 3,
-) -> np.ndarray:
-    expanded = _dilate_mask(mask, kernel_size=offset_kernel).astype(np.uint8) * 255
-    scale = max(1, int(scale))
-    high_res_shape = (expanded.shape[1] * scale, expanded.shape[0] * scale)
-    contour_input = cv2.resize(expanded, high_res_shape, interpolation=cv2.INTER_NEAREST)
-    contours, _ = cv2.findContours(contour_input, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    dashed = np.zeros_like(contour_input)
-    cycle_length = max(1.0, dash_length + gap_length)
-
-    for contour in contours:
-        points = contour[:, 0, :]
-        if len(points) < 2:
-            continue
-
-        distance_along = 0.0
-        for index in range(len(points)):
-            start = points[index].astype(np.float32)
-            end = points[(index + 1) % len(points)].astype(np.float32)
-            segment = end - start
-            segment_length = float(np.linalg.norm(segment))
-            if segment_length <= 0.0:
-                continue
-
-            direction = segment / segment_length
-            cursor = 0.0
-            while cursor < segment_length:
-                phase = distance_along % cycle_length
-                remaining_segment = segment_length - cursor
-                if phase < dash_length:
-                    draw_length = min(dash_length - phase, remaining_segment)
-                    draw_start = start + direction * cursor
-                    draw_end = start + direction * (cursor + draw_length)
-                    cv2.line(
-                        dashed,
-                        tuple(np.rint(draw_start).astype(int)),
-                        tuple(np.rint(draw_end).astype(int)),
-                        255,
-                        thickness=max(1, thickness * scale),
-                        lineType=cv2.LINE_8,
-                    )
-                    cursor += draw_length
-                    distance_along += draw_length
-                else:
-                    skip_length = min(cycle_length - phase, remaining_segment)
-                    cursor += skip_length
-                    distance_along += skip_length
-
-    low_res = cv2.resize(dashed, (mask.shape[1], mask.shape[0]), interpolation=cv2.INTER_NEAREST)
-    return (low_res > 0).astype(np.float32)
-
-
 def _silhouette_mask(frame: np.ndarray, mask: np.ndarray, *, frame_index: int) -> None:
     if not np.any(mask):
         return
 
     del frame_index
-    original = frame.astype(np.float32)
-    interior = mask.astype(np.uint8) * 255
-    interior_alpha = cv2.GaussianBlur(interior, (0, 0), sigmaX=2.4, sigmaY=2.4).astype(np.float32) / 255.0
-    interior_alpha[mask] = 1.0
-    silhouette_fill = np.full_like(original, 252.0, dtype=np.float32)
+    contour_mask = mask.astype(np.uint8) * 255
+    contours, _ = cv2.findContours(contour_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return
 
-    output = original.copy()
-    inner_halo = _dilate_mask(mask, kernel_size=9) & ~mask
-    outer_halo = _dilate_mask(mask, kernel_size=17) & ~_dilate_mask(mask, kernel_size=7)
-    fringe_specs = (
-        (_shift_mask(inner_halo, x=-2), np.array((255.0, 250.0, 210.0), dtype=np.float32), 0.18),
-        (_shift_mask(inner_halo, x=2), np.array((228.0, 220.0, 255.0), dtype=np.float32), 0.15),
-        (_shift_mask(outer_halo, x=-3), np.array((255.0, 245.0, 215.0), dtype=np.float32), 0.06),
-        (_shift_mask(outer_halo, x=3), np.array((212.0, 205.0, 255.0), dtype=np.float32), 0.05),
-    )
-    for halo_mask, color, strength in fringe_specs:
-        halo_alpha = cv2.GaussianBlur((halo_mask.astype(np.uint8) * 255), (0, 0), sigmaX=2.0, sigmaY=2.0).astype(np.float32) / 255.0
-        halo_alpha *= strength
-        output = output * (1.0 - halo_alpha[:, :, None]) + color * halo_alpha[:, :, None]
+    approx_contours = [
+        cv2.approxPolyDP(contour, epsilon=max(2.0, 0.01 * cv2.arcLength(contour, True)), closed=True)
+        for contour in contours
+        if len(contour) >= 3
+    ]
+    if not approx_contours:
+        return
 
-    output = output * (1.0 - interior_alpha[:, :, None]) + silhouette_fill * interior_alpha[:, :, None]
-
-    cutout_matte = _dilate_mask(mask, kernel_size=15) & ~mask
-    matte_alpha = cv2.GaussianBlur((cutout_matte.astype(np.uint8) * 255), (0, 0), sigmaX=0.55, sigmaY=0.55).astype(np.float32) / 255.0
-    border_line = _dashed_contour_alpha(mask, offset_kernel=15, dash_length=52.0, gap_length=64.0, thickness=6, scale=4)
-    line_alpha = border_line
-    if np.any(matte_alpha > 0):
-        output = output * (1.0 - matte_alpha[:, :, None]) + np.array((255.0, 255.0, 255.0), dtype=np.float32) * matte_alpha[:, :, None]
-    if np.any(line_alpha > 0):
-        output = output * (1.0 - line_alpha[:, :, None]) + np.array((0.0, 0.0, 0.0), dtype=np.float32) * line_alpha[:, :, None]
-
-    frame[:] = np.clip(output, 0, 255).astype(np.uint8)
+    frame[mask] = 255
+    cv2.drawContours(frame, approx_contours, -1, (255, 255, 255), thickness=cv2.FILLED, lineType=cv2.LINE_AA)
 
 
 def _apply_rf_detr_effect(
@@ -1113,10 +1021,16 @@ def render_rf_detr_redacted_clip(
     detector_frames = 0
     output_frames = 0
     frame_reports: list[dict[str, object]] = []
+    read_seconds = 0.0
+    detector_seconds = 0.0
+    effect_seconds = 0.0
+    writer_seconds = 0.0
+    finalize_seconds = 0.0
     started = time.perf_counter()
 
     def _emit_output_frame(frame_to_write: np.ndarray, detection_report: dict[str, object]) -> None:
-        nonlocal output_frames, redacted_frames
+        nonlocal output_frames, redacted_frames, effect_seconds, writer_seconds
+        effect_started = time.perf_counter()
         if last_mask is not None:
             _apply_rf_detr_effect(frame_to_write, last_mask, effect=effect, frame_index=int(detection_report["frame_index"]))
             redacted_frames += 1
@@ -1124,13 +1038,18 @@ def render_rf_detr_redacted_clip(
             from core.driver_face_reintegrate import _draw_banner
 
             _draw_banner(frame_to_write, banner_text)
+        effect_seconds += time.perf_counter() - effect_started
+        writer_started = time.perf_counter()
         writer.write(frame_to_write)
+        writer_seconds += time.perf_counter() - writer_started
         output_frames += 1
         frame_reports.append(detection_report)
 
     try:
         for frame_index, frame_row in enumerate(frames):
+            read_started = time.perf_counter()
             ok, frame = capture.read()
+            read_seconds += time.perf_counter() - read_started
             if not ok:
                 raise RuntimeError(f"Video ended early at frame {frame_index}")
 
@@ -1147,6 +1066,7 @@ def render_rf_detr_redacted_clip(
             }
 
             if rerun_detector:
+                detector_started = time.perf_counter()
                 detector_frames += 1
                 crop_rect = _passenger_crop_rect(
                     frame_row=frame_row,
@@ -1229,6 +1149,7 @@ def render_rf_detr_redacted_clip(
                                 startup_mask_source_frame_index = frame_index
                     elif last_mask is None:
                         last_mask_box = None
+                detector_seconds += time.perf_counter() - detector_started
             elif last_mask_box is not None:
                 detection_report["reason"] = "reused_previous_mask"
                 detection_report["mask_box"] = {
@@ -1267,9 +1188,36 @@ def render_rf_detr_redacted_clip(
         capture.release()
         writer.release()
 
+    finalize_started = time.perf_counter()
     _finalize_shareable_mp4(intermediate_output_path, output_path)
+    finalize_seconds = time.perf_counter() - finalize_started
 
     runtime_seconds = time.perf_counter() - started
+    runtime_breakdown = {
+        "read_seconds": round(read_seconds, 4),
+        "detector_seconds": round(detector_seconds, 4),
+        "effect_seconds": round(effect_seconds, 4),
+        "writer_seconds": round(writer_seconds, 4),
+        "finalize_seconds": round(finalize_seconds, 4),
+        "untracked_seconds": round(
+            max(0.0, runtime_seconds - read_seconds - detector_seconds - effect_seconds - writer_seconds - finalize_seconds),
+            4,
+        ),
+        "detector_frames": detector_frames,
+        "output_frames": output_frames,
+        "avg_detector_ms": round((detector_seconds / detector_frames) * 1000.0, 2) if detector_frames else 0.0,
+        "avg_effect_ms": round((effect_seconds / output_frames) * 1000.0, 2) if output_frames else 0.0,
+        "avg_writer_ms": round((writer_seconds / output_frames) * 1000.0, 2) if output_frames else 0.0,
+    }
+    print(
+        "RF-DETR runtime breakdown: "
+        f"detector={detector_seconds:.2f}s/{detector_frames} frames, "
+        f"effect={effect_seconds:.2f}s/{output_frames} frames, "
+        f"writer={writer_seconds:.2f}s/{output_frames} frames, "
+        f"finalize={finalize_seconds:.2f}s, "
+        f"read={read_seconds:.2f}s, "
+        f"other={max(0.0, runtime_breakdown['untracked_seconds']):.2f}s"
+    )
     return {
         "candidate_id": candidate_id,
         "sample_dir": str(sample_dir),
@@ -1306,6 +1254,7 @@ def render_rf_detr_redacted_clip(
         "startup_mask_source_frame_index": startup_mask_source_frame_index,
         "trim_startup_from_output": trim_startup_from_output,
         "source_clip_description": source_clip_description or source_kind,
+        "runtime_breakdown": runtime_breakdown,
         "frame_reports": frame_reports,
     }
 

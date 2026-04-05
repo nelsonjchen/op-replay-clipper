@@ -1002,6 +1002,7 @@ def render_anonymized_driver_backing_video(
                 seat_report["hidden_redaction"] = {
                     "candidate_id": hidden_report.get("candidate_id"),
                     "rf_detr_device": hidden_report.get("rf_detr_device"),
+                    "rf_detr_requested_device": hidden_report.get("rf_detr_requested_device"),
                     "rf_detr_model_id": hidden_report.get("rf_detr_model_id"),
                     "rf_detr_threshold": hidden_report.get("rf_detr_threshold"),
                     "rf_detr_frame_stride": hidden_report.get("rf_detr_frame_stride"),
@@ -1013,6 +1014,7 @@ def render_anonymized_driver_backing_video(
                     "redacted_frames": hidden_report.get("redacted_frames"),
                     "detector_frames": hidden_report.get("detector_frames"),
                     "runtime_seconds": hidden_report.get("runtime_seconds"),
+                    "runtime_breakdown": hidden_report.get("runtime_breakdown"),
                     "startup_mask_source_frame_index": hidden_report.get("startup_mask_source_frame_index"),
                 }
             else:
