@@ -414,6 +414,93 @@ def test_default_rf_detr_device_honors_override(monkeypatch) -> None:
     assert driver_face_benchmark_worker._default_rf_detr_device() == "cpu"
 
 
+def test_render_rf_detr_redacted_clip_logs_requested_and_actual_device(monkeypatch, tmp_path, capsys) -> None:
+    frames = [np.zeros((4, 4, 3), dtype=np.uint8)]
+    capture_state = {"index": 0}
+
+    class _FakeCapture:
+        def isOpened(self) -> bool:
+            return True
+
+        def get(self, prop: int) -> float:
+            if prop == driver_face_benchmark_worker.cv2.CAP_PROP_FRAME_WIDTH:
+                return 4
+            if prop == driver_face_benchmark_worker.cv2.CAP_PROP_FRAME_HEIGHT:
+                return 4
+            if prop == driver_face_benchmark_worker.cv2.CAP_PROP_FPS:
+                return 20.0
+            return 0.0
+
+        def read(self):
+            idx = capture_state["index"]
+            if idx >= len(frames):
+                return False, None
+            capture_state["index"] += 1
+            return True, frames[idx].copy()
+
+        def release(self) -> None:
+            return None
+
+    class _FakeWriter:
+        def isOpened(self) -> bool:
+            return True
+
+        def write(self, _frame) -> None:
+            return None
+
+        def release(self) -> None:
+            return None
+
+    monkeypatch.setattr(driver_face_benchmark_worker.cv2, "VideoCapture", lambda _path: _FakeCapture())
+    monkeypatch.setattr(driver_face_benchmark_worker.cv2, "VideoWriter", lambda *args, **kwargs: _FakeWriter())
+    monkeypatch.setattr(driver_face_benchmark_worker.cv2, "VideoWriter_fourcc", lambda *args: 0)
+    monkeypatch.setattr(driver_face_benchmark_worker.cv2, "cvtColor", lambda frame, _code: frame)
+    monkeypatch.setattr(driver_face_benchmark_worker, "_load_rf_detr_model", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(driver_face_benchmark_worker, "_default_rf_detr_device", lambda: "cuda")
+    monkeypatch.setattr(driver_face_benchmark_worker, "_rf_detr_model_device", lambda _model: "cuda")
+    monkeypatch.setattr(driver_face_benchmark_worker, "_predict_rf_detr", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(driver_face_benchmark_worker, "_expand_crop_detections_to_full_frame", lambda detections, **_kwargs: detections)
+    monkeypatch.setattr(
+        driver_face_benchmark_worker,
+        "_choose_passenger_mask",
+        lambda *args, **kwargs: (
+            np.ones((4, 4), dtype=bool),
+            {"reason": "selected", "target_side": "passenger", "target_image_side": "right"},
+        ),
+    )
+    monkeypatch.setattr(driver_face_benchmark_worker, "_passenger_crop_rect", lambda **_kwargs: (0, 0, 4, 4))
+    monkeypatch.setattr(driver_face_benchmark_worker, "_dilate_mask", lambda mask, **_kwargs: mask)
+    monkeypatch.setattr(driver_face_benchmark_worker, "_box_from_mask", lambda _mask: (0, 0, 4, 4))
+    monkeypatch.setattr(driver_face_benchmark_worker, "_finalize_shareable_mp4", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(driver_face_benchmark_worker, "_score_rf_detr_sample", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(driver_face_benchmark_worker, "_shareable_h264_encoder_name", lambda: "h264_nvenc")
+
+    report = driver_face_benchmark_worker.render_rf_detr_redacted_clip(
+        sample_dir=tmp_path,
+        output_path=tmp_path / "rf-detr-passenger-silhouette.mp4",
+        source_path=tmp_path / "source.mp4",
+        source_kind="prepared_eval_h264_clip",
+        track={"frames": [{"selected_side": "left"}], "device_type": "tizi"},
+        model_id="rfdetr-seg-preview",
+        threshold=0.3,
+        frame_stride=1,
+        mask_dilate=0,
+        startup_hold_frames=0,
+        passenger_crop_margin_ratio=0.1,
+        missing_hold_frames=0,
+        target_side="passenger",
+        effect="silhouette",
+        trim_startup_from_output=False,
+    )
+
+    stdout = capsys.readouterr().out
+    assert "RF-DETR acceleration:" in stdout
+    assert "requested_device=cuda" in stdout
+    assert "actual_model_device=cuda" in stdout
+    assert report["rf_detr_requested_device"] == "cuda"
+    assert report["rf_detr_device"] == "cuda"
+
+
 def test_silhouette_mask_replaces_masked_region_with_bright_silhouette() -> None:
     frame = np.zeros((25, 25, 3), dtype=np.uint8)
     mask = np.zeros((25, 25), dtype=bool)

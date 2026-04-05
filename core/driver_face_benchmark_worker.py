@@ -1087,7 +1087,17 @@ def render_rf_detr_redacted_clip(
         raise RuntimeError(f"Failed to create output clip: {output_path}")
 
     candidate_id = output_path.stem
-    model = _load_rf_detr_model(model_id, device=_default_rf_detr_device())
+    requested_device = _default_rf_detr_device()
+    model = _load_rf_detr_model(model_id, device=requested_device)
+    actual_device = _rf_detr_model_device(model)
+    print(
+        "RF-DETR acceleration: "
+        f"candidate_id={candidate_id}, "
+        f"requested_device={requested_device}, "
+        f"actual_model_device={actual_device}, "
+        f"model_id={model_id}, "
+        f"effect={effect}"
+    )
     stride = max(1, int(frame_stride))
     last_mask: np.ndarray | None = None
     last_mask_box: tuple[int, int, int, int] | None = None
@@ -1290,7 +1300,8 @@ def render_rf_detr_redacted_clip(
         "rf_detr_test_target_side": target_side,
         "rf_detr_missing_hold_frames": missing_hold_frames,
         "rf_detr_effect": effect,
-        "rf_detr_device": _rf_detr_model_device(model),
+        "rf_detr_requested_device": requested_device,
+        "rf_detr_device": actual_device,
         "output_video_encoder": _shareable_h264_encoder_name(),
         "startup_mask_source_frame_index": startup_mask_source_frame_index,
         "trim_startup_from_output": trim_startup_from_output,
