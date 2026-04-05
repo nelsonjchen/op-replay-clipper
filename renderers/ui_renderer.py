@@ -21,6 +21,8 @@ from core.render_runtime import configure_ui_environment, temporary_headless_dis
 
 UI_STARTUP_WARMUP_SECONDS = 1
 UI_FRAMERATE = 20
+UI_GOP_SECONDS = 1
+UI_GOP_FRAMES = UI_FRAMERATE * UI_GOP_SECONDS
 UI_LAYOUT_MODES = ("default", "alt")
 UIRecordingAcceleration = Literal["auto", "cpu", "videotoolbox", "nvidia"]
 
@@ -181,6 +183,7 @@ def _configure_ui_recording_encoder(
     file_format: str,
     acceleration: UIRecordingAcceleration = "auto",
 ) -> str:
+    env["RECORD_GOP_FRAMES"] = str(UI_GOP_FRAMES)
     if acceleration == "auto":
         if _has_nvidia():
             acceleration = "nvidia"
