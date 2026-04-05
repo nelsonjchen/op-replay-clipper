@@ -148,6 +148,55 @@ def test_create_prediction_uses_version_hash_when_model_is_pinned(monkeypatch) -
     create.assert_called_once_with(version="abc123", input={"route": "x"})
 
 
+def test_create_prediction_uses_http_fallback_when_sdk_unavailable(monkeypatch) -> None:
+    prediction = FakePrediction(status="starting")
+    monkeypatch.setattr(replicate_run, "replicate", None)
+    monkeypatch.setattr(replicate_run, "require_api_token", lambda: "token")
+    http_create = Mock(return_value=prediction)
+    monkeypatch.setattr(replicate_run, "_http_create_prediction", http_create)
+
+    result = replicate_run.create_prediction("nelsonjchen/op-replay-clipper-beta:abc123", {"route": "x"})
+
+    assert result is prediction
+    http_create.assert_called_once_with("nelsonjchen/op-replay-clipper-beta:abc123", {"route": "x"}, token="token")
+
+
+def test_http_resolve_latest_version_uses_api(monkeypatch) -> None:
+    response = Mock()
+    response.json.return_value = {"results": [{"id": "new-version"}]}
+    response.raise_for_status = Mock()
+    get = Mock(return_value=response)
+    monkeypatch.setattr(replicate_run.requests, "get", get)
+
+    version = replicate_run._http_resolve_latest_version("nelsonjchen/op-replay-clipper-beta", token="token")
+
+    assert version == "new-version"
+    get.assert_called_once()
+
+
+def test_http_create_prediction_posts_prediction(monkeypatch) -> None:
+    version_response = Mock()
+    version_response.json.return_value = {"results": [{"id": "new-version"}]}
+    version_response.raise_for_status = Mock()
+    prediction_response = Mock()
+    prediction_response.json.return_value = {
+        "id": "pred-123",
+        "status": "starting",
+        "logs": "",
+        "urls": {"web": "https://replicate.com/p/test"},
+    }
+    prediction_response.raise_for_status = Mock()
+    monkeypatch.setattr(replicate_run.requests, "get", Mock(return_value=version_response))
+    post = Mock(return_value=prediction_response)
+    monkeypatch.setattr(replicate_run.requests, "post", post)
+
+    prediction = replicate_run._http_create_prediction("nelsonjchen/op-replay-clipper-beta", {"route": "x"}, token="token")
+
+    assert isinstance(prediction, replicate_run.HttpPrediction)
+    assert prediction.id == "pred-123"
+    post.assert_called_once()
+
+
 def test_wait_for_prediction_returns_succeeded_prediction(capsys) -> None:
     prediction = FakePrediction(output=FakeFileOutput(b"video"), status="succeeded", logs="done\n")
     result = replicate_run.wait_for_prediction(prediction, poll_interval_seconds=0)

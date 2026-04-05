@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import warnings
+from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
 import site
@@ -21,6 +22,31 @@ _MODEL_SPECS = {
     "rfdetr-seg-2xlarge": ("RFDETRSeg2XLarge", "rf-detr-seg-xxlarge.pt"),
     "rfdetr-seg-xxlarge": ("RFDETRSeg2XLarge", "rf-detr-seg-xxlarge.pt"),
 }
+
+
+def rf_detr_weights_dir() -> Path:
+    weights_dir = REPO_ROOT / ".cache/rfdetr"
+    weights_dir.mkdir(parents=True, exist_ok=True)
+    return weights_dir
+
+
+def rf_detr_weights_path(model_id: str) -> Path:
+    try:
+        _model_class_name, weight_filename = _MODEL_SPECS[model_id]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported RF-DETR segmentation model id: {model_id}") from exc
+    return rf_detr_weights_dir() / weight_filename
+
+
+def prewarm_rf_detr_weights(model_ids: Iterable[str], *, device: str = "cpu") -> tuple[Path, ...]:
+    warmed_paths: list[Path] = []
+    for model_id in model_ids:
+        load_rf_detr_model(model_id, device=device)
+        weights_path = rf_detr_weights_path(model_id)
+        if not weights_path.exists():
+            raise FileNotFoundError(f"RF-DETR weights were not materialized for {model_id}: {weights_path}")
+        warmed_paths.append(weights_path)
+    return tuple(warmed_paths)
 
 
 def _python_nvidia_lib_dirs() -> tuple[str, ...]:
@@ -127,8 +153,7 @@ def load_rf_detr_model(model_id: str, device: str = "auto"):
         raise ValueError(f"Unsupported RF-DETR segmentation model id: {model_id}") from exc
 
     resolved_device = resolve_rf_detr_device(device)
-    weights_dir = REPO_ROOT / ".cache/rfdetr"
-    weights_dir.mkdir(parents=True, exist_ok=True)
+    weights_dir = rf_detr_weights_dir()
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message=r"`use_return_dict` is deprecated! Use `return_dict` instead!")
         model = model_classes[model_class_name](

@@ -5,20 +5,54 @@ import os
 import time
 from collections.abc import Iterable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from dotenv import load_dotenv
-import replicate
 import requests
 from core import route_inputs
+
+try:
+    import replicate
+except Exception as exc:  # pragma: no cover - exercised via fallback tests
+    replicate = None
+    _REPLICATE_IMPORT_ERROR = exc
+else:
+    _REPLICATE_IMPORT_ERROR = None
 
 DEFAULT_MODEL = "nelsonjchen/op-replay-clipper-beta"
 DEFAULT_URL = "https://connect.comma.ai/5beb9b58bd12b691/0000010a--a51155e496/90/105"
 DEFAULT_OUTPUT = Path("./shared/replicate-run-output.mp4")
+_REPLICATE_API_ROOT = "https://api.replicate.com/v1"
 _ANONYMIZATION_PROFILE_LABEL_ALIASES = {
     "driver unchanged, passenger pixelize": "driver unchanged, passenger hidden",
     "driver face swap, passenger pixelize": "driver face swap, passenger hidden",
 }
+
+
+class HttpPrediction:
+    def __init__(self, payload: dict[str, Any], *, token: str) -> None:
+        self._token = token
+        self._payload = payload
+        self._apply_payload(payload)
+
+    def _apply_payload(self, payload: dict[str, Any]) -> None:
+        self._payload = payload
+        self.id = payload.get("id", "")
+        self.status = payload.get("status", "")
+        self.logs = payload.get("logs", "") or ""
+        self.error = payload.get("error")
+        self.output = payload.get("output")
+        self.urls = SimpleNamespace(web=(payload.get("urls") or {}).get("web"))
+
+    def reload(self) -> None:
+        response = requests.get(
+            f"{_REPLICATE_API_ROOT}/predictions/{self.id}",
+            headers={"Authorization": f"Token {self._token}"},
+            timeout=60,
+        )
+        response.raise_for_status()
+        self._apply_payload(response.json())
 
 
 def normalize_anonymization_profile_label(value: str) -> str:
@@ -97,6 +131,45 @@ def require_api_token() -> str:
     return token
 
 
+def _replicate_headers(token: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Token {token}",
+        "Content-Type": "application/json",
+    }
+
+
+def _http_resolve_latest_version(model_ref: str, *, token: str) -> str:
+    owner, name = model_ref.split("/", 1)
+    response = requests.get(
+        f"{_REPLICATE_API_ROOT}/models/{owner}/{name}/versions",
+        headers={"Authorization": f"Token {token}"},
+        timeout=60,
+    )
+    response.raise_for_status()
+    results = response.json().get("results") or []
+    if not results:
+        raise SystemExit(f"No versions found for Replicate model {model_ref}.")
+    version = (results[0].get("id") or "").strip()
+    if not version:
+        raise SystemExit(f"Replicate version list for {model_ref} did not include a usable id.")
+    return version
+
+
+def _http_create_prediction(model_ref: str, payload: dict[str, Any], *, token: str) -> HttpPrediction:
+    if ":" in model_ref:
+        _, version = model_ref.rsplit(":", 1)
+    else:
+        version = _http_resolve_latest_version(model_ref, token=token)
+    response = requests.post(
+        f"{_REPLICATE_API_ROOT}/predictions",
+        headers=_replicate_headers(token),
+        json={"version": version, "input": payload},
+        timeout=60,
+    )
+    response.raise_for_status()
+    return HttpPrediction(response.json(), token=token)
+
+
 def resolve_jwt_token(jwt_token: str) -> str:
     explicit = jwt_token.strip()
     if explicit:
@@ -121,7 +194,15 @@ def resolve_model(model: str) -> tuple[str, bool]:
     return DEFAULT_MODEL, False
 
 
+def using_replicate_http_fallback() -> bool:
+    if os.environ.get("REPLICATE_RUN_FORCE_HTTP", "").strip() == "1":
+        return True
+    return replicate is None
+
+
 def create_prediction(model_ref: str, payload: dict[str, Any]) -> Any:
+    if using_replicate_http_fallback():
+        return _http_create_prediction(model_ref, payload, token=require_api_token())
     if ":" in model_ref:
         _, version = model_ref.rsplit(":", 1)
         return replicate.predictions.create(version=version, input=payload)
@@ -242,6 +323,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if not model_was_explicit:
         print(f"Warning: --model was not set; using latest beta alias {args.model}", flush=True)
+    if using_replicate_http_fallback():
+        reason = "forced by REPLICATE_RUN_FORCE_HTTP=1" if os.environ.get("REPLICATE_RUN_FORCE_HTTP", "").strip() == "1" else f"Replicate SDK unavailable ({_REPLICATE_IMPORT_ERROR})"
+        print(f"Using Replicate HTTP fallback: {reason}", flush=True)
     print(f"Running {args.model}", flush=True)
     print(f"Saving output to {args.output}", flush=True)
     prediction = run_prediction_with_retries(

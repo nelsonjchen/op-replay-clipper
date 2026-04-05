@@ -17,6 +17,9 @@ FACEFUSION_PYTHON_VERSION="${FACEFUSION_PYTHON_VERSION:-3.12}"
 FACEFUSION_PREWARM_MODELS="${FACEFUSION_PREWARM_MODELS:-1}"
 FACEFUSION_PRUNE_VENV="${FACEFUSION_PRUNE_VENV:-1}"
 FACEFUSION_HARDLINK_DEDUPE="${FACEFUSION_HARDLINK_DEDUPE:-1}"
+RF_DETR_PREWARM_WEIGHTS="${RF_DETR_PREWARM_WEIGHTS:-1}"
+RF_DETR_PREWARM_MODEL_IDS="${RF_DETR_PREWARM_MODEL_IDS:-rfdetr-seg-preview}"
+export RF_DETR_PREWARM_WEIGHTS RF_DETR_PREWARM_MODEL_IDS
 OPENPILOT_BUILD_UI_ASSETS="${OPENPILOT_BUILD_UI_ASSETS:-1}"
 OPENPILOT_INSTALL_X_RUNTIME_PACKAGES="${OPENPILOT_INSTALL_X_RUNTIME_PACKAGES:-0}"
 OPENPILOT_NVIDIA_GL_PACKAGE="${OPENPILOT_NVIDIA_GL_PACKAGE:-libnvidia-gl-580-server}"
@@ -188,6 +191,81 @@ ensure_uv_on_path() {
   export PATH="/root/.local/bin:${PATH}"
 }
 
+prewarm_rf_detr_weights() {
+  if [[ "${RF_DETR_PREWARM_WEIGHTS}" != "1" ]]; then
+    log_step "Skipping RF-DETR weight prewarm"
+    return
+  fi
+
+  log_step "Prewarming RF-DETR weights"
+  local weights_dir="${RF_DETR_WEIGHTS_DIR:-}"
+  if [[ -z "${weights_dir}" ]]; then
+    if [[ "${APP_ROOT}" == "/" ]]; then
+      weights_dir="/src/.cache/rfdetr"
+    else
+      weights_dir="${APP_ROOT}/.cache/rfdetr"
+    fi
+  fi
+  mkdir -p "${weights_dir}"
+  cd "${APP_ROOT}"
+  RF_DETR_WEIGHTS_DIR="${weights_dir}" DRIVER_FACE_BENCHMARK_RF_DETR_DEVICE=cpu python - <<'PY'
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from rfdetr import (
+    RFDETRSeg2XLarge,
+    RFDETRSegLarge,
+    RFDETRSegMedium,
+    RFDETRSegNano,
+    RFDETRSegPreview,
+    RFDETRSegSmall,
+    RFDETRSegXLarge,
+)
+
+model_ids = [model_id.strip() for model_id in os.environ.get("RF_DETR_PREWARM_MODEL_IDS", "").split(",") if model_id.strip()]
+if not model_ids:
+    raise SystemExit("RF_DETR_PREWARM_MODEL_IDS is empty")
+
+model_classes = {
+    "rfdetr-seg-preview": RFDETRSegPreview,
+    "rfdetr-seg-nano": RFDETRSegNano,
+    "rfdetr-seg-small": RFDETRSegSmall,
+    "rfdetr-seg-medium": RFDETRSegMedium,
+    "rfdetr-seg-large": RFDETRSegLarge,
+    "rfdetr-seg-xlarge": RFDETRSegXLarge,
+    "rfdetr-seg-2xlarge": RFDETRSeg2XLarge,
+    "rfdetr-seg-xxlarge": RFDETRSeg2XLarge,
+}
+weight_filenames = {
+    "rfdetr-seg-preview": "rf-detr-seg-preview.pt",
+    "rfdetr-seg-nano": "rf-detr-seg-nano.pt",
+    "rfdetr-seg-small": "rf-detr-seg-small.pt",
+    "rfdetr-seg-medium": "rf-detr-seg-medium.pt",
+    "rfdetr-seg-large": "rf-detr-seg-large.pt",
+    "rfdetr-seg-xlarge": "rf-detr-seg-xlarge.pt",
+    "rfdetr-seg-2xlarge": "rf-detr-seg-xxlarge.pt",
+    "rfdetr-seg-xxlarge": "rf-detr-seg-xxlarge.pt",
+}
+
+weights_dir = Path(os.environ["RF_DETR_WEIGHTS_DIR"]).expanduser().resolve()
+weights_dir.mkdir(parents=True, exist_ok=True)
+
+for model_id in model_ids:
+    try:
+        model_class = model_classes[model_id]
+        weight_filename = weight_filenames[model_id]
+    except KeyError as exc:
+        raise SystemExit(f"Unsupported RF-DETR segmentation model id: {model_id}") from exc
+    model_class(pretrain_weights=str((weights_dir / weight_filename).resolve()), device="cpu")
+    weights_path = weights_dir / weight_filename
+    if not weights_path.exists():
+        raise SystemExit(f"RF-DETR weights were not materialized for {model_id}: {weights_path}")
+    print(f"warmed {weights_path}", flush=True)
+PY
+}
+
 install_facefusion_runtime() {
   log_step "Installing FaceFusion CUDA runtime"
   cd "${FACEFUSION_ROOT}"
@@ -251,14 +329,17 @@ for label, fn in checks:
 PY
 }
 
-dedupe_facefusion_venv_files() {
+dedupe_python_env_against_main_site_packages() {
+  local env_root="$1"
+  local label="$2"
+
   if [[ "${FACEFUSION_HARDLINK_DEDUPE}" != "1" ]]; then
-    log_step "Skipping FaceFusion virtualenv hardlink dedupe"
+    log_step "Skipping ${label} hardlink dedupe"
     return
   fi
 
-  log_step "Hardlinking duplicate FaceFusion virtualenv files"
-  python3 - "${FACEFUSION_ROOT}" <<'PY'
+  log_step "Hardlinking duplicate ${label} files"
+  python3 - "${env_root}" "${label}" <<'PY'
 from __future__ import annotations
 
 import hashlib
@@ -276,10 +357,11 @@ def sha256sum(path: Path) -> str:
     return digest.hexdigest()
 
 
-facefusion_root = Path(sys.argv[1]).expanduser().resolve()
-venv_site_packages = next(facefusion_root.glob(".venv/lib/python*/site-packages"), None)
+env_root = Path(sys.argv[1]).expanduser().resolve()
+label = sys.argv[2]
+venv_site_packages = next(env_root.glob(".venv/lib/python*/site-packages"), None)
 if venv_site_packages is None:
-    print("FaceFusion site-packages directory not found; skipping dedupe", flush=True)
+    print(f"{label} site-packages directory not found; skipping dedupe", flush=True)
     raise SystemExit(0)
 
 main_site_packages = None
@@ -315,11 +397,19 @@ for ff_path in sorted(venv_site_packages.rglob("*")):
     linked_bytes += ff_stat.st_size
 
 print(
-    f"Hardlinked {linked_files} duplicate FaceFusion files "
+    f"Hardlinked {linked_files} duplicate {label} files "
     f"({linked_bytes / (1024 * 1024):.1f} MiB shared)",
     flush=True,
 )
 PY
+}
+
+dedupe_facefusion_venv_files() {
+  dedupe_python_env_against_main_site_packages "${FACEFUSION_ROOT}" "FaceFusion virtualenv"
+}
+
+dedupe_openpilot_venv_files() {
+  dedupe_python_env_against_main_site_packages "${OPENPILOT_ROOT}" "openpilot virtualenv"
 }
 
 deactivate_facefusion_venv() {
@@ -381,6 +471,16 @@ prune_facefusion_checkout() {
   log_step "Pruning FaceFusion checkout"
   cd "${FACEFUSION_ROOT}"
   rm -rf .git .github tests
+}
+
+prune_openpilot_venv_artifacts() {
+  log_step "Pruning openpilot virtualenv bytecode caches"
+  local openpilot_venv="${OPENPILOT_ROOT}/.venv"
+  if [[ ! -d "${openpilot_venv}" ]]; then
+    return
+  fi
+  find "${openpilot_venv}" -type d -name '__pycache__' -prune -exec rm -rf {} +
+  find "${openpilot_venv}" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 }
 
 clean_transient_package_caches() {
@@ -739,6 +839,7 @@ main() {
   redirect_system_tmp
   configure_git_lfs
   ensure_uv_on_path
+  prewarm_rf_detr_weights
   clone_facefusion_checkout
   install_facefusion_runtime
   prewarm_facefusion_models
@@ -751,6 +852,8 @@ main() {
   install_openpilot_dependencies
   fix_vendored_tool_permissions
   build_openpilot_clip_dependencies
+  dedupe_openpilot_venv_files
+  prune_openpilot_venv_artifacts
   if [[ "${OPENPILOT_BUILD_UI_ASSETS}" == "1" ]]; then
     install_accelerated_linux_pyray
     generate_ui_fonts
