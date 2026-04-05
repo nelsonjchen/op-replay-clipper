@@ -299,7 +299,7 @@ def _rf_detr_blur_filter_graph(*, backend: str, blur_size: int = 37) -> str:
         return (
             f"[0:v]format=yuv420p,split=2[base][to_blur];"
             f"[to_blur]format=nv12,hwupload,avgblur_opencl=sizeX={blur_size}:sizeY={blur_size},"
-            f"hwdownload,format=yuv420p[blurred];"
+            f"hwdownload,format=nv12,format=yuv420p[blurred];"
             f"[1:v]format=gray[mask];"
             f"[base][blurred][mask]maskedmerge[out]"
         )
