@@ -929,6 +929,9 @@ def test_patch_ui_application_record_skip_inserts_skip_logic(tmp_path) -> None:
     assert "if RECORD_PRESET:" in updated
     assert "if RECORD_CODEC.startswith('libx'):" in updated
     assert "if RECORD_TAG:" in updated
+    assert 'RECORD_GOP_FRAMES = os.getenv("RECORD_GOP_FRAMES", "")' in updated
+    assert "if RECORD_GOP_FRAMES:" in updated
+    assert "'-g', RECORD_GOP_FRAMES" in updated
     assert 'RECORD_FORCE_KEYFRAMES = os.getenv("RECORD_FORCE_KEYFRAMES", "")' in updated
     assert "if RECORD_FORCE_KEYFRAMES:" in updated
     assert "'-force_key_frames', RECORD_FORCE_KEYFRAMES" in updated
@@ -1053,6 +1056,8 @@ def test_apply_openpilot_runtime_patches_reports_changed_files(tmp_path) -> None
     assert report.ui_null_egl is True
     assert report.augmented_road_fill is True
     assert report.model_renderer_lead_position is True
+    assert 'RECORD_GOP_FRAMES = os.getenv("RECORD_GOP_FRAMES", "")' in updated_application
+    assert "'-g', RECORD_GOP_FRAMES" in updated_application
     assert "'-colorspace', 'bt709'" in updated_application
     assert "'-color_primaries', 'bt709'" in updated_application
     assert "'-color_trc', 'bt709'" in updated_application
@@ -1145,6 +1150,7 @@ def test_ui_recording_encoder_prefers_nvidia(monkeypatch) -> None:
     assert env["RECORD_CODEC"] == "hevc_nvenc"
     assert env["RECORD_PRESET"] == "p4"
     assert env["RECORD_TAG"] == "hvc1"
+    assert env["RECORD_GOP_FRAMES"] == str(ui_renderer.UI_GOP_FRAMES)
 
 
 def test_ui_recording_encoder_prefers_videotoolbox_on_macos(monkeypatch) -> None:
@@ -1167,6 +1173,7 @@ def test_ui_recording_encoder_prefers_videotoolbox_on_macos(monkeypatch) -> None
     assert env["RECORD_CODEC"] == "hevc_videotoolbox"
     assert env["RECORD_PRESET"] == "fast"
     assert env["RECORD_TAG"] == "hvc1"
+    assert env["RECORD_GOP_FRAMES"] == str(ui_renderer.UI_GOP_FRAMES)
 
 
 def test_ui_recording_encoder_falls_back_to_cpu(monkeypatch) -> None:
@@ -1181,4 +1188,5 @@ def test_ui_recording_encoder_falls_back_to_cpu(monkeypatch) -> None:
     assert acceleration == "cpu"
     assert env["RECORD_CODEC"] == "libx264"
     assert env["RECORD_PRESET"] == "veryfast"
+    assert env["RECORD_GOP_FRAMES"] == str(ui_renderer.UI_GOP_FRAMES)
     assert "RECORD_TAG" not in env
