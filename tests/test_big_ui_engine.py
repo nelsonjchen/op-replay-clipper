@@ -929,6 +929,9 @@ def test_patch_ui_application_record_skip_inserts_skip_logic(tmp_path) -> None:
     assert "if RECORD_PRESET:" in updated
     assert "if RECORD_CODEC.startswith('libx'):" in updated
     assert "if RECORD_TAG:" in updated
+    assert 'RECORD_FORCE_KEYFRAMES = os.getenv("RECORD_FORCE_KEYFRAMES", "")' in updated
+    assert "if RECORD_FORCE_KEYFRAMES:" in updated
+    assert "'-force_key_frames', RECORD_FORCE_KEYFRAMES" in updated
     assert "'-colorspace', 'bt709'" in updated
     assert "'-color_primaries', 'bt709'" in updated
     assert "'-color_trc', 'bt709'" in updated

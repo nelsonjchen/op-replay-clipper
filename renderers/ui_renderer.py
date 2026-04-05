@@ -308,6 +308,10 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
     )
     if warmup_seconds > 0:
         env["RECORD_SKIP_FRAMES"] = str(warmup_seconds * UI_FRAMERATE)
+    if trim_front > 0:
+        # Force an IDR at the visible clip boundary so the later stream-copy trim
+        # can start on a keyframe instead of mid-GOP.
+        env["RECORD_FORCE_KEYFRAMES"] = str(trim_front)
 
     clip_cmd = [
         *_openpilot_python_cmd(openpilot_dir),
