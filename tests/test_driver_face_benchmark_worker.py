@@ -526,9 +526,10 @@ def test_render_rf_detr_redacted_clip_logs_requested_and_actual_device(monkeypat
     assert report["runtime_breakdown"]["output_frames"] == 1
 
 
-def test_render_rf_detr_redacted_clip_uses_ffmpeg_blur_backend(monkeypatch, tmp_path, capsys) -> None:
+def test_render_rf_detr_redacted_clip_applies_box_blur_in_frame_path(monkeypatch, tmp_path, capsys) -> None:
     frames = [np.zeros((4, 4, 3), dtype=np.uint8)]
     capture_state = {"index": 0}
+    emitted_frames: list[np.ndarray] = []
 
     class _FakeCapture:
         def isOpened(self) -> bool:
@@ -557,8 +558,8 @@ def test_render_rf_detr_redacted_clip_uses_ffmpeg_blur_backend(monkeypatch, tmp_
         def isOpened(self) -> bool:
             return True
 
-        def write(self, _frame) -> None:
-            return None
+        def write(self, frame) -> None:
+            emitted_frames.append(frame.copy())
 
         def release(self) -> None:
             return None
@@ -567,6 +568,7 @@ def test_render_rf_detr_redacted_clip_uses_ffmpeg_blur_backend(monkeypatch, tmp_
     monkeypatch.setattr(driver_face_benchmark_worker.cv2, "VideoWriter", lambda *args, **kwargs: _FakeWriter())
     monkeypatch.setattr(driver_face_benchmark_worker.cv2, "VideoWriter_fourcc", lambda *args: 0)
     monkeypatch.setattr(driver_face_benchmark_worker.cv2, "cvtColor", lambda frame, _code: frame)
+    monkeypatch.setattr(driver_face_benchmark_worker.cv2, "blur", lambda frame, _ksize: np.full_like(frame, 77))
     monkeypatch.setattr(driver_face_benchmark_worker, "_load_rf_detr_model", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(driver_face_benchmark_worker, "_default_rf_detr_device", lambda: "cuda")
     monkeypatch.setattr(driver_face_benchmark_worker, "_rf_detr_model_device", lambda _model: "cuda")
@@ -583,9 +585,9 @@ def test_render_rf_detr_redacted_clip_uses_ffmpeg_blur_backend(monkeypatch, tmp_
     monkeypatch.setattr(driver_face_benchmark_worker, "_passenger_crop_rect", lambda **_kwargs: (0, 0, 4, 4))
     monkeypatch.setattr(driver_face_benchmark_worker, "_dilate_mask", lambda mask, **_kwargs: mask)
     monkeypatch.setattr(driver_face_benchmark_worker, "_box_from_mask", lambda _mask: (0, 0, 4, 4))
-    monkeypatch.setattr(driver_face_benchmark_worker, "_finalize_shareable_masked_blur_mp4", lambda **_kwargs: "cpu")
     monkeypatch.setattr(driver_face_benchmark_worker, "_score_rf_detr_sample", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(driver_face_benchmark_worker, "_shareable_h264_encoder_name", lambda: "h264_nvenc")
+    monkeypatch.setattr(driver_face_benchmark_worker, "_finalize_shareable_mp4", lambda *_args, **_kwargs: None)
 
     report = driver_face_benchmark_worker.render_rf_detr_redacted_clip(
         sample_dir=tmp_path,
@@ -606,10 +608,12 @@ def test_render_rf_detr_redacted_clip_uses_ffmpeg_blur_backend(monkeypatch, tmp_
     )
 
     stdout = capsys.readouterr().out
-    assert "RF-DETR blur video backend: cpu" in stdout
-    assert report["rf_detr_blur_video_backend"] == "cpu"
+    assert "RF-DETR blur video backend:" not in stdout
+    assert report["rf_detr_blur_video_backend"] is None
     assert report["redacted_frames"] == 1
     assert report["runtime_breakdown"]["output_frames"] == 1
+    assert emitted_frames
+    assert np.all(emitted_frames[0] == 77)
 
 
 def test_silhouette_mask_replaces_masked_region_with_bright_silhouette() -> None:

@@ -49,8 +49,8 @@ DEFAULT_RF_DETR_MASK_DILATE = 15
 DEFAULT_RF_DETR_STARTUP_HOLD_FRAMES = 6
 DEFAULT_RF_DETR_PASSENGER_CROP_MARGIN_RATIO = 0.10
 DEFAULT_RF_DETR_MISSING_HOLD_FRAMES = 10
-DEFAULT_RF_DETR_BLUR_SIZE = 151
-DEFAULT_RF_DETR_BLUR_MASK_DILATE = 27
+DEFAULT_RF_DETR_BLUR_SIZE = 271
+DEFAULT_RF_DETR_BLUR_MASK_DILATE = 51
 DEFAULT_RF_DETR_PROGRESS_INTERVAL_SECONDS = 5.0
 
 DM_INPUT_SIZE = (1440.0, 960.0)
@@ -773,7 +773,9 @@ def _dilate_mask(mask: np.ndarray, *, kernel_size: int) -> np.ndarray:
 
 def _blur_mask(frame: np.ndarray, mask: np.ndarray) -> None:
     blur_mask = _dilate_mask(mask, kernel_size=_rf_detr_blur_mask_dilate())
-    blurred = cv2.GaussianBlur(frame, (0, 0), sigmaX=28, sigmaY=28)
+    blur_size = max(1, int(_rf_detr_blur_size()))
+    blur_size |= 1
+    blurred = cv2.blur(frame, (blur_size, blur_size))
     frame[blur_mask] = blurred[blur_mask]
 
 
@@ -1157,7 +1159,6 @@ def render_rf_detr_redacted_clip(
     height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = float(capture.get(cv2.CAP_PROP_FPS) or 20.0)
     intermediate_output_path = _intermediate_output_path(output_path)
-    mask_output_path = _mask_intermediate_output_path(output_path)
     blur_video_backend: str | None = None
     writer = cv2.VideoWriter(
         str(intermediate_output_path),
@@ -1168,19 +1169,6 @@ def render_rf_detr_redacted_clip(
     if not writer.isOpened():
         capture.release()
         raise RuntimeError(f"Failed to create output clip: {output_path}")
-    mask_writer = None
-    if effect == "blur":
-        mask_writer = cv2.VideoWriter(
-            str(mask_output_path),
-            cv2.VideoWriter_fourcc(*"mp4v"),
-            fps,
-            (width, height),
-        )
-        if not mask_writer.isOpened():
-            writer.release()
-            capture.release()
-            raise RuntimeError(f"Failed to create blur mask clip: {mask_output_path}")
-
     candidate_id = output_path.stem
     requested_device = _default_rf_detr_device()
     model = _load_rf_detr_model(model_id, device=requested_device)
@@ -1245,20 +1233,6 @@ def render_rf_detr_redacted_clip(
             from core.driver_face_reintegrate import _draw_banner
 
             _draw_banner(frame_to_write, banner_text)
-        if effect == "blur" and mask_writer is not None:
-            mask_frame = np.zeros_like(frame_to_write)
-            if last_mask is not None:
-                blur_mask = _dilate_mask(last_mask, kernel_size=_rf_detr_blur_mask_dilate())
-                mask_frame[blur_mask] = 255
-                redacted_frames += 1
-            effect_seconds += time.perf_counter() - effect_started
-            writer_started = time.perf_counter()
-            writer.write(frame_to_write)
-            mask_writer.write(mask_frame)
-            writer_seconds += time.perf_counter() - writer_started
-            output_frames += 1
-            frame_reports.append(detection_report)
-            return
         if last_mask is not None:
             _apply_rf_detr_effect(frame_to_write, last_mask, effect=effect, frame_index=int(detection_report["frame_index"]))
             redacted_frames += 1
@@ -1414,20 +1388,9 @@ def render_rf_detr_redacted_clip(
     finally:
         capture.release()
         writer.release()
-        if mask_writer is not None:
-            mask_writer.release()
 
     finalize_started = time.perf_counter()
-    if effect == "blur":
-        blur_video_backend = _finalize_shareable_masked_blur_mp4(
-            base_path=intermediate_output_path,
-            mask_path=mask_output_path,
-            output_path=output_path,
-        )
-        intermediate_output_path.unlink(missing_ok=True)
-        mask_output_path.unlink(missing_ok=True)
-    else:
-        _finalize_shareable_mp4(intermediate_output_path, output_path)
+    _finalize_shareable_mp4(intermediate_output_path, output_path)
     finalize_seconds = time.perf_counter() - finalize_started
 
     runtime_seconds = time.perf_counter() - started
