@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import platform
@@ -94,6 +95,10 @@ def _pixelize_roi(frame, rect: tuple[int, int, int, int], *, block_size: int) ->
 
 def _intermediate_output_path(output_path: Path) -> Path:
     return output_path.with_name(f"{output_path.stem}.intermediate{output_path.suffix}")
+
+
+def _mask_intermediate_output_path(output_path: Path) -> Path:
+    return output_path.with_name(f"{output_path.stem}.mask.intermediate{output_path.suffix}")
 
 
 def _default_benchmark_data_root() -> Path:
@@ -217,6 +222,97 @@ def _shareable_h264_encoder_name() -> str:
     return args[1]
 
 
+@functools.lru_cache(maxsize=1)
+def _ffmpeg_filter_names() -> frozenset[str]:
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-filters"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return frozenset()
+
+    filters: set[str] = set()
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0][0] in {".", "T", "S", "|"}:
+            filters.add(parts[1])
+    return frozenset(filters)
+
+
+def _ffmpeg_filter_available(name: str) -> bool:
+    return name in _ffmpeg_filter_names()
+
+
+@functools.lru_cache(maxsize=1)
+def _ffmpeg_hwaccel_names() -> frozenset[str]:
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-hwaccels"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return frozenset()
+
+    names = {
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip() and not line.startswith("Hardware acceleration methods:")
+    }
+    return frozenset(names)
+
+
+def _rf_detr_blur_backend_preference() -> str:
+    cleaned = os.environ.get("DRIVER_FACE_BENCHMARK_RF_DETR_BLUR_BACKEND", "auto").strip().lower()
+    if cleaned in {"auto", "opencl", "cpu"}:
+        return cleaned
+    return "auto"
+
+
+def _rf_detr_opencl_blur_available() -> bool:
+    return (
+        "opencl" in _ffmpeg_hwaccel_names()
+        and _ffmpeg_filter_available("avgblur_opencl")
+        and _ffmpeg_filter_available("maskedmerge")
+    )
+
+
+def _rf_detr_blur_backend_candidates() -> list[str]:
+    preference = _rf_detr_blur_backend_preference()
+    if preference == "cpu":
+        return ["cpu"]
+    if preference == "opencl":
+        return ["opencl", "cpu"]
+    if _rf_detr_opencl_blur_available():
+        return ["opencl", "cpu"]
+    return ["cpu"]
+
+
+def _rf_detr_blur_filter_graph(*, backend: str, blur_size: int = 37) -> str:
+    if backend == "opencl":
+        return (
+            f"[0:v]format=yuv420p,split=2[base][to_blur];"
+            f"[to_blur]format=nv12,hwupload,avgblur_opencl=sizeX={blur_size}:sizeY={blur_size},"
+            f"hwdownload,format=yuv420p[blurred];"
+            f"[1:v]format=gray[mask];"
+            f"[base][blurred][mask]maskedmerge[out]"
+        )
+    if backend == "cpu":
+        return (
+            f"[0:v]format=yuv420p,split=2[base][to_blur];"
+            f"[to_blur]avgblur=sizeX={blur_size}:sizeY={blur_size}[blurred];"
+            f"[1:v]format=gray[mask];"
+            f"[base][blurred][mask]maskedmerge[out]"
+        )
+    raise ValueError(f"Unsupported RF-DETR blur backend: {backend}")
+
+
 def _finalize_shareable_mp4(intermediate_path: Path, output_path: Path) -> None:
     command = [
         "ffmpeg",
@@ -236,6 +332,48 @@ def _finalize_shareable_mp4(intermediate_path: Path, output_path: Path) -> None:
         raise RuntimeError(f"Failed to finalize shareable mp4 {output_path}: {stderr}") from exc
     finally:
         intermediate_path.unlink(missing_ok=True)
+
+
+def _finalize_shareable_masked_blur_mp4(
+    *,
+    base_path: Path,
+    mask_path: Path,
+    output_path: Path,
+) -> str:
+    backends = _rf_detr_blur_backend_candidates()
+    last_error: RuntimeError | None = None
+    for backend in backends:
+        command = ["ffmpeg", "-y"]
+        if backend == "opencl":
+            command.extend(["-init_hw_device", "opencl=ocl", "-filter_hw_device", "ocl"])
+        command.extend(
+            [
+                "-i",
+                str(base_path),
+                "-i",
+                str(mask_path),
+                "-filter_complex",
+                _rf_detr_blur_filter_graph(backend=backend),
+                "-map",
+                "[out]",
+                "-an",
+                *_shareable_h264_encoder_args(),
+                "-movflags",
+                "+faststart",
+                str(output_path),
+            ]
+        )
+        try:
+            subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            return backend
+        except subprocess.CalledProcessError as exc:
+            stderr = exc.stderr.strip()
+            print(f"RF-DETR blur finalize backend {backend} failed; trying fallback if available: {stderr}")
+            last_error = RuntimeError(f"Failed to finalize masked blur mp4 via {backend}: {stderr}")
+    if last_error is None:
+        raise RuntimeError(f"No RF-DETR blur backends available for {output_path}")
+    raise last_error
+
 
 
 def _load_rect(frame_row: dict[str, object], key: str) -> tuple[int, int, int, int] | None:
@@ -984,6 +1122,8 @@ def render_rf_detr_redacted_clip(
     height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = float(capture.get(cv2.CAP_PROP_FPS) or 20.0)
     intermediate_output_path = _intermediate_output_path(output_path)
+    mask_output_path = _mask_intermediate_output_path(output_path)
+    blur_video_backend: str | None = None
     writer = cv2.VideoWriter(
         str(intermediate_output_path),
         cv2.VideoWriter_fourcc(*"mp4v"),
@@ -993,6 +1133,18 @@ def render_rf_detr_redacted_clip(
     if not writer.isOpened():
         capture.release()
         raise RuntimeError(f"Failed to create output clip: {output_path}")
+    mask_writer = None
+    if effect == "blur":
+        mask_writer = cv2.VideoWriter(
+            str(mask_output_path),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            fps,
+            (width, height),
+        )
+        if not mask_writer.isOpened():
+            writer.release()
+            capture.release()
+            raise RuntimeError(f"Failed to create blur mask clip: {mask_output_path}")
 
     candidate_id = output_path.stem
     requested_device = _default_rf_detr_device()
@@ -1031,13 +1183,26 @@ def render_rf_detr_redacted_clip(
     def _emit_output_frame(frame_to_write: np.ndarray, detection_report: dict[str, object]) -> None:
         nonlocal output_frames, redacted_frames, effect_seconds, writer_seconds
         effect_started = time.perf_counter()
-        if last_mask is not None:
-            _apply_rf_detr_effect(frame_to_write, last_mask, effect=effect, frame_index=int(detection_report["frame_index"]))
-            redacted_frames += 1
         if banner_text:
             from core.driver_face_reintegrate import _draw_banner
 
             _draw_banner(frame_to_write, banner_text)
+        if effect == "blur" and mask_writer is not None:
+            mask_frame = np.zeros_like(frame_to_write)
+            if last_mask is not None:
+                mask_frame[last_mask] = 255
+                redacted_frames += 1
+            effect_seconds += time.perf_counter() - effect_started
+            writer_started = time.perf_counter()
+            writer.write(frame_to_write)
+            mask_writer.write(mask_frame)
+            writer_seconds += time.perf_counter() - writer_started
+            output_frames += 1
+            frame_reports.append(detection_report)
+            return
+        if last_mask is not None:
+            _apply_rf_detr_effect(frame_to_write, last_mask, effect=effect, frame_index=int(detection_report["frame_index"]))
+            redacted_frames += 1
         effect_seconds += time.perf_counter() - effect_started
         writer_started = time.perf_counter()
         writer.write(frame_to_write)
@@ -1187,9 +1352,20 @@ def render_rf_detr_redacted_clip(
     finally:
         capture.release()
         writer.release()
+        if mask_writer is not None:
+            mask_writer.release()
 
     finalize_started = time.perf_counter()
-    _finalize_shareable_mp4(intermediate_output_path, output_path)
+    if effect == "blur":
+        blur_video_backend = _finalize_shareable_masked_blur_mp4(
+            base_path=intermediate_output_path,
+            mask_path=mask_output_path,
+            output_path=output_path,
+        )
+        intermediate_output_path.unlink(missing_ok=True)
+        mask_output_path.unlink(missing_ok=True)
+    else:
+        _finalize_shareable_mp4(intermediate_output_path, output_path)
     finalize_seconds = time.perf_counter() - finalize_started
 
     runtime_seconds = time.perf_counter() - started
@@ -1218,6 +1394,8 @@ def render_rf_detr_redacted_clip(
         f"read={read_seconds:.2f}s, "
         f"other={max(0.0, runtime_breakdown['untracked_seconds']):.2f}s"
     )
+    if blur_video_backend is not None:
+        print(f"RF-DETR blur video backend: {blur_video_backend}")
     return {
         "candidate_id": candidate_id,
         "sample_dir": str(sample_dir),
@@ -1248,6 +1426,7 @@ def render_rf_detr_redacted_clip(
         "rf_detr_test_target_side": target_side,
         "rf_detr_missing_hold_frames": missing_hold_frames,
         "rf_detr_effect": effect,
+        "rf_detr_blur_video_backend": blur_video_backend,
         "rf_detr_requested_device": requested_device,
         "rf_detr_device": actual_device,
         "output_video_encoder": _shareable_h264_encoder_name(),
