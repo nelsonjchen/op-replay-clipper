@@ -214,6 +214,27 @@ def apply_facefusion_runtime_env(facefusion_root: Path) -> None:
         os.environ[key] = value
 
 
+def _run_logged_subprocess(command: list[str], *, cwd: Path, env: dict[str, str]) -> None:
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    assert process.stdout is not None
+    output_lines: list[str] = []
+    for line in process.stdout:
+        print(line, end="")
+        output_lines.append(line)
+    return_code = process.wait()
+    if return_code != 0:
+        combined_output = "".join(output_lines)
+        raise subprocess.CalledProcessError(return_code, command, output=combined_output)
+
+
 def intermediate_video_encoder_args() -> list[str]:
     encoder = default_facefusion_output_video_encoder()
     if encoder.startswith("hevc_"):
@@ -466,7 +487,7 @@ def _run_facefusion_swap(
     command[command.index("--jobs-path") + 1] = str(jobs_path)
     command[command.index("--temp-path") + 1] = str(temp_path)
     env = facefusion_runtime_env(facefusion_root)
-    subprocess.run(command, cwd=facefusion_root, env=env, check=True)
+    _run_logged_subprocess(command, cwd=facefusion_root, env=env)
     return output_path
 
 
