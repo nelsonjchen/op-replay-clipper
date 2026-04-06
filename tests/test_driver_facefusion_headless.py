@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import sys
+import inspect
 from pathlib import Path
 
 from core import driver_facefusion_headless
 
 
-def test_disable_content_analysis_installs_stub_module_without_importing_real_module(
+def test_disable_content_analysis_overrides_real_module_entrypoints(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -15,10 +16,44 @@ def test_disable_content_analysis_installs_stub_module_without_importing_real_mo
     package_dir = facefusion_root / "facefusion"
     package_dir.mkdir(parents=True)
 
-    imported_marker = tmp_path / "real-module-imported.txt"
     package_dir.joinpath("__init__.py").write_text("")
     package_dir.joinpath("content_analyser.py").write_text(
-        f"from pathlib import Path\nPath({str(imported_marker)!r}).write_text('imported')\n"
+        "\n".join(
+            [
+                "def pre_check():",
+                "    raise AssertionError('real pre_check should not run')",
+                "",
+                "def create_static_model_set(_scope='full'):",
+                "    raise AssertionError('real create_static_model_set should not run')",
+                "",
+                "def collect_model_downloads():",
+                "    raise AssertionError('real collect_model_downloads should not run')",
+                "",
+                "def get_inference_pool():",
+                "    raise AssertionError('real get_inference_pool should not run')",
+                "",
+                "def clear_inference_pool():",
+                "    raise AssertionError('real clear_inference_pool should not run')",
+                "",
+                "def detect_nsfw(_frame):",
+                "    raise AssertionError('real detect_nsfw should not run')",
+                "",
+                "def analyse_frame(_frame):",
+                "    raise AssertionError('real analyse_frame should not run')",
+                "",
+                "def analyse_image(_path):",
+                "    raise AssertionError('real analyse_image should not run')",
+                "",
+                "def analyse_stream(_frame, _fps):",
+                "    raise AssertionError('real analyse_stream should not run')",
+                "",
+                "def analyse_video(_path, _start, _end):",
+                "    raise AssertionError('real analyse_video should not run')",
+                "",
+                "def resolve_execution_providers(_providers=None):",
+                "    return ['cpu']",
+            ]
+        )
     )
 
     monkeypatch.delitem(sys.modules, "facefusion", raising=False)
@@ -26,7 +61,6 @@ def test_disable_content_analysis_installs_stub_module_without_importing_real_mo
 
     driver_facefusion_headless._disable_content_analysis(facefusion_root)
 
-    assert not imported_marker.exists()
     stub = sys.modules["facefusion.content_analyser"]
     assert stub.pre_check() is True
     assert stub.create_static_model_set("full") == {}
@@ -38,6 +72,7 @@ def test_disable_content_analysis_installs_stub_module_without_importing_real_mo
     assert stub.analyse_image("frame.png") is False
     assert stub.analyse_stream(object(), 20) is False
     assert stub.analyse_video("clip.mp4", 0, 100) is False
+    assert inspect.getsource(stub)
 
 
 def test_main_runs_facefusion_with_stubbed_content_analyser(monkeypatch, tmp_path: Path) -> None:
@@ -45,11 +80,21 @@ def test_main_runs_facefusion_with_stubbed_content_analyser(monkeypatch, tmp_pat
     package_dir = facefusion_root / "facefusion"
     package_dir.mkdir(parents=True)
 
-    imported_marker = tmp_path / "real-module-imported.txt"
     observed_path = tmp_path / "observed.json"
     package_dir.joinpath("__init__.py").write_text("")
     package_dir.joinpath("content_analyser.py").write_text(
-        f"from pathlib import Path\nPath({str(imported_marker)!r}).write_text('imported')\n"
+        "\n".join(
+            [
+                "def pre_check():",
+                "    raise AssertionError('real pre_check should not run')",
+                "",
+                "def collect_model_downloads():",
+                "    raise AssertionError('real collect_model_downloads should not run')",
+                "",
+                "def analyse_video(_path, _start, _end):",
+                "    raise AssertionError('real analyse_video should not run')",
+            ]
+        )
     )
     facefusion_root.joinpath("facefusion.py").write_text(
         "\n".join(
@@ -84,7 +129,6 @@ def test_main_runs_facefusion_with_stubbed_content_analyser(monkeypatch, tmp_pat
     )
 
     assert exit_code == 0
-    assert not imported_marker.exists()
     observed = json.loads(observed_path.read_text())
     assert observed == {
         "argv": ["--target-path", "target.mp4"],
@@ -92,4 +136,3 @@ def test_main_runs_facefusion_with_stubbed_content_analyser(monkeypatch, tmp_pat
         "downloads": [{}, {}],
         "analyse_video": False,
     }
-

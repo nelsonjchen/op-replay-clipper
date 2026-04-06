@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-import types
+import importlib
 import runpy
 import sys
 from pathlib import Path
@@ -30,7 +30,10 @@ def _disable_content_analysis(facefusion_root: Path) -> None:
     def _clear_inference_pool(*_args: object, **_kwargs: object) -> None:
         return None
 
-    content_analyser = types.ModuleType("facefusion.content_analyser")
+    for key in ("facefusion.content_analyser", "facefusion"):
+        sys.modules.pop(key, None)
+
+    content_analyser = importlib.import_module("facefusion.content_analyser")
     content_analyser.STREAM_COUNTER = 0
     content_analyser.pre_check = _pre_check
     content_analyser.create_static_model_set = _empty_model_set
