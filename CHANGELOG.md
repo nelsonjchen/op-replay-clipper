@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 This repository does not currently publish versioned release tags, so the older history below is backfilled from shipped git history and grouped into date-based milestones instead. There is no `Unreleased` section at the moment because the current project state is considered released.
 
+## 2026-04-06
+
+- Changed: Replaced the older coarse passenger pixelize path with RF-DETR full-body hidden-passenger redaction for driver-camera anonymization.
+- Added: Introduced hidden-passenger profile choices plus `blur` and `silhouette` redaction controls across the local CLI and hosted Replicate surface.
+- Fixed: Hardened hosted Replicate runs around output download handling, JWT-backed route access, and public routes that are missing uploaded logs.
+- Fixed: Preserved compressed route logs for openpilot-backed rendering so newer route downloads keep working more reliably in hosted and local runs.
+- Fixed: Hardened the Linux/NVIDIA UI and passenger-redaction runtime for the validated null-EGL T4/driver-580 path used by hosted debugging and smokes.
+- Changed: BIG UI renders now show the route timer as both `MM:SS` and total elapsed seconds.
+
+## 2026-04-02
+
+- Changed: Switched Replicate deploy guidance back to stock `cog 0.17.2+` after upstream fixed the raw URL coercion regression for plain `str` inputs.
+- Removed: Retired the repo's patched Cog runtime flow and related push helpers.
+
 ## 2026-03-26
 
 - Added: Documented the upstream openpilot and Cog modifications that the project depends on.
@@ -13,11 +27,6 @@ This repository does not currently publish versioned release tags, so the older 
 - Added: Introduced route-driven metric versus imperial autodetection for BIG UI renders.
 - Fixed: Corrected newer mici 360 camera dimensions so 360 and 360-forward-upon-wide renders keep working on newer routes.
 - Changed: Tightened predictor field descriptions and added a production-readiness checklist plus supporting docs.
-
-## 2026-04-02
-
-- Changed: Switched Replicate deploy guidance back to stock `cog 0.17.2+` after upstream fixed the raw URL coercion regression for plain `str` inputs.
-- Removed: Retired the repo's patched Cog runtime flow and related push helpers.
 
 ## 2026-03-25
 
