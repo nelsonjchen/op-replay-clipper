@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import types
 import runpy
 import sys
 from pathlib import Path
@@ -11,16 +12,40 @@ def _disable_content_analysis(facefusion_root: Path) -> None:
     if str(facefusion_root) not in sys.path:
         sys.path.insert(0, str(facefusion_root))
 
-    import facefusion.content_analyser as content_analyser
-
     def _always_safe(*_args: object, **_kwargs: object) -> bool:
         return False
 
-    # FaceFusion's generic NSFW gate false-positives on our driver camera footage.
+    def _pre_check(*_args: object, **_kwargs: object) -> bool:
+        return True
+
+    def _empty_model_downloads(*_args: object, **_kwargs: object) -> tuple[dict[str, object], dict[str, object]]:
+        return {}, {}
+
+    def _empty_model_set(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return {}
+
+    def _empty_inference_pool(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return {}
+
+    def _clear_inference_pool(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    content_analyser = types.ModuleType("facefusion.content_analyser")
+    content_analyser.STREAM_COUNTER = 0
+    content_analyser.pre_check = _pre_check
+    content_analyser.create_static_model_set = _empty_model_set
+    content_analyser.collect_model_downloads = _empty_model_downloads
+    content_analyser.resolve_execution_providers = lambda *_args, **_kwargs: []
+    content_analyser.get_inference_pool = _empty_inference_pool
+    content_analyser.clear_inference_pool = _clear_inference_pool
+    content_analyser.detect_nsfw = _always_safe
     content_analyser.analyse_frame = _always_safe
     content_analyser.analyse_image = _always_safe
     content_analyser.analyse_stream = _always_safe
     content_analyser.analyse_video = _always_safe
+
+    # FaceFusion's generic NSFW gate false-positives on our driver camera footage.
+    sys.modules["facefusion.content_analyser"] = content_analyser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
