@@ -333,6 +333,12 @@ def compute_time_overlay_position(*, gui_width: int, time_width: int, big: bool)
     )
 
 
+def format_route_timer_text(route_seconds: float, *, prefix: str = "") -> str:
+    whole_seconds = int(route_seconds)
+    timer_text = f"{whole_seconds // 60:02d}:{whole_seconds % 60:02d} • {whole_seconds}s"
+    return f"{prefix}{timer_text}" if prefix else timer_text
+
+
 def _extract_nested_attr(obj: object, path: tuple[str, ...]) -> object | None:
     current = obj
     for name in path:
@@ -1097,7 +1103,7 @@ def render_overlays(gui_app, font, big, metadata, title, route_seconds, show_met
 
     time_width = 0
     if show_time:
-        time_text = f"{int(route_seconds) // 60:02d}:{int(route_seconds) % 60:02d}"
+        time_text = format_route_timer_text(route_seconds)
         time_width = int(measure_text_cached(font, time_text, time_size).x)
         time_x, time_y = compute_time_overlay_position(gui_width=gui_app.width, time_width=time_width, big=big)
         draw_text_box(

@@ -26,6 +26,7 @@ from renderers.big_ui_engine import (
     draw_model_input_overlay,
     draw_text_box,
     emit_runtime_log,
+    format_route_timer_text,
     load_route_metadata,
     load_segment_messages,
     patch_submaster,
@@ -775,7 +776,7 @@ class DriverDebugOverlayRenderer:
         title_x = rect.x + outer_pad_x
         title_y = rect.y + outer_pad_y
         header_right_x = rect.x + rect.width - (outer_pad_x * 2)
-        time_text = f"T+{int(route_seconds) // 60:02d}:{int(route_seconds) % 60:02d}"
+        time_text = format_route_timer_text(route_seconds, prefix="T+")
         rl.draw_text_ex(self._label_font, "DRIVER DEBUG", rl.Vector2(title_x, title_y), 24, 0, blue)
         rl.draw_text_ex(self._value_font, time_text, rl.Vector2(title_x, title_y + 28), 34, 0, white)
 

@@ -1132,12 +1132,16 @@ def test_render_overlays_insets_timer_inside_video_frame(monkeypatch) -> None:
 
     assert calls == [
         (
-            "01:30",
-            gui_app.width - (len("01:30") * 8) - big_ui_engine.TEXT_BOX_PADDING_X - big_ui_engine.TIME_OVERLAY_EDGE_MARGIN_BIG,
+            "01:30 • 90s",
+            gui_app.width - (len("01:30 • 90s") * 8) - big_ui_engine.TEXT_BOX_PADDING_X - big_ui_engine.TIME_OVERLAY_EDGE_MARGIN_BIG,
             big_ui_engine.TEXT_BOX_PADDING_Y + big_ui_engine.TIME_OVERLAY_EDGE_MARGIN_BIG,
             24,
         )
     ]
+
+
+def test_format_route_timer_text_includes_minute_seconds_and_total_seconds() -> None:
+    assert big_ui_engine.format_route_timer_text(90.95) == "01:30 • 90s"
 
 
 def test_ui_recording_encoder_prefers_nvidia(monkeypatch) -> None:

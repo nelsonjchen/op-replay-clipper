@@ -370,3 +370,7 @@ def test_install_unmirrored_driver_camera_patches_nested_camera_view() -> None:
 
     assert camera_view._render is not original_render
     assert getattr(camera_view._render, "__self__", None) is camera_view
+
+
+def test_driver_debug_timer_text_uses_shared_total_seconds_format() -> None:
+    assert driver_debug_engine.format_route_timer_text(90.95, prefix="T+") == "T+01:30 • 90s"
