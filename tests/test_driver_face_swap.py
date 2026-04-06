@@ -163,6 +163,9 @@ def test_facefusion_command_swaps_all_faces_in_crop(tmp_path: Path, monkeypatch)
 
     selector_index = command.index("--face-selector-mode")
     assert command[selector_index + 1] == "many"
+    assert command[1].endswith("driver_facefusion_headless.py")
+    root_index = command.index("--facefusion-root")
+    assert command[root_index + 1] == str(tmp_path / "facefusion")
 
 
 def test_intermediate_encoder_falls_back_to_libx264(monkeypatch) -> None:

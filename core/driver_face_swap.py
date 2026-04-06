@@ -368,9 +368,12 @@ def _facefusion_swap_command(
 ) -> list[str]:
     output_video_encoder = default_facefusion_output_video_encoder()
     execution_providers = default_facefusion_execution_providers()
+    launcher_path = Path(__file__).resolve().parent / "driver_facefusion_headless.py"
     base_command = [
         str(facefusion_root / ".venv/bin/python"),
-        str(facefusion_root / "facefusion.py"),
+        str(launcher_path),
+        "--facefusion-root",
+        str(facefusion_root),
         "headless-run",
         "--jobs-path",
         str(facefusion_root / "jobs"),
