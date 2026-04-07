@@ -27,10 +27,6 @@ The clipper is deployed on [Replicate](https://replicate.com):
 
 https://replicate.com/nelsonjchen/op-replay-clipper
 
-The latest in-progress changes are usually pushed to the staging Replicate model first:
-
-https://replicate.com/nelsonjchen/op-replay-clipper-beta
-
 Replicate is an ultra-low-cost pay-as-you-go compute platform for running software jobs. Replicate is a great way to run this clipper as it's fast, easy to use, and you don't need to install anything on your computer or even deploy anything yourself. Just enter in the required information into the form, and Replicate will generate a clip. Expect to pay about ~$0.01 per clip but not even need to put in any payment details until you've reached a generously large level of usage.
 
 On Replicate and `cog predict`, the `route` input is now URL-only. The clip timing comes from the `connect.comma.ai` URL itself, so there are no separate `startSeconds` or `lengthSeconds` inputs anymore.
@@ -80,8 +76,6 @@ We assume you've already paired your device and have access to the device with y
    * When you were adjusting the selected portion of the route in a previous step, it was changing those last two numbers in the browser address bar URL which is the start time and end time respectively.
    * "Share This Route" button if it is present will work too. Choose "copy to clipboard" or similar.
 6. Visit https://replicate.com/nelsonjchen/op-replay-clipper
-   * If you want the freshest changes before they land on the main model, use the staging Replicate model instead:
-     https://replicate.com/nelsonjchen/op-replay-clipper-beta
 7. Under `route`, paste the URL you copied in the previous step.
    * ![image](https://github.com/commaai/openpilot/assets/5363/15d286cc-057f-4a1c-be82-855c5b570b90)
 8. Tweak any settings you like.
@@ -387,7 +381,7 @@ uv run python replicate_run.py \
 Notes:
 
 * `replicate_run.py` uses the hosted Replicate model version, not a local Cog/container run
-* pass `--model nelsonjchen/op-replay-clipper-beta:<version>` if you want to smoke the staging model instead of the main one
+* pass `--model <owner>/<model>:<version>` to target a specific hosted Replicate model version during smoke tests
 * the script loads `REPLICATE_API_TOKEN` from `.env` via `python-dotenv`
 * it prints the remote file URL when Replicate returns one, then writes the file to the path you passed with `--output`
 * the hosted helper now takes a full `connect.comma.ai` clip URL and does not expose separate `start-seconds` or `length-seconds` flags
