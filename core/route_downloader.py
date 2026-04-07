@@ -31,11 +31,6 @@ class FileListDict(TypedDict):
     # Filename are `qcamera.ts`
     qcameras: List[str]
 
-class RouteInfoDict(TypedDict):
-    segment_end_times: List[int]
-    segment_start_times: List[int]
-
-
 DOWNLOAD_MAX_ATTEMPTS = 3
 DOWNLOAD_RETRY_DELAY_SECONDS = 2
 
@@ -56,6 +51,35 @@ def _download_with_requests(url: str, destination: Path) -> None:
             for chunk in response.iter_content(chunk_size=1024 * 1024):
                 if chunk:
                     handle.write(chunk)
+
+
+def _build_connect_clip_url(route: str, start_seconds: int, length: int) -> str:
+    dongle_id, route_slug = route.split("|", 1)
+    end_seconds = start_seconds + length
+    return f"https://connect.comma.ai/{dongle_id}/{route_slug}/{start_seconds}/{end_seconds}"
+
+
+def _build_missing_upload_guidance(
+    route: str,
+    *,
+    start_seconds: int,
+    length: int,
+    smear_seconds: int,
+    segment_id: int,
+) -> str:
+    connect_url = _build_connect_clip_url(route, start_seconds, length)
+    guidance = [
+        f'Open {connect_url}, use "Files" to upload the missing files with "Upload All", wait for uploads to finish, then try again.'
+    ]
+    if segment_id == 0 and start_seconds < 60:
+        guidance.append(
+            f"This clip starts {start_seconds} seconds into the route, so it still uses route segment 0 because Connect clip URLs are relative to the route start."
+        )
+    if smear_seconds > 0:
+        guidance.append(
+            f"This render also uses {smear_seconds} seconds of hidden preroll, so it can require uploads from before the visible clip start."
+        )
+    return " ".join(guidance)
 
 
 def _decompress_log_preserving_source(compressed_path: Path, output_path: Path) -> None:
@@ -176,38 +200,16 @@ def downloadSegments(
             raise ValueError(f"Route {route} is not accessible. You may need to set the route to be public. Visit https://connect.comma.ai/{dongle_id}, view the route, dropdown the \"More Info\" button, and toggle \"Public\". You can set \"Public\" back to off after using this tool.")
     filelist: FileListDict = route_files_response.json()
 
-    # Look at the complete route segments endpoint of the and lookup the route info
-    # e.g. https://api.comma.ai/v1/devices/<dongle id>/routes_segments?end=1712304000000&start=0
-    # Where end is the current unix time in milliseconds format
-    full_route_segments_url = f"https://api.comma.ai/v1/devices/{dongle_id}/routes_segments?end={int(time.time() * 1000)}&start=0"
-    print(f"Downloading route segment info from {full_route_segments_url}")
-    if jwt_token:
-        route_info_response = requests.get(full_route_segments_url, headers={"Authorization": f"JWT {jwt_token}"})
-    else:
-        route_info_response = requests.get(full_route_segments_url)
-    # Response is an array of route info objects
-    # Look for the one where the object inside's "fullname" matches the route
-    route_info: RouteInfoDict = {}
-    for route_segment in route_info_response.json():
-        if route_segment["fullname"] == route:
-            route_info = route_segment
-            break
-    if not route_info:
-        raise ValueError(f"Route {route} not found in route segments")
-
-    # Get the start and end times of the route
-    # Download segment info from https://api.comma.ai/v1/devices/<dongle id>/routes_segments?end=1712304000000&start=1711094400000
-    route_start_time = route_info["segment_start_times"][start_segment]
-    route_end_time = route_info["segment_end_times"][end_segment]
-    print(f"Route {route} starts at {route_start_time} and ends at {route_end_time}")
-    comma_connect_url = f"https://connect.comma.ai/{dongle_id}/{route_start_time}/{route_end_time}"
-    print(f"View the route at {comma_connect_url}")
-
-    call_to_action_upload_message = f"Visit {comma_connect_url} , dropdown the \"Files\" button, and next to \"All files\", select \"Upload ## Files\". After all files have completed uploading, try again."
-
     # For every segment_id check if the file exists in the filelist
     # If it doesn't, throw an error
     for segment_id in segment_ids:
+        call_to_action_upload_message = _build_missing_upload_guidance(
+            route,
+            start_seconds=start_seconds,
+            length=length,
+            smear_seconds=smear_seconds,
+            segment_id=segment_id,
+        )
         camera_exists = False
         ecamera_exists = False
         dcamera_exists = False
