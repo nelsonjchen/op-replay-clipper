@@ -239,6 +239,26 @@ Pass criteria:
 - the driver-debug footer still renders correctly
 - the hidden passenger region is blurred for the full delivered clip with no exposed frames
 
+### 10. 360 Hidden Passenger Blur
+
+```bash
+uv run python replicate_run.py \
+  --model "$STAGING_MODEL" \
+  --url "$ROUTE_URL" \
+  --render-type 360 \
+  --anonymization-profile 'driver unchanged, passenger hidden' \
+  --passenger-redaction-style blur \
+  --jwt-token "$JWT_TOKEN" \
+  --output ./shared/prod-check-360-hidden-blur.mp4
+```
+
+Pass criteria:
+
+- the prediction succeeds
+- the output is playable in a 360-aware player
+- the driver-camera portion shows the anonymized passenger treatment for the full delivered clip
+- the resulting file still carries injected 360 metadata
+
 ## Runtime Assumptions To Verify
 
 These are not separate smokes, but they should be true when the matrix passes.
@@ -247,7 +267,8 @@ These are not separate smokes, but they should be true when the matrix passes.
 - The runtime still accepts plain raw `https://connect.comma.ai/...` URLs on
   the hosted surface.
 - The hosted `anonymizationProfile` surface accepts the new hidden-passenger
-  labels and still accepts old pixelize labels as compatibility aliases.
+  labels and still accepts old pixelize labels as compatibility aliases across
+  `driver`, `driver-debug`, `360`, and `360_forward_upon_wide`.
 - The hosted `passengerRedactionStyle` surface accepts `blur` and
   `silhouette`, defaulting to `blur`.
 - BIG UI unit detection should come from the logged route `IsMetric` param

@@ -73,6 +73,56 @@ def test_seat_mode_counts_reflect_mixed_profile(tmp_path: Path) -> None:
     }
 
 
+def test_banner_text_is_empty_for_passenger_hidden_only(tmp_path: Path) -> None:
+    active_seats = [
+        driver_face_swap.PreparedSeatArtifacts(
+            seat_side="right",
+            seat_role="passenger",
+            crop_clip=tmp_path / "right.mp4",
+            track_metadata=tmp_path / "right.json",
+        ),
+    ]
+
+    banner_text = driver_face_swap._banner_text_for_active_seats(
+        active_seats,
+        driver_face_swap.DriverFaceSwapOptions(
+            mode="facefusion",
+            profile="driver_unchanged_passenger_hidden",
+            passenger_redaction_style="silhouette",
+        ),
+    )
+
+    assert banner_text == ""
+
+
+def test_banner_text_only_mentions_face_swap_for_driver_swap_plus_hidden_passenger(tmp_path: Path) -> None:
+    active_seats = [
+        driver_face_swap.PreparedSeatArtifacts(
+            seat_side="left",
+            seat_role="driver",
+            crop_clip=tmp_path / "left.mp4",
+            track_metadata=tmp_path / "left.json",
+        ),
+        driver_face_swap.PreparedSeatArtifacts(
+            seat_side="right",
+            seat_role="passenger",
+            crop_clip=tmp_path / "right.mp4",
+            track_metadata=tmp_path / "right.json",
+        ),
+    ]
+
+    banner_text = driver_face_swap._banner_text_for_active_seats(
+        active_seats,
+        driver_face_swap.DriverFaceSwapOptions(
+            mode="facefusion",
+            profile="driver_face_swap_passenger_hidden",
+            passenger_redaction_style="silhouette",
+        ),
+    )
+
+    assert banner_text == "DRIVER FACE SWAPPED"
+
+
 def test_canonical_driver_face_profile_normalizes_pixelize_aliases() -> None:
     assert driver_face_swap.canonical_driver_face_profile("driver_unchanged_passenger_pixelize") == "driver_unchanged_passenger_hidden"
     assert driver_face_swap.canonical_driver_face_profile("driver_face_swap_passenger_pixelize") == "driver_face_swap_passenger_hidden"

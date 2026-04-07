@@ -89,7 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
         ],
         type=normalize_anonymization_profile_label,
         default="none",
-        help="Seat anonymization strategy for driver-camera renders on the hosted model.",
+        help="Seat anonymization strategy for driver-backed renders on the hosted model, including driver, driver-debug, and the 360 modes.",
     )
     parser.add_argument(
         "--passenger-redaction-style",

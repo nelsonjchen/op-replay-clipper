@@ -9,7 +9,7 @@ from core.rf_detr_runtime import ensure_python_nvidia_libs_preferred, sync_pytho
 ensure_python_nvidia_libs_preferred()
 
 from core import route_inputs
-from core.clip_orchestrator import ClipRequest, is_smear_render_type, run_clip
+from core.clip_orchestrator import ClipRequest, is_smear_render_type, run_clip, supports_driver_face_anonymization
 from core.openpilot_config import default_image_openpilot_root
 
 MIN_LENGTH_SECONDS = 5
@@ -92,7 +92,7 @@ class Predictor(BasePredictor):
             default="",
         ),
         anonymizationProfile: str = Input(
-            description="Seat anonymization strategy for driver-camera renders. Recommended values are: none, driver unchanged/passenger hidden, driver unchanged/passenger face swap, driver face swap/passenger hidden, driver face swap/passenger face swap.",
+            description="Seat anonymization strategy for driver-backed renders such as driver, driver-debug, 360, and 360_forward_upon_wide. Recommended values are: none, driver unchanged/passenger hidden, driver unchanged/passenger face swap, driver face swap/passenger hidden, driver face swap/passenger face swap.",
             choices=HOSTED_ANONYMIZATION_PROFILE_CHOICES,
             default="none",
         ),
@@ -140,7 +140,7 @@ class Predictor(BasePredictor):
                 driver_face_selection="auto_best_match",
             )
         )
-        if renderType in {"driver", "driver-debug"}:
+        if supports_driver_face_anonymization(renderType):
             selection_report_path = Path(result.output_path).with_name(f"{Path(result.output_path).stem}.driver-face-selection.json")
             if selection_report_path.exists():
                 try:

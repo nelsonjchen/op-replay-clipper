@@ -17,6 +17,7 @@ from core.clip_orchestrator import (
     is_openpilot_render_type,
     is_smear_render_type,
     run_clip,
+    supports_driver_face_anonymization,
 )
 from core.driver_face_swap import (
     canonical_driver_face_profile,
@@ -76,7 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--driver-face-anonymization",
         choices=["none", "facefusion"],
         default="none",
-        help="Optionally replace the face in the backing driver video before rendering `driver` or `driver-debug`.",
+        help="Optionally replace the face in the backing driver video before rendering a driver-backed clip such as `driver`, `driver-debug`, or the 360 modes.",
     )
     parser.add_argument(
         "--driver-face-profile",
@@ -147,7 +148,7 @@ def _prepare_openpilot_if_needed(args: argparse.Namespace) -> str:
     openpilot_path = Path(args.openpilot_dir).expanduser().resolve()
     openpilot_dir = str(openpilot_path)
     needs_openpilot = is_openpilot_render_type(args.render_type) or (
-        args.render_type == "driver" and args.driver_face_anonymization != "none"
+        supports_driver_face_anonymization(args.render_type) and args.driver_face_anonymization != "none"
     )
     if not needs_openpilot:
         return openpilot_dir

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import shutil
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -52,6 +55,13 @@ RENDER_TYPE_FILE_TYPES: dict[RenderType, tuple[str, ...]] = {
     "forward_upon_wide": ("ecameras", "cameras"),
     "360_forward_upon_wide": ("ecameras", "dcameras", "cameras"),
 }
+
+DRIVER_FACE_ANONYMIZATION_RENDER_TYPES: tuple[RenderType, ...] = (
+    "driver",
+    "driver-debug",
+    "360",
+    "360_forward_upon_wide",
+)
 
 
 @dataclass(frozen=True)
@@ -131,6 +141,18 @@ def is_smear_render_type(render_type: RenderType) -> bool:
     return render_type in ("ui", "ui-alt", "driver-debug")
 
 
+def supports_driver_face_anonymization(render_type: RenderType | str) -> bool:
+    return render_type in DRIVER_FACE_ANONYMIZATION_RENDER_TYPES
+
+
+def _append_unique_file_types(file_types: tuple[str, ...], *extras: str) -> tuple[str, ...]:
+    result = list(file_types)
+    for extra in extras:
+        if extra not in result:
+            result.append(extra)
+    return tuple(result)
+
+
 def normalize_output_format(render_type: RenderType, requested_format: OutputFormatInput) -> OutputFormat:
     if requested_format in ("h264", "hevc"):
         return requested_format
@@ -155,11 +177,12 @@ def select_download_file_types(
     if is_ui_render_type(render_type) and qcam:
         return ("qcameras", "logs")
     file_types = RENDER_TYPE_FILE_TYPES[render_type]
-    if render_type == "driver" and driver_face_anonymization != "none" and "logs" not in file_types:
-        file_types = (*file_types, "logs")
+    extra_file_types: list[str] = []
     if render_type in ("forward_upon_wide", "360_forward_upon_wide") and is_auto_forward_upon_wide(forward_upon_wide_h):
-        return (*file_types, "qlogs", "logs")
-    return file_types
+        extra_file_types.extend(("qlogs", "logs"))
+    if supports_driver_face_anonymization(render_type) and driver_face_anonymization != "none":
+        extra_file_types.append("logs")
+    return _append_unique_file_types(file_types, *extra_file_types)
 
 
 def resolve_data_dir(route: str, data_root: str, explicit_data_dir: str | None) -> Path:
@@ -196,8 +219,10 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
         selection_mode=request.driver_face_selection,
         donor_bank_dir=request.driver_face_donor_bank_dir,
     )
-    if has_driver_face_anonymization(driver_face_swap) and request.render_type not in ("driver", "driver-debug"):
-        raise ValueError("Driver face anonymization is only supported for `driver` and `driver-debug` renders.")
+    if has_driver_face_anonymization(driver_face_swap) and not supports_driver_face_anonymization(request.render_type):
+        raise ValueError(
+            "Driver face anonymization is only supported for `driver`, `driver-debug`, `360`, and `360_forward_upon_wide` renders."
+        )
 
     return ClipPlan(
         render_type=request.render_type,
@@ -320,6 +345,76 @@ def run_clip(request: ClipRequest) -> ClipResult:
             acceleration="facefusion",
         )
 
+    if plan.render_type in ("360", "360_forward_upon_wide") and has_driver_face_anonymization(plan.driver_face_swap):
+        with tempfile.TemporaryDirectory(prefix="driver-face-360-backing-") as backing_root:
+            backing_output_path = Path(backing_root) / "driver-backing.mp4"
+            backing_video_path = render_anonymized_driver_backing_video(
+                route=plan.route,
+                route_or_url=request.route_or_url,
+                start_seconds=plan.start_seconds,
+                length_seconds=plan.length_seconds,
+                data_dir=str(plan.data_dir),
+                openpilot_dir=plan.openpilot_dir,
+                acceleration=plan.local_acceleration,
+                output_path=str(backing_output_path),
+                options=plan.driver_face_swap,
+                jwt_token=plan.jwt_token,
+                render_banner=False,
+            )
+            backing_selection_report_path = backing_video_path.with_name(f"{backing_video_path.stem}.driver-face-selection.json")
+            equirect_banner_text = ""
+            driver_watermark_track: dict[str, object] | None = None
+            if backing_selection_report_path.exists():
+                try:
+                    selection_report = json.loads(backing_selection_report_path.read_text())
+                    equirect_banner_text = str(selection_report.get("banner_text") or "")
+                    seats = selection_report.get("seats")
+                    if isinstance(seats, dict):
+                        for seat_report in seats.values():
+                            if isinstance(seat_report, dict) and seat_report.get("seat_role") == "driver":
+                                overlay_track = seat_report.get("overlay_track")
+                                if isinstance(overlay_track, dict):
+                                    driver_watermark_track = overlay_track
+                                    break
+                except (json.JSONDecodeError, OSError, TypeError, ValueError):
+                    equirect_banner_text = ""
+                    driver_watermark_track = None
+            video_result = video_renderer.render_video_clip(
+                video_renderer.VideoRenderOptions(
+                    render_type=plan.render_type,
+                    data_dir=str(plan.data_dir),
+                    route_or_segment=plan.route,
+                    start_seconds=plan.start_seconds,
+                    length_seconds=plan.length_seconds,
+                    target_mb=plan.target_mb,
+                    file_format=plan.file_format,
+                    acceleration=plan.local_acceleration,
+                    forward_upon_wide_h=plan.forward_upon_wide_h,
+                    openpilot_dir=plan.openpilot_dir,
+                    output_path=str(plan.output_path),
+                    driver_input_path=str(backing_video_path),
+                    driver_watermark_text=equirect_banner_text,
+                    driver_watermark_track=driver_watermark_track,
+                )
+            )
+            final_selection_report_path = video_result.output_path.with_name(
+                f"{video_result.output_path.stem}.driver-face-selection.json"
+            )
+            if backing_selection_report_path.exists():
+                if final_selection_report_path.exists():
+                    final_selection_report_path.unlink()
+                shutil.copy2(backing_selection_report_path, final_selection_report_path)
+            elif final_selection_report_path.exists():
+                final_selection_report_path.unlink()
+        return ClipResult(
+            output_path=video_result.output_path,
+            route=plan.route,
+            render_type=plan.render_type,
+            data_dir=plan.data_dir,
+            file_format=plan.file_format,
+            acceleration=video_result.acceleration,
+        )
+
     video_result = video_renderer.render_video_clip(
         video_renderer.VideoRenderOptions(
             render_type=plan.render_type,
@@ -329,7 +424,7 @@ def run_clip(request: ClipRequest) -> ClipResult:
             length_seconds=plan.length_seconds,
             target_mb=plan.target_mb,
             file_format=plan.file_format,
-            acceleration=request.local_acceleration,
+            acceleration=plan.local_acceleration,
             forward_upon_wide_h=plan.forward_upon_wide_h,
             openpilot_dir=plan.openpilot_dir,
             output_path=str(plan.output_path),
