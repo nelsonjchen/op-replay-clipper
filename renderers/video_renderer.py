@@ -7,9 +7,13 @@ import platform
 import re
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
+
+import cv2
+import numpy as np
 
 from core.forward_upon_wide import (
     DEFAULT_FORWARD_UPON_WIDE_H,
@@ -48,6 +52,9 @@ class VideoRenderOptions:
     forward_upon_wide_h: ForwardUponWideHInput = DEFAULT_FORWARD_UPON_WIDE_H
     openpilot_dir: str = ""
     output_path: str = "./shared/cog-clip.mp4"
+    driver_input_path: str | None = None
+    driver_watermark_text: str = ""
+    driver_watermark_track: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -269,6 +276,78 @@ def _encoder_output_args(accel: VideoAcceleration, target_bps: int, output_path:
     ]
 
 
+def _dict_box_to_int_tuple(value: object) -> tuple[int, int, int, int] | None:
+    if not isinstance(value, dict):
+        return None
+    try:
+        return int(value["x"]), int(value["y"]), int(value["width"]), int(value["height"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _driver_watermark_lines(text: str) -> list[str]:
+    words = text.split()
+    if len(words) <= 2:
+        return [text]
+    midpoint = max(1, len(words) // 2)
+    return [" ".join(words[:midpoint]), " ".join(words[midpoint:])]
+
+
+def _write_driver_watermark_frames(
+    output_dir: Path,
+    text: str,
+    *,
+    frame_width: int,
+    frame_height: int,
+    frame_count: int,
+    track: dict[str, Any],
+) -> str:
+    font = cv2.FONT_HERSHEY_DUPLEX
+    font_scale = max(0.9, min(1.45, frame_height / 540.0))
+    thickness = max(2, int(round(frame_height / 260.0)))
+    lines = _driver_watermark_lines(text)
+    metrics = [cv2.getTextSize(line, font, font_scale, thickness) for line in lines]
+    text_w = max(size[0] for size, _baseline in metrics)
+    text_h = max(size[1] for size, _baseline in metrics)
+    baseline = max(line_baseline for _size, line_baseline in metrics)
+    line_gap = max(6, int(round(frame_height / 120.0))) if len(lines) > 1 else 0
+    total_text_h = (text_h * len(lines)) + (line_gap * max(0, len(lines) - 1))
+    frames = list(track.get("frames", []))
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for frame_index in range(frame_count):
+        frame = np.zeros((frame_height, frame_width, 4), dtype=np.uint8)
+        row = frames[min(frame_index, len(frames) - 1)] if frames else {}
+        rect = _dict_box_to_int_tuple(row.get("crop_rect")) or _dict_box_to_int_tuple(row.get("padded_box"))
+        if rect is not None:
+            x, y, w, _h = rect
+            pad_x = max(12, int(round(frame_width / 96.0)))
+            pad_y = max(8, int(round(frame_height / 120.0)))
+            box_w = text_w + (pad_x * 2)
+            box_h = total_text_h + baseline + (pad_y * 2)
+            box_x = max(10, min(frame_width - box_w - 10, x + max(0, (w - box_w) // 2)))
+            preferred_box_y = y - box_h - 12
+            if preferred_box_y < 10:
+                box_y = min(frame_height - box_h - 10, y + _h + 12)
+            else:
+                box_y = preferred_box_y
+            overlay = frame.copy()
+            cv2.rectangle(overlay, (box_x, box_y), (box_x + box_w, box_y + box_h), (0, 235, 255, 196), thickness=-1)
+            cv2.rectangle(overlay, (box_x, box_y), (box_x + box_w, box_y + box_h), (0, 0, 0, 228), thickness=max(2, thickness))
+            frame = cv2.addWeighted(overlay, 1.0, frame, 1.0, 0.0)
+            current_y = box_y + pad_y + text_h
+            for line in lines:
+                line_w = cv2.getTextSize(line, font, font_scale, thickness)[0][0]
+                text_x = box_x + max(pad_x, (box_w - line_w) // 2)
+                cv2.putText(frame, line, (text_x, current_y), font, font_scale, (0, 0, 0, 255), thickness, cv2.LINE_AA)
+                current_y += text_h + line_gap
+        frame_path = output_dir / f"watermark-{frame_index:05d}.png"
+        if not cv2.imwrite(str(frame_path), frame):
+            raise RuntimeError(f"Failed to write driver watermark frame to {frame_path}")
+
+    return str((output_dir / "watermark-%05d.png").resolve())
+
+
 def _simple_render_command(opts: VideoRenderOptions, accel: VideoAcceleration, ffmpeg_input: str) -> list[str]:
     start_seconds_relative = opts.start_seconds % 60
     target_bps = _target_bitrate(opts.target_mb, opts.length_seconds)
@@ -292,25 +371,45 @@ def _simple_render_command(opts: VideoRenderOptions, accel: VideoAcceleration, f
     ]
 
 
-def _complex_render_command(opts: VideoRenderOptions, accel: VideoAcceleration, inputs: list[str], filter_complex: str) -> list[str]:
+def _complex_render_command(
+    opts: VideoRenderOptions,
+    accel: VideoAcceleration,
+    inputs: list[str],
+    filter_complex: str,
+    *,
+    apply_output_seek: bool = True,
+) -> list[str]:
     start_seconds_relative = opts.start_seconds % 60
     target_bps = _target_bitrate(opts.target_mb, opts.length_seconds)
     command = ["ffmpeg", "-y"]
     for ffmpeg_input in inputs:
         command.extend([*accel.decoder_args, "-probesize", "100M", "-r", "20", "-i", ffmpeg_input])
-    command.extend(
-        [
-            "-t",
-            str(opts.length_seconds),
-            "-ss",
-            str(start_seconds_relative),
-            "-filter_complex",
-            filter_complex,
-            "-map",
-            "[vout]",
-            *(_encoder_output_args(accel, target_bps, opts.output_path)),
-        ]
-    )
+    command.extend(["-t", str(opts.length_seconds), "-filter_complex", filter_complex, "-map", "[vout]"])
+    if apply_output_seek:
+        command.extend(["-ss", str(start_seconds_relative)])
+    command.extend(_encoder_output_args(accel, target_bps, opts.output_path))
+    return command
+
+
+def _complex_render_command_with_watermark(
+    opts: VideoRenderOptions,
+    accel: VideoAcceleration,
+    inputs: list[str],
+    watermark_pattern: str,
+    filter_complex: str,
+    *,
+    apply_output_seek: bool = True,
+) -> list[str]:
+    start_seconds_relative = opts.start_seconds % 60
+    target_bps = _target_bitrate(opts.target_mb, opts.length_seconds)
+    command = ["ffmpeg", "-y"]
+    for ffmpeg_input in inputs:
+        command.extend([*accel.decoder_args, "-probesize", "100M", "-r", "20", "-i", ffmpeg_input])
+    command.extend(["-framerate", "20", "-i", watermark_pattern])
+    command.extend(["-t", str(opts.length_seconds), "-filter_complex", filter_complex, "-map", "[vout]"])
+    if apply_output_seek:
+        command.extend(["-ss", str(start_seconds_relative)])
+    command.extend(_encoder_output_args(accel, target_bps, opts.output_path))
     return command
 
 
@@ -337,103 +436,213 @@ def render_video_clip(opts: VideoRenderOptions) -> VideoRenderResult:
 
     forward_input = _concat_string(opts.data_dir, route, segments, "fcamera.hevc")
     wide_input = _concat_string(opts.data_dir, route, segments, "ecamera.hevc")
-    driver_input = _concat_string(opts.data_dir, route, segments, "dcamera.hevc")
+    driver_input = str(Path(opts.driver_input_path).expanduser().resolve()) if opts.driver_input_path else _concat_string(
+        opts.data_dir, route, segments, "dcamera.hevc"
+    )
     first_segment = segments[0]
+    driver_probe_path = (
+        Path(opts.driver_input_path).expanduser().resolve()
+        if opts.driver_input_path
+        else _segment_file_path(opts.data_dir, route, first_segment, "dcamera.hevc")
+    )
+    driver_dimensions = _probe_video_dimensions(driver_probe_path)
     forward_dimensions = _probe_video_dimensions(_segment_file_path(opts.data_dir, route, first_segment, "fcamera.hevc"))
     wide_dimensions = _probe_video_dimensions(_segment_file_path(opts.data_dir, route, first_segment, "ecamera.hevc"))
     if wide_dimensions is None:
         wide_dimensions = (1928, 1208)
+    if driver_dimensions is None:
+        driver_dimensions = wide_dimensions
     if forward_dimensions is None:
         forward_dimensions = wide_dimensions
+    driver_width = driver_dimensions[0] if driver_dimensions is not None else wide_dimensions[0]
     wide_height = wide_dimensions[1] if wide_dimensions is not None else 1208
+    watermark_pattern: str | None = None
+    watermark_root: Path | None = None
+    if (
+        opts.driver_watermark_text
+        and opts.driver_watermark_track
+        and opts.render_type in ("360", "360_forward_upon_wide")
+    ):
+        temp_root = Path(tempfile.mkdtemp(prefix="driver-watermark-"))
+        watermark_root = temp_root
+        watermark_width = driver_width * (2 if opts.render_type == "360_forward_upon_wide" else 1)
+        watermark_height = wide_height * (2 if opts.render_type == "360_forward_upon_wide" else 1)
+        watermark_pattern = _write_driver_watermark_frames(
+            temp_root,
+            opts.driver_watermark_text,
+            frame_width=watermark_width,
+            frame_height=watermark_height,
+            frame_count=max(1, int(round(opts.length_seconds * 20))),
+            track=opts.driver_watermark_track,
+        )
 
-    if opts.render_type == "forward":
-        command = _simple_render_command(opts, accel, forward_input)
-    elif opts.render_type == "wide":
-        command = _simple_render_command(opts, accel, wide_input)
-    elif opts.render_type == "driver":
-        command = _simple_render_command(opts, accel, driver_input)
-    elif opts.render_type == "forward_upon_wide":
-        warp = None
-        if is_auto_forward_upon_wide(opts.forward_upon_wide_h):
-            warp = resolve_auto_forward_upon_wide_warp(
-                route,
-                data_dir=opts.data_dir,
-                openpilot_dir=opts.openpilot_dir,
-                forward_dimensions=forward_dimensions,
-                wide_dimensions=wide_dimensions,
-                output_scale=1,
-            )
-        if warp is not None:
-            filter_complex = f"{_forward_upon_wide_warp_chain(warp, source_stream_label='[1:v]', output_label='front')};[0:v][front]overlay=0:0[vout]"
-        else:
-            layout = _resolve_forward_upon_wide_layout(
+    try:
+        if opts.render_type == "forward":
+            command = _simple_render_command(opts, accel, forward_input)
+        elif opts.render_type == "wide":
+            command = _simple_render_command(opts, accel, wide_input)
+        elif opts.render_type == "driver":
+            command = _simple_render_command(opts, accel, driver_input)
+        elif opts.render_type == "forward_upon_wide":
+            warp = None
+            if is_auto_forward_upon_wide(opts.forward_upon_wide_h):
+                warp = resolve_auto_forward_upon_wide_warp(
+                    route,
+                    data_dir=opts.data_dir,
+                    openpilot_dir=opts.openpilot_dir,
+                    forward_dimensions=forward_dimensions,
+                    wide_dimensions=wide_dimensions,
+                    output_scale=1,
+                )
+            if warp is not None:
+                filter_complex = f"{_forward_upon_wide_warp_chain(warp, source_stream_label='[1:v]', output_label='front')};[0:v][front]overlay=0:0[vout]"
+            else:
+                layout = _resolve_forward_upon_wide_layout(
+                    opts,
+                    route=route,
+                    forward_dimensions=forward_dimensions,
+                    wide_dimensions=wide_dimensions,
+                    output_scale=1,
+                )
+                filter_complex = _forward_upon_wide_filter(layout)
+            command = _complex_render_command(
                 opts,
-                route=route,
-                forward_dimensions=forward_dimensions,
-                wide_dimensions=wide_dimensions,
-                output_scale=1,
+                accel,
+                [wide_input, forward_input],
+                filter_complex,
             )
-            filter_complex = _forward_upon_wide_filter(layout)
-        command = _complex_render_command(
-            opts,
-            accel,
-            [wide_input, forward_input],
-            filter_complex,
-        )
-    elif opts.render_type == "360":
-        command = _complex_render_command(
-            opts,
-            accel,
-            [driver_input, wide_input],
-            f"[0:v]pad=iw:ih+290:0:290:color=#160000,crop=iw:{wide_height}[driver];[driver][1:v]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]",
-        )
-    elif opts.render_type == "360_forward_upon_wide":
-        warp = None
-        if is_auto_forward_upon_wide(opts.forward_upon_wide_h):
-            warp = resolve_auto_forward_upon_wide_warp(
-                route,
-                data_dir=opts.data_dir,
-                openpilot_dir=opts.openpilot_dir,
-                forward_dimensions=forward_dimensions,
-                wide_dimensions=wide_dimensions,
-                output_scale=2,
-            )
-        if warp is not None:
+        elif opts.render_type == "360":
+            if opts.driver_input_path:
+                driver_chain = (
+                    f"[0:v]trim=start=0:duration={opts.length_seconds},setpts=PTS-STARTPTS,"
+                    f"pad=iw:ih+290:0:290:color=#160000,crop=iw:{wide_height}[driver_raw]"
+                )
+                apply_output_seek = False
+            else:
+                driver_chain = f"[0:v]pad=iw:ih+290:0:290:color=#160000,crop=iw:{wide_height}[driver_raw]"
+                apply_output_seek = True
+            if watermark_pattern is not None:
+                driver_chain = f"{driver_chain};[driver_raw][2:v]overlay=0:0[driver]"
+            else:
+                driver_chain = f"{driver_chain};[driver_raw]copy[driver]"
             filter_complex = (
-                f"[1:v]scale=iw*2:ih*2[wide];"
-                f"{_forward_upon_wide_warp_chain(warp, source_stream_label='[2:v]', output_label='front')};"
-                f"[wide][front]overlay=0:0[fuw];"
-                f"[0:v]scale=iw*2:ih*2,pad=iw:ih+290:0:290:color=#160000,crop=iw:{wide_height * 2}[driver];"
-                f"[driver][fuw]hstack=inputs=2[v];"
+                f"{driver_chain};"
+                f"[1:v]trim=start={opts.start_seconds % 60}:duration={opts.length_seconds},setpts=PTS-STARTPTS[wide];"
+                f"[driver][wide]hstack=inputs=2[v];"
+                "[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]"
+                if opts.driver_input_path
+                else f"{driver_chain};[driver][1:v]hstack=inputs=2[v];[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]"
+            )
+            if watermark_pattern is not None:
+                command = _complex_render_command_with_watermark(
+                    opts,
+                    accel,
+                    [driver_input, wide_input],
+                    watermark_pattern,
+                    filter_complex,
+                    apply_output_seek=apply_output_seek,
+                )
+            else:
+                command = _complex_render_command(
+                    opts,
+                    accel,
+                    [driver_input, wide_input],
+                    filter_complex,
+                    apply_output_seek=apply_output_seek,
+                )
+        elif opts.render_type == "360_forward_upon_wide":
+            warp = None
+            if is_auto_forward_upon_wide(opts.forward_upon_wide_h):
+                warp = resolve_auto_forward_upon_wide_warp(
+                    route,
+                    data_dir=opts.data_dir,
+                    openpilot_dir=opts.openpilot_dir,
+                    forward_dimensions=forward_dimensions,
+                    wide_dimensions=wide_dimensions,
+                    output_scale=2,
+                )
+            if opts.driver_input_path:
+                driver_chain = (
+                    f"[0:v]trim=start=0:duration={opts.length_seconds},setpts=PTS-STARTPTS,"
+                    f"scale=iw*2:ih*2,pad=iw:ih+290:0:290:color=#160000,crop=iw:{wide_height * 2}[driver_raw]"
+                )
+                apply_output_seek = False
+            else:
+                driver_chain = (
+                    f"[0:v]scale=iw*2:ih*2,pad=iw:ih+290:0:290:color=#160000,crop=iw:{wide_height * 2}[driver_raw]"
+                )
+                apply_output_seek = True
+            if watermark_pattern is not None:
+                watermark_input_label = "[3:v]"
+                driver_chain = f"{driver_chain};[driver_raw]{watermark_input_label}overlay=0:0[driver]"
+            else:
+                driver_chain = f"{driver_chain};[driver_raw]copy[driver]"
+            if warp is not None:
+                if opts.driver_input_path:
+                    fuw_chain = (
+                        f"[1:v]trim=start={opts.start_seconds % 60}:duration={opts.length_seconds},setpts=PTS-STARTPTS,"
+                        "scale=iw*2:ih*2[wide];"
+                        f"[2:v]trim=start={opts.start_seconds % 60}:duration={opts.length_seconds},setpts=PTS-STARTPTS[forward];"
+                        f"{_forward_upon_wide_warp_chain(warp, source_stream_label='[forward]', output_label='front')};"
+                        "[wide][front]overlay=0:0[fuw]"
+                    )
+                else:
+                    fuw_chain = (
+                        "[1:v]scale=iw*2:ih*2[wide];"
+                        f"{_forward_upon_wide_warp_chain(warp, source_stream_label='[2:v]', output_label='front')};"
+                        "[wide][front]overlay=0:0[fuw]"
+                    )
+            else:
+                layout = _resolve_forward_upon_wide_layout(
+                    opts,
+                    route=route,
+                    forward_dimensions=forward_dimensions,
+                    wide_dimensions=wide_dimensions,
+                    output_scale=2,
+                )
+                if opts.driver_input_path:
+                    fuw_chain = (
+                        f"[2:v]trim=start={opts.start_seconds % 60}:duration={opts.length_seconds},setpts=PTS-STARTPTS,"
+                        f"scale={layout.overlay_width}:{layout.overlay_height},format=yuva420p,colorchannelmixer=aa=1[front];"
+                        f"[1:v]trim=start={opts.start_seconds % 60}:duration={opts.length_seconds},setpts=PTS-STARTPTS,"
+                        "scale=iw*2:ih*2[wide];"
+                        f"[wide][front]overlay={layout.x}:{layout.y}[fuw]"
+                    )
+                else:
+                    fuw_chain = (
+                        f"[2:v]scale={layout.overlay_width}:{layout.overlay_height},format=yuva420p,colorchannelmixer=aa=1[front];"
+                        "[1:v]scale=iw*2:ih*2[wide];"
+                        f"[wide][front]overlay={layout.x}:{layout.y}[fuw]"
+                    )
+            filter_complex = (
+                f"{fuw_chain};{driver_chain};"
+                "[driver][fuw]hstack=inputs=2[v];"
                 "[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]"
             )
+            if watermark_pattern is not None:
+                command = _complex_render_command_with_watermark(
+                    opts,
+                    accel,
+                    [driver_input, wide_input, forward_input],
+                    watermark_pattern,
+                    filter_complex,
+                    apply_output_seek=apply_output_seek,
+                )
+            else:
+                command = _complex_render_command(
+                    opts,
+                    accel,
+                    [driver_input, wide_input, forward_input],
+                    filter_complex,
+                    apply_output_seek=apply_output_seek,
+                )
         else:
-            layout = _resolve_forward_upon_wide_layout(
-                opts,
-                route=route,
-                forward_dimensions=forward_dimensions,
-                wide_dimensions=wide_dimensions,
-                output_scale=2,
-            )
-            filter_complex = (
-                f"[2:v]scale={layout.overlay_width}:{layout.overlay_height},format=yuva420p,colorchannelmixer=aa=1[front];"
-                f"[1:v]scale=iw*2:ih*2[wide];"
-                f"[wide][front]overlay={layout.x}:{layout.y}[fuw];"
-                f"[0:v]scale=iw*2:ih*2,pad=iw:ih+290:0:290:color=#160000,crop=iw:{wide_height * 2}[driver];"
-                f"[driver][fuw]hstack=inputs=2[v];"
-                "[v]v360=dfisheye:equirect:ih_fov=195:iv_fov=122[vout]"
-            )
-        command = _complex_render_command(
-            opts,
-            accel,
-            [driver_input, wide_input, forward_input],
-            filter_complex,
-        )
-    else:
-        raise ValueError(f"Invalid render_type: {opts.render_type}")
+            raise ValueError(f"Invalid render_type: {opts.render_type}")
 
-    _run_logged(command)
+        _run_logged(command)
+    finally:
+        if watermark_root is not None and watermark_root.exists():
+            shutil.rmtree(watermark_root, ignore_errors=True)
 
     output_path = Path(opts.output_path).resolve()
     if opts.render_type in ("360", "360_forward_upon_wide"):

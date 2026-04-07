@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import sys
@@ -86,3 +87,35 @@ def test_predictor_setup_defaults_rf_detr_device_to_auto(monkeypatch) -> None:
     predictor.setup()
 
     assert os.environ["DRIVER_FACE_BENCHMARK_RF_DETR_DEVICE"] == "auto"
+
+
+def test_predictor_logs_hidden_redaction_summary_for_360_render(tmp_path, monkeypatch, capsys) -> None:
+    cog_predictor = _load_cog_predictor()
+    output_path = tmp_path / "out.mp4"
+    output_path.write_bytes(b"video")
+    selection_report_path = output_path.with_name(f"{output_path.stem}.driver-face-selection.json")
+    selection_report_path.write_text(json.dumps({"seat_reports": [{"hidden_redaction": {"effect": "blur"}}]}) + "\n")
+
+    monkeypatch.setattr(
+        cog_predictor,
+        "run_clip",
+        lambda request: types.SimpleNamespace(output_path=output_path),
+    )
+
+    predictor = cog_predictor.Predictor()
+    result = predictor.predict(
+        renderType="360",
+        route="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496",
+        smearAmount=3,
+        fileSize=9,
+        fileFormat="auto",
+        jwtToken="",
+        anonymizationProfile="driver unchanged, passenger hidden",
+        passengerRedactionStyle="blur",
+        notes="",
+    )
+
+    captured = capsys.readouterr()
+    assert result == output_path
+    assert "HIDDEN_REDACTION_SUMMARY:" in captured.out
+    assert '"effect": "blur"' in captured.out

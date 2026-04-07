@@ -237,6 +237,15 @@ uv run python clip.py driver-debug --demo --length-seconds 20 \
   --driver-face-source-image ./assets/driver-face-donors/generic-donor-clean-shaven.jpg \
   --driver-face-preset fast \
   --output ./shared/driver-debug-facefusion.mp4
+
+uv run python clip.py 360 --demo --length-seconds 20 \
+  --driver-face-anonymization facefusion \
+  --driver-face-profile driver_face_swap_passenger_hidden \
+  --passenger-redaction-style blur \
+  --driver-face-selection auto_best_match \
+  --driver-face-donor-bank-dir ./assets/driver-face-donors \
+  --driver-face-preset fast \
+  --output ./shared/driver-360-facefusion.mp4
 ```
 
 Tiny RF-DETR-only repro:
@@ -285,7 +294,7 @@ Notes:
 
 * `clip.py` is the primary local CLI for UI and non-UI renders
 * `driver-debug` is an openpilot-backed render type like `ui` and `ui-alt`, but it only needs `dcameras` and `logs`
-* `driver` and `driver-debug` can optionally anonymize the backing driver video with `--driver-face-anonymization facefusion`
+* `driver`, `driver-debug`, `360`, and `360_forward_upon_wide` can optionally anonymize the backing driver video with `--driver-face-anonymization facefusion`
 * `--driver-face-profile` controls who is swapped versus hidden: `driver_unchanged_passenger_hidden`, `driver_unchanged_passenger_face_swap`, `driver_face_swap_passenger_hidden`, and `driver_face_swap_passenger_face_swap`
 * `--passenger-redaction-style` controls how hidden passengers are rendered and currently supports `blur` and `silhouette`
 * Old `...passenger_pixelize` profile slugs are still accepted as compatibility aliases, but they now map to hidden-passenger + `blur`
@@ -293,7 +302,7 @@ Notes:
 * Every anonymized output now burns a bright mode-specific banner into the driver video, for example `PASSENGER BLURRED`, `PASSENGER SILHOUETTED`, or `DRIVER SWAPPED, PASSENGER BLURRED`, so viewers can tell what was actually changed
 * `--driver-face-preset fast` is the practical default for short clips, while `quality` trades more time for cleaner masking and higher-resolution swapping
 * `--driver-face-selection auto_best_match` runs a short same-tone donor search against the donor bank, writes a `<output>.driver-face-selection.json` sidecar report, then uses the selected donor for the final swap
-* `driver` anonymization also needs `logs`, because the face crop is driven by driver-monitoring telemetry rather than a fresh detector pass
+* Driver-backed anonymization also needs `logs`, because the face crop is driven by driver-monitoring telemetry rather than a fresh detector pass
 * `driver-debug` uses the same hidden preroll/cut behavior as the UI renderers so the visible clip starts after the DM state has initialized
 * BIG UI renders now use a repo-owned exact-frame runner instead of the old coarse 20 Hz chunk mapping, so lane lines and path overlays stay aligned to the logged road camera frames
 * The BIG UI renderer also does a hidden 1-second warmup before recording so the visible clip starts with initialized video/UI state instead of a blank opening
