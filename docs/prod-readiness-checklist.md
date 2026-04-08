@@ -217,9 +217,47 @@ Pass criteria:
 - the prediction succeeds
 - the output is playable
 - the driver banner reads `DRIVER SWAPPED, PASSENGER SILHOUETTED`
-- the hidden passenger region is fully opaque white with the dashed cutout outline
+- the hidden passenger region is fully opaque white with no explicit outline stroke
 
-### 9. Driver Debug Hidden Passenger Blur
+### 9. Driver Hidden Passenger Black Silhouette
+
+```bash
+uv run python replicate_run.py \
+  --model "$STAGING_MODEL" \
+  --url "$ROUTE_URL" \
+  --render-type driver \
+  --anonymization-profile 'driver face swap, passenger hidden' \
+  --passenger-redaction-style black_silhouette \
+  --jwt-token "$JWT_TOKEN" \
+  --output ./shared/prod-check-driver-hidden-black-silhouette.mp4
+```
+
+Pass criteria:
+
+- the prediction succeeds
+- the output is playable
+- the hidden passenger region is opaque dark charcoal with no explicit outline stroke
+
+### 10. Driver Hidden Passenger IR Tint
+
+```bash
+uv run python replicate_run.py \
+  --model "$STAGING_MODEL" \
+  --url "$ROUTE_URL" \
+  --render-type driver \
+  --anonymization-profile 'driver face swap, passenger hidden' \
+  --passenger-redaction-style ir_tint \
+  --jwt-token "$JWT_TOKEN" \
+  --output ./shared/prod-check-driver-hidden-ir-tint.mp4
+```
+
+Pass criteria:
+
+- the prediction succeeds
+- the output is playable
+- the hidden passenger region uses the muted burgundy `ir_tint` fill with no explicit outline stroke
+
+### 11. Driver Debug Hidden Passenger Blur
 
 ```bash
 uv run python replicate_run.py \
@@ -239,7 +277,7 @@ Pass criteria:
 - the driver-debug footer still renders correctly
 - the hidden passenger region is blurred for the full delivered clip with no exposed frames
 
-### 10. 360 Hidden Passenger Blur
+### 12. 360 Hidden Passenger Blur
 
 ```bash
 uv run python replicate_run.py \
@@ -269,8 +307,8 @@ These are not separate smokes, but they should be true when the matrix passes.
 - The hosted `anonymizationProfile` surface accepts the new hidden-passenger
   labels and still accepts old pixelize labels as compatibility aliases across
   `driver`, `driver-debug`, `360`, and `360_forward_upon_wide`.
-- The hosted `passengerRedactionStyle` surface accepts `blur` and
-  `silhouette`, defaulting to `blur`.
+- The hosted `passengerRedactionStyle` surface accepts `blur`,
+  `silhouette`, `black_silhouette`, and `ir_tint`, defaulting to `blur`.
 - BIG UI unit detection should come from the logged route `IsMetric` param
   when present, and imperial should remain the fallback when it is missing.
 - The 360 renderer should no longer assume older fixed camera dimensions on

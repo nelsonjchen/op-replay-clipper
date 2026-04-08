@@ -21,6 +21,7 @@ HOSTED_ANONYMIZATION_PROFILE_CHOICES = [
     "driver face swap, passenger hidden",
     "driver face swap, passenger face swap",
 ]
+PASSENGER_REDACTION_STYLE_CHOICES = ["blur", "silhouette", "black_silhouette", "ir_tint"]
 
 GUI_ANONYMIZATION_PROFILE_MAP = {
     "none": ("none", "driver_face_swap_passenger_face_swap"),
@@ -98,7 +99,7 @@ class Predictor(BasePredictor):
         ),
         passengerRedactionStyle: str = Input(
             description="How to hide the passenger when the chosen anonymization profile uses passenger hidden mode.",
-            choices=["blur", "silhouette"],
+            choices=PASSENGER_REDACTION_STYLE_CHOICES,
             default="blur",
         ),
         notes: str = Input(description="Optional notes for your own reference. Does not affect output.", default=""),

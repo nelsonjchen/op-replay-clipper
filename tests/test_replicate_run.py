@@ -95,6 +95,23 @@ def test_build_input_allows_driver_debug_render_type() -> None:
     assert payload["passengerRedactionStyle"] == "silhouette"
 
 
+def test_build_input_allows_ir_tint_redaction_style() -> None:
+    args = SimpleNamespace(
+        notes="",
+        url="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496",
+        file_size=9,
+        jwt_token="",
+        file_format="auto",
+        render_type="driver",
+        smear_amount=3,
+        anonymization_profile="driver face swap, passenger hidden",
+        passenger_redaction_style="ir_tint",
+    )
+
+    payload = replicate_run.build_input(args)
+    assert payload["passengerRedactionStyle"] == "ir_tint"
+
+
 def test_encode_replicate_route_input_preserves_existing_literal_prefix() -> None:
     url = "literal:https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496"
     assert replicate_run.encode_replicate_route_input(url) == url.removeprefix("literal:")

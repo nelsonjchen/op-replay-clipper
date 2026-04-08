@@ -25,10 +25,11 @@ OPENPILOT_DIR="${SMOKE_OPENPILOT_DIR:-${REPO_ROOT}/.cache/openpilot-local}"
 RF_DETR_DEVICE="${SMOKE_RF_DETR_DEVICE:-}"
 REQUIRE_RF_DETR_DEVICE="${SMOKE_REQUIRE_RF_DETR_DEVICE:-}"
 REQUIRE_OUTPUT_ENCODER="${SMOKE_REQUIRE_OUTPUT_ENCODER:-}"
+PYTHON_BIN="${SMOKE_PYTHON_BIN:-}"
 
 usage() {
   cat <<'EOF'
-Run the three product-facing passenger-redaction smoke checks.
+Run the product-facing passenger-redaction smoke checks.
 
 Usage:
   smoke_driver_redaction.sh [options]
@@ -43,6 +44,7 @@ Environment:
   SMOKE_DRIVER_MODE                unchanged or swap. Defaults to unchanged for local and swap for hosted.
   SMOKE_SYNC_REPO                  1 to run uv sync before local smokes. Default: 1
   SMOKE_OPENPILOT_DIR              Openpilot checkout to reuse for local smokes.
+  SMOKE_PYTHON_BIN                 Python interpreter used for JSON report checks. Default: auto-detect python3/python
 
 Options:
   --backend <local|hosted>         Smoke backend. Default: local
@@ -55,6 +57,7 @@ Options:
   --rf-detr-device <auto|cpu|cuda|mps>
   --require-rf-detr-device <device>
   --require-output-encoder <name>
+  --python-bin <path>              Python interpreter used for JSON report checks
   --skip-sync-repo                 Skip the initial uv sync step for local smokes
   -h, --help                       Show this help text
 EOF
@@ -71,6 +74,23 @@ require_value() {
 
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+}
+
+resolve_python_bin() {
+  if [[ -n "${PYTHON_BIN}" ]]; then
+    printf '%s\n' "${PYTHON_BIN}"
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' "python3"
+    return 0
+  fi
+  if command -v python >/dev/null 2>&1; then
+    printf '%s\n' "python"
+    return 0
+  fi
+  echo "Could not find python3 or python for report validation." >&2
+  exit 1
 }
 
 while [[ $# -gt 0 ]]; do
@@ -115,6 +135,10 @@ while [[ $# -gt 0 ]]; do
       REQUIRE_OUTPUT_ENCODER="$2"
       shift 2
       ;;
+    --python-bin)
+      PYTHON_BIN="$2"
+      shift 2
+      ;;
     --skip-sync-repo)
       SYNC_REPO="0"
       shift
@@ -155,6 +179,7 @@ if [[ "${BACKEND}" == "hosted" ]]; then
 fi
 
 mkdir -p "${OUTPUT_DIR}"
+PYTHON_BIN="$(resolve_python_bin)"
 
 if [[ "${BACKEND}" == "local" && "${SYNC_REPO}" != "0" ]]; then
   log "Syncing repo environment with uv"
@@ -255,7 +280,7 @@ run_case() {
       echo "Expected selection report at ${selection_report}" >&2
       exit 1
     fi
-    python - "${selection_report}" "${REQUIRE_RF_DETR_DEVICE}" "${REQUIRE_OUTPUT_ENCODER}" <<'PY'
+    "${PYTHON_BIN}" - "${selection_report}" "${REQUIRE_RF_DETR_DEVICE}" "${REQUIRE_OUTPUT_ENCODER}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -264,14 +289,29 @@ report = json.loads(Path(sys.argv[1]).read_text())
 required_device = sys.argv[2]
 required_encoder = sys.argv[3]
 hidden = None
-for seat_report in report.get("seat_reports", []):
-    hidden = seat_report.get("hidden_redaction")
-    if hidden:
-        break
+seat_reports = report.get("seat_reports")
+if isinstance(seat_reports, list):
+    for seat_report in seat_reports:
+        if not isinstance(seat_report, dict):
+            continue
+        hidden = seat_report.get("hidden_redaction")
+        if hidden:
+            break
+if hidden is None:
+    seats = report.get("seats")
+    if isinstance(seats, dict):
+        for seat_report in seats.values():
+            if not isinstance(seat_report, dict):
+                continue
+            hidden = seat_report.get("hidden_redaction")
+            if hidden:
+                break
 if hidden is None:
     raise SystemExit("Could not find hidden_redaction in selection report")
 actual_device = hidden.get("rf_detr_device")
 actual_encoder = hidden.get("output_video_encoder")
+actual_effect = hidden.get("rf_detr_effect") or hidden.get("effect")
+print(f"hidden_redaction.rf_detr_effect={actual_effect}")
 print(f"hidden_redaction.rf_detr_device={actual_device}")
 print(f"hidden_redaction.output_video_encoder={actual_encoder}")
 if required_device and actual_device != required_device:
@@ -312,6 +352,20 @@ run_case \
   "$(driver_profile_slug)" \
   "$(driver_profile_label)" \
   "silhouette"
+
+run_case \
+  "driver-hidden-black-silhouette" \
+  "driver" \
+  "$(driver_profile_slug)" \
+  "$(driver_profile_label)" \
+  "black_silhouette"
+
+run_case \
+  "driver-hidden-ir-tint" \
+  "driver" \
+  "$(driver_profile_slug)" \
+  "$(driver_profile_label)" \
+  "ir_tint"
 
 run_case \
   "driver-debug-hidden-blur" \

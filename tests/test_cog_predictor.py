@@ -77,6 +77,17 @@ def test_hosted_anonymization_profile_choices_are_canonical() -> None:
     ]
 
 
+def test_passenger_redaction_style_choices_include_new_variants() -> None:
+    cog_predictor = _load_cog_predictor()
+
+    assert cog_predictor.PASSENGER_REDACTION_STYLE_CHOICES == [
+        "blur",
+        "silhouette",
+        "black_silhouette",
+        "ir_tint",
+    ]
+
+
 def test_predictor_setup_defaults_rf_detr_device_to_auto(monkeypatch) -> None:
     cog_predictor = _load_cog_predictor()
     monkeypatch.delenv("DRIVER_FACE_BENCHMARK_RF_DETR_DEVICE", raising=False)

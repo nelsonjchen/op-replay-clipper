@@ -45,6 +45,7 @@ RENDER_TYPES: tuple[RenderType, ...] = (
     "forward_upon_wide",
     "360_forward_upon_wide",
 )
+PASSENGER_REDACTION_STYLE_CHOICES = ["blur", "silhouette", "black_silhouette", "ir_tint"]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -93,7 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--passenger-redaction-style",
-        choices=["blur", "silhouette"],
+        choices=PASSENGER_REDACTION_STYLE_CHOICES,
         default="blur",
         help="How to hide the passenger when the selected anonymization profile uses passenger hidden mode.",
     )

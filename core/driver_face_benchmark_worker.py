@@ -43,6 +43,11 @@ RF_DETR_CANDIDATE_IDS = {
     "rf-detr-passenger-blur",
     "rf-detr-passenger-silhouette",
 }
+RF_DETR_SILHOUETTE_STYLE_PALETTES = {
+    "silhouette": (255, 255, 255),
+    "black_silhouette": (27, 27, 30),
+    "ir_tint": (88, 64, 158),
+}
 DEFAULT_RF_DETR_THRESHOLD = 0.4
 DEFAULT_RF_DETR_FRAME_STRIDE = 5
 DEFAULT_RF_DETR_MASK_DILATE = 15
@@ -779,11 +784,25 @@ def _blur_mask(frame: np.ndarray, mask: np.ndarray) -> None:
     frame[blur_mask] = blurred[blur_mask]
 
 
-def _silhouette_mask(frame: np.ndarray, mask: np.ndarray, *, frame_index: int) -> None:
+def _silhouette_style_palette(effect: str) -> tuple[int, int, int]:
+    try:
+        return RF_DETR_SILHOUETTE_STYLE_PALETTES[effect]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported RF-DETR silhouette effect: {effect}") from exc
+
+
+def _silhouette_mask(
+    frame: np.ndarray,
+    mask: np.ndarray,
+    *,
+    frame_index: int,
+    effect: str = "silhouette",
+) -> None:
     if not np.any(mask):
         return
 
     del frame_index
+    fill_color = _silhouette_style_palette(effect)
     contour_mask = mask.astype(np.uint8) * 255
     contours, _ = cv2.findContours(contour_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
@@ -797,8 +816,8 @@ def _silhouette_mask(frame: np.ndarray, mask: np.ndarray, *, frame_index: int) -
     if not approx_contours:
         return
 
-    frame[mask] = 255
-    cv2.drawContours(frame, approx_contours, -1, (255, 255, 255), thickness=cv2.FILLED, lineType=cv2.LINE_AA)
+    frame[mask] = fill_color
+    cv2.drawContours(frame, approx_contours, -1, fill_color, thickness=cv2.FILLED, lineType=cv2.LINE_AA)
 
 
 def _apply_rf_detr_effect(
@@ -811,8 +830,8 @@ def _apply_rf_detr_effect(
     if effect == "blur":
         _blur_mask(frame, mask)
         return
-    if effect == "silhouette":
-        _silhouette_mask(frame, mask, frame_index=frame_index)
+    if effect in RF_DETR_SILHOUETTE_STYLE_PALETTES:
+        _silhouette_mask(frame, mask, frame_index=frame_index, effect=effect)
         return
     raise ValueError(f"Unsupported RF-DETR effect: {effect}")
 

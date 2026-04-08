@@ -28,7 +28,7 @@ DriverFaceAnonymizationProfile = Literal[
 ]
 DriverFaceSwapPreset = Literal["fast", "quality"]
 DriverFaceSelectionMode = Literal["manual", "auto_best_match"]
-PassengerRedactionStyle = Literal["blur", "silhouette"]
+PassengerRedactionStyle = Literal["blur", "silhouette", "black_silhouette", "ir_tint"]
 SeatAnonymizationMode = Literal["none", "facefusion", "hidden"]
 
 DEFAULT_FACEFUSION_ROOT = "./.cache/facefusion"

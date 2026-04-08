@@ -637,3 +637,40 @@ def test_silhouette_mask_border_is_static_for_cutout_effect() -> None:
     driver_face_benchmark_worker._silhouette_mask(frame_b, mask, frame_index=4)
 
     assert np.array_equal(frame_a, frame_b)
+
+
+def test_black_silhouette_mask_replaces_masked_region_with_dark_fill() -> None:
+    frame = np.full((25, 25, 3), 200, dtype=np.uint8)
+    mask = np.zeros((25, 25), dtype=bool)
+    mask[7:18, 7:18] = True
+
+    driver_face_benchmark_worker._silhouette_mask(frame, mask, frame_index=3, effect="black_silhouette")
+
+    center_pixel = frame[12, 12]
+    assert np.all(center_pixel <= 40)
+    assert np.all(frame[0, 0] == 200)
+
+
+def test_ir_tint_mask_replaces_masked_region_with_red_dominant_fill() -> None:
+    frame = np.zeros((25, 25, 3), dtype=np.uint8)
+    mask = np.zeros((25, 25), dtype=bool)
+    mask[10:15, 10:15] = True
+
+    driver_face_benchmark_worker._silhouette_mask(frame, mask, frame_index=5, effect="ir_tint")
+
+    center_pixel = frame[12, 12]
+    assert center_pixel[2] > center_pixel[1]
+    assert center_pixel[2] > center_pixel[0]
+    assert np.all(frame[0, 0] == 0)
+
+
+def test_ir_tint_mask_border_is_static_for_cutout_effect() -> None:
+    mask = np.zeros((25, 25), dtype=bool)
+    mask[10:15, 10:15] = True
+    frame_a = np.zeros((25, 25, 3), dtype=np.uint8)
+    frame_b = np.zeros((25, 25, 3), dtype=np.uint8)
+
+    driver_face_benchmark_worker._silhouette_mask(frame_a, mask, frame_index=0, effect="ir_tint")
+    driver_face_benchmark_worker._silhouette_mask(frame_b, mask, frame_index=4, effect="ir_tint")
+
+    assert np.array_equal(frame_a, frame_b)

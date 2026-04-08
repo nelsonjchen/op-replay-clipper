@@ -224,6 +224,24 @@ uv run python clip.py driver --demo --length-seconds 20 \
   --driver-face-preset fast \
   --output ./shared/driver-facefusion-silhouette.mp4
 
+uv run python clip.py driver --demo --length-seconds 20 \
+  --driver-face-anonymization facefusion \
+  --driver-face-profile driver_face_swap_passenger_hidden \
+  --passenger-redaction-style black_silhouette \
+  --driver-face-selection auto_best_match \
+  --driver-face-donor-bank-dir ./assets/driver-face-donors \
+  --driver-face-preset fast \
+  --output ./shared/driver-facefusion-black-silhouette.mp4
+
+uv run python clip.py driver --demo --length-seconds 20 \
+  --driver-face-anonymization facefusion \
+  --driver-face-profile driver_face_swap_passenger_hidden \
+  --passenger-redaction-style ir_tint \
+  --driver-face-selection auto_best_match \
+  --driver-face-donor-bank-dir ./assets/driver-face-donors \
+  --driver-face-preset fast \
+  --output ./shared/driver-facefusion-ir-tint.mp4
+
 uv run python clip.py driver-debug --demo --length-seconds 20 \
   --driver-face-anonymization facefusion \
   --driver-face-profile driver_unchanged_passenger_hidden \
@@ -290,8 +308,9 @@ Notes:
 * `driver-debug` is an openpilot-backed render type like `ui` and `ui-alt`, but it only needs `dcameras` and `logs`
 * `driver`, `driver-debug`, `360`, and `360_forward_upon_wide` can optionally anonymize the backing driver video with `--driver-face-anonymization facefusion`
 * `--driver-face-profile` controls who is swapped versus hidden: `driver_unchanged_passenger_hidden`, `driver_unchanged_passenger_face_swap`, `driver_face_swap_passenger_hidden`, and `driver_face_swap_passenger_face_swap`
-* `--passenger-redaction-style` controls how hidden passengers are rendered and currently supports `blur` and `silhouette`
+* `--passenger-redaction-style` controls how hidden passengers are rendered and supports `blur`, `silhouette` (white), `black_silhouette`, and `ir_tint`
 * Old `...passenger_pixelize` profile slugs are still accepted as compatibility aliases, but they now map to hidden-passenger + `blur`
+* `ir_tint` is a stylized night-camera-inspired burgundy treatment, not a literal infrared reconstruction
 * That anonymization path reuses the repo-owned DM face track, uses FaceFusion for swapped seats, and uses the shared RF-DETR full-body redaction path for hidden passengers before the final driver-video render
 * Every anonymized output now burns a bright mode-specific banner into the driver video, for example `PASSENGER BLURRED`, `PASSENGER SILHOUETTED`, or `DRIVER SWAPPED, PASSENGER BLURRED`, so viewers can tell what was actually changed
 * `--driver-face-preset fast` is the practical default for short clips, while `quality` trades more time for cleaner masking and higher-resolution swapping

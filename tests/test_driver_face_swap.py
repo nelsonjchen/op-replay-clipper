@@ -198,6 +198,40 @@ def test_hidden_passenger_redaction_report_keeps_output_encoder(monkeypatch, tmp
     assert report["output_video_encoder"] == "h264_nvenc"
 
 
+def test_hidden_passenger_redaction_passes_ir_tint_effect(monkeypatch, tmp_path: Path) -> None:
+    track_path = tmp_path / "passenger-face-track.json"
+    track_path.write_text(json.dumps({"frames": []}))
+    source_path = tmp_path / "source.mp4"
+    source_path.write_bytes(b"source")
+    output_path = tmp_path / "output.mp4"
+    captured: dict[str, object] = {}
+
+    def _fake_render_rf_detr_redacted_clip(**kwargs):
+        captured.update(kwargs)
+        return {"rf_detr_device": "cuda", "rf_detr_model_id": "rfdetr-seg-preview"}
+
+    monkeypatch.setattr(
+        "core.driver_face_benchmark_worker.render_rf_detr_redacted_clip",
+        _fake_render_rf_detr_redacted_clip,
+    )
+
+    _, _, report = driver_face_swap._run_hidden_passenger_redaction(
+        sample_dir=tmp_path,
+        source_path=source_path,
+        output_path=output_path,
+        track_metadata=track_path,
+        options=driver_face_swap.DriverFaceSwapOptions(
+            mode="facefusion",
+            profile="driver_face_swap_passenger_hidden",
+            passenger_redaction_style="ir_tint",
+        ),
+        banner_text="DRIVER FACE SWAPPED",
+    )
+
+    assert report["rf_detr_device"] == "cuda"
+    assert captured["effect"] == "ir_tint"
+
+
 def test_facefusion_command_swaps_all_faces_in_crop(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(driver_face_swap, "default_facefusion_output_video_encoder", lambda: "libx264")
     monkeypatch.setattr(driver_face_swap, "default_facefusion_execution_providers", lambda: ["cpu"])

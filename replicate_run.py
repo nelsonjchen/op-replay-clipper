@@ -28,6 +28,7 @@ _ANONYMIZATION_PROFILE_LABEL_ALIASES = {
     "driver unchanged, passenger pixelize": "driver unchanged, passenger hidden",
     "driver face swap, passenger pixelize": "driver face swap, passenger hidden",
 }
+PASSENGER_REDACTION_STYLE_CHOICES = ["blur", "silhouette", "black_silhouette", "ir_tint"]
 
 
 class HttpPrediction:
@@ -93,7 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--passenger-redaction-style",
-        choices=["blur", "silhouette"],
+        choices=PASSENGER_REDACTION_STYLE_CHOICES,
         default="blur",
         help="How to hide the passenger when the selected anonymization profile uses passenger hidden mode.",
     )
