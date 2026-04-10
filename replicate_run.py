@@ -11,6 +11,7 @@ from typing import Any
 from dotenv import load_dotenv
 import requests
 from core import route_inputs
+from core.ui_layouts import UI_ALT_VARIANTS
 
 try:
     import replicate
@@ -71,6 +72,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="ui",
         help="Clip render type.",
     )
+    parser.add_argument(
+        "--ui-alt-variant",
+        choices=UI_ALT_VARIANTS,
+        default=None,
+        help="Alternate UI composition for `ui-alt` renders.",
+    )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Where to write the returned MP4.")
     parser.add_argument("--smear-amount", type=int, default=3, help="UI smear amount.")
     parser.add_argument("--file-size", type=int, default=9, help="Target output size in MB.")
@@ -111,7 +118,9 @@ def validate_connect_url(url: str) -> str:
 
 
 def build_input(args: argparse.Namespace) -> dict[str, Any]:
-    return {
+    if args.ui_alt_variant is not None and args.render_type != "ui-alt":
+        raise SystemExit("--ui-alt-variant is only supported with the `ui-alt` render type")
+    payload = {
         "notes": args.notes,
         "route": encode_replicate_route_input(args.url),
         "fileSize": args.file_size,
@@ -122,6 +131,9 @@ def build_input(args: argparse.Namespace) -> dict[str, Any]:
         "anonymizationProfile": args.anonymization_profile,
         "passengerRedactionStyle": args.passenger_redaction_style,
     }
+    if args.ui_alt_variant is not None:
+        payload["uiAltVariant"] = args.ui_alt_variant
+    return payload
 
 
 def require_api_token() -> str:

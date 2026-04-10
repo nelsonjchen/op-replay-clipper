@@ -11,6 +11,7 @@ ensure_python_nvidia_libs_preferred()
 from core import route_inputs
 from core.clip_orchestrator import ClipRequest, is_smear_render_type, run_clip, supports_driver_face_anonymization
 from core.openpilot_config import default_image_openpilot_root
+from core.ui_layouts import UI_ALT_VARIANTS
 
 MIN_LENGTH_SECONDS = 5
 MAX_LENGTH_SECONDS = 300
@@ -82,6 +83,11 @@ class Predictor(BasePredictor):
             le=40,
             default=3,
         ),
+        uiAltVariant: str | None = Input(
+            description="(ui-alt only) Alternate composition. `device` keeps a single main camera view with telemetry, while the stacked modes require wide video.",
+            choices=UI_ALT_VARIANTS,
+            default=None,
+        ),
         fileSize: int = Input(description="Target output size in MB. Actual size may vary.", ge=5, le=200, default=9),
         fileFormat: str = Input(
             description="Output codec. Auto is recommended: it uses HEVC for 360 renders and H.264 for the others. HEVC usually gives better quality for the size, but some browsers and devices do not play it well.",
@@ -116,6 +122,8 @@ class Predictor(BasePredictor):
             driver_face_anonymization, driver_face_profile = GUI_ANONYMIZATION_PROFILE_MAP[anonymizationProfile]
         except KeyError as exc:
             raise ValueError(f"Unsupported anonymization profile: {anonymizationProfile}") from exc
+        if uiAltVariant is not None and renderType != "ui-alt":
+            raise ValueError("`uiAltVariant` is only supported when `renderType` is `ui-alt`.")
         result = run_clip(
             ClipRequest(
                 render_type=renderType,  # type: ignore[arg-type]
@@ -123,6 +131,7 @@ class Predictor(BasePredictor):
                 start_seconds=0,
                 length_seconds=0,
                 target_mb=fileSize,
+                ui_alt_variant=uiAltVariant,  # type: ignore[arg-type]
                 file_format=fileFormat,  # type: ignore[arg-type]
                 output_path="./shared/cog-clip.mp4",
                 smear_seconds=smearAmount if is_smear_render_type(renderType) else 0,  # type: ignore[arg-type]

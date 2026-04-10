@@ -154,7 +154,7 @@ def test_build_layout_rects_default_uses_full_canvas() -> None:
     rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="default")
 
     assert rects.road_rect == (0, 0, 1920, 1080)
-    assert rects.footer_rect is None
+    assert rects.telemetry_rect is None
 
 
 def test_load_route_metadata_falls_back_to_car_fingerprint_when_platform_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -242,20 +242,38 @@ def test_load_route_metadata_falls_back_without_uploaded_logs(monkeypatch) -> No
     assert metadata["commit"] == "12345678"
 
 
-def test_build_layout_rects_alt_reserves_footer() -> None:
-    rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="alt")
+def test_build_layout_rects_alt_device_uses_sidebar_telemetry() -> None:
+    rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="alt", ui_alt_variant="device")
 
-    assert rects.road_rect == (0, 0, 1920, 578)
+    assert rects.road_rect == (0, 72, 1344, 1008)
     assert rects.wide_rect is None
-    assert rects.footer_rect == (0, 578, 1920, 502)
+    assert rects.telemetry_rect == (1344, 72, 576, 1008)
 
 
-def test_build_layout_rects_alt_with_wide_splits_camera_area() -> None:
-    rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="alt", show_wide_panel=True)
+def test_build_layout_rects_alt_stacked_forward_over_wide_splits_camera_area() -> None:
+    rects = big_ui_engine.build_layout_rects(
+        width=1920,
+        height=1080,
+        layout_mode="alt",
+        ui_alt_variant="stacked_forward_over_wide",
+    )
 
-    assert rects.road_rect == (0, 0, 1920, 289)
-    assert rects.wide_rect == (0, 289, 1920, 289)
-    assert rects.footer_rect == (0, 578, 1920, 502)
+    assert rects.road_rect == (0, 72, 1344, 504)
+    assert rects.wide_rect == (0, 576, 1344, 504)
+    assert rects.telemetry_rect == (1344, 72, 576, 1008)
+
+
+def test_build_layout_rects_alt_stacked_wide_over_forward_swaps_camera_order() -> None:
+    rects = big_ui_engine.build_layout_rects(
+        width=1920,
+        height=1080,
+        layout_mode="alt",
+        ui_alt_variant="stacked_wide_over_forward",
+    )
+
+    assert rects.road_rect == (0, 576, 1344, 504)
+    assert rects.wide_rect == (0, 72, 1344, 504)
+    assert rects.telemetry_rect == (1344, 72, 576, 1008)
 
 
 def test_compute_ui_alt_dual_canvas_height_preserves_full_height_views() -> None:
@@ -263,18 +281,30 @@ def test_compute_ui_alt_dual_canvas_height_preserves_full_height_views() -> None
     assert big_ui_engine.compute_ui_alt_dual_canvas_height(1080) == 2662
 
 
-def test_build_layout_rects_alt_with_wide_can_keep_footer_as_addon() -> None:
-    rects = big_ui_engine.build_layout_rects(
-        width=2160,
-        height=2662,
-        layout_mode="alt",
-        show_wide_panel=True,
-        footer_height_override=502,
-    )
+def test_compute_ui_alt_telemetry_width_uses_reasonable_bounds() -> None:
+    assert big_ui_engine.compute_ui_alt_telemetry_width(1280) == 420
+    assert big_ui_engine.compute_ui_alt_telemetry_width(1920) == 576
+    assert big_ui_engine.compute_ui_alt_telemetry_width(2560) == 640
 
-    assert rects.road_rect == (0, 0, 2160, 1080)
-    assert rects.wide_rect == (0, 1080, 2160, 1080)
-    assert rects.footer_rect == (0, 2160, 2160, 502)
+
+def test_compute_ui_alt_stacked_canvas_height_adds_vertical_room() -> None:
+    assert big_ui_engine.compute_ui_alt_stacked_canvas_height(1080) == 1404
+    assert big_ui_engine.compute_ui_alt_stacked_canvas_height(720) == 960
+    assert big_ui_engine.compute_ui_alt_stacked_canvas_height(1600) == 2020
+
+
+def test_ui_alt_blink_on_toggles_on_half_second_boundaries() -> None:
+    assert big_ui_engine.ui_alt_blink_on(90.0) is True
+    assert big_ui_engine.ui_alt_blink_on(90.24) is True
+    assert big_ui_engine.ui_alt_blink_on(90.5) is False
+    assert big_ui_engine.ui_alt_blink_on(91.0) is True
+
+
+def test_validate_ui_alt_stream_availability_requires_wide_for_stacked() -> None:
+    with pytest.raises(RuntimeError, match="wide stream"):
+        big_ui_engine.validate_ui_alt_stream_availability("stacked_forward_over_wide", has_wide_stream=False)
+
+    big_ui_engine.validate_ui_alt_stream_availability("device", has_wide_stream=False)
 
 
 def test_compute_ui_alt_panel_label_position_uses_safe_inset() -> None:

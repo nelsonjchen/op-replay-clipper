@@ -25,6 +25,7 @@ from core.driver_face_swap import (
 )
 from core.forward_upon_wide import ForwardUponWideHInput, is_auto_forward_upon_wide
 from core.openpilot_config import default_image_openpilot_root
+from core.ui_layouts import UIAltVariant, resolve_ui_alt_variant
 from renderers import driver_debug_renderer, ui_renderer, video_renderer
 
 
@@ -71,6 +72,7 @@ class ClipRequest:
     start_seconds: int
     length_seconds: int
     target_mb: int
+    ui_alt_variant: UIAltVariant | None = None
     file_format: OutputFormatInput = "auto"
     output_path: str = "./shared/cog-clip.mp4"
     smear_seconds: int = 0
@@ -100,6 +102,7 @@ class ClipRequest:
 @dataclass(frozen=True)
 class ClipPlan:
     render_type: RenderType
+    ui_alt_variant: UIAltVariant | None
     route: str
     start_seconds: int
     length_seconds: int
@@ -223,9 +226,12 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
         raise ValueError(
             "Driver face anonymization is only supported for `driver`, `driver-debug`, `360`, and `360_forward_upon_wide` renders."
         )
+    if request.ui_alt_variant is not None and request.render_type != "ui-alt":
+        raise ValueError("`ui_alt_variant` is only supported for `ui-alt` renders.")
 
     return ClipPlan(
         render_type=request.render_type,
+        ui_alt_variant=resolve_ui_alt_variant(request.ui_alt_variant) if request.render_type == "ui-alt" else None,
         route=parsed.route,
         start_seconds=parsed.start_seconds,
         length_seconds=parsed.length_seconds,
@@ -284,6 +290,7 @@ def run_clip(request: ClipRequest) -> ClipResult:
                 openpilot_dir=plan.openpilot_dir,
                 headless=plan.headless,
                 layout_mode="alt" if plan.render_type == "ui-alt" else "default",
+                ui_alt_variant=plan.ui_alt_variant,
                 qcam=plan.qcam,
                 acceleration=plan.local_acceleration,
             )

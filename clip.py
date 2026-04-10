@@ -29,6 +29,7 @@ from core.driver_face_swap import (
 from core.forward_upon_wide import parse_forward_upon_wide_h
 from core.openpilot_bootstrap import bootstrap_openpilot, ensure_openpilot_checkout
 from core.openpilot_config import default_local_openpilot_root, default_openpilot_branch, default_openpilot_repo_url
+from core.ui_layouts import UI_ALT_VARIANTS
 
 
 DEMO_ROUTE = "5beb9b58bd12b691|0000010a--a51155e496"
@@ -67,6 +68,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--file-format", choices=["auto", "h264", "hevc"], default="auto")
     parser.add_argument("--forward-upon-wide-h", type=parse_forward_upon_wide_h, default="auto", help=argparse.SUPPRESS)
     parser.add_argument("--qcam", action="store_true")
+    parser.add_argument(
+        "--ui-alt-variant",
+        choices=UI_ALT_VARIANTS,
+        default=None,
+        help="Alternate UI composition for `ui-alt`. `device` keeps a single main camera view with telemetry, while the stacked modes require wide video.",
+    )
     parser.add_argument("--windowed", action="store_true")
     parser.add_argument("--skip-openpilot-update", action="store_true")
     parser.add_argument("--skip-openpilot-bootstrap", action="store_true")
@@ -175,6 +182,8 @@ def _prepare_openpilot_if_needed(args: argparse.Namespace) -> str:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
+    if args.ui_alt_variant is not None and args.render_type != "ui-alt":
+        raise SystemExit("--ui-alt-variant is only supported with the `ui-alt` render type")
 
     route, start_seconds, length_seconds = _resolve_route_and_timing(args)
     openpilot_dir = _prepare_openpilot_if_needed(args)
@@ -187,6 +196,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 start_seconds=start_seconds,
                 length_seconds=length_seconds,
                 target_mb=args.file_size_mb,
+                ui_alt_variant=args.ui_alt_variant,
                 file_format=args.file_format,
                 output_path=args.output,
                 smear_seconds=args.smear_seconds if is_smear_render_type(args.render_type) else 0,

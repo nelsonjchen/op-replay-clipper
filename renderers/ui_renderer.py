@@ -17,6 +17,7 @@ from core.openpilot_integration import (
     build_openpilot_compatible_data_dir,
 )
 from core.render_runtime import configure_ui_environment, temporary_headless_display
+from core.ui_layouts import UIAltVariant, is_stacked_ui_alt_variant, resolve_ui_alt_variant
 
 
 UI_STARTUP_WARMUP_SECONDS = 1
@@ -49,6 +50,7 @@ class UIRenderOptions:
     openpilot_dir: str = field(default_factory=default_image_openpilot_root)
     headless: bool = True
     layout_mode: str = "default"
+    ui_alt_variant: UIAltVariant | None = None
     qcam: bool = False
     acceleration: UIRecordingAcceleration = "auto"
 
@@ -293,6 +295,11 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
         raise FileNotFoundError(f"Modern clip tool not found at {openpilot_dir}/tools/clip/run.py")
     if opts.layout_mode not in UI_LAYOUT_MODES:
         raise ValueError(f"Unknown UI layout mode: {opts.layout_mode}")
+    if opts.layout_mode == "default" and opts.ui_alt_variant is not None:
+        raise ValueError("`ui_alt_variant` is only supported when layout_mode is `alt`.")
+    resolved_ui_alt_variant = resolve_ui_alt_variant(opts.ui_alt_variant) if opts.layout_mode == "alt" else None
+    if resolved_ui_alt_variant is not None and is_stacked_ui_alt_variant(resolved_ui_alt_variant) and opts.qcam:
+        raise ValueError("Stacked `ui-alt` variants require wide video and are not available with `qcam`.")
 
     patch_report = apply_openpilot_runtime_patches(openpilot_dir)
     if patch_report.changed:
@@ -334,6 +341,8 @@ def render_ui_clip(opts: UIRenderOptions) -> UIRenderResult:
         "--layout-mode",
         opts.layout_mode,
     ]
+    if resolved_ui_alt_variant is not None:
+        clip_cmd += ["--ui-alt-variant", resolved_ui_alt_variant]
     if opts.data_dir:
         compat_root = build_openpilot_compatible_data_dir(opts.route, Path(opts.data_dir))
         clip_cmd += ["-d", str(compat_root)]

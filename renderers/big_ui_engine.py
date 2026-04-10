@@ -26,6 +26,7 @@ from renderers.styled_text import (
     StyledTextRun,
     StyledTextState,
 )
+from core.ui_layouts import DEFAULT_UI_ALT_VARIANT, UI_ALT_VARIANTS, UIAltVariant, is_stacked_ui_alt_variant
 
 FRAMERATE = 20
 CAMERA_SERVICE = "roadEncodeIdx"
@@ -51,9 +52,18 @@ UI_ALT_CONFIDENCE_RAIL_GAP = 24.0
 UI_ALT_CONFIDENCE_LABEL_NUDGE_X = -4.0
 UI_ALT_BLINKER_CORNER_INSET_Y = 20
 UI_ALT_STEERING_DISPLAY_RING_PAD = 52
+UI_ALT_TELEMETRY_HEADER_HEIGHT = 44.0
 UI_ALT_FOOTER_CTA_LINE = "Make your own `ui-alt` clips with"
 UI_ALT_FOOTER_CTA_URL = "https://github.com/nelsonjchen/op-replay-clipper"
 UI_ALT_FOOTER_CTA_URL_DISPLAY = "github.com/nelsonjchen/op-replay-clipper"
+UI_ALT_TELEMETRY_WIDTH_RATIO = 0.30
+UI_ALT_TELEMETRY_MIN_WIDTH = 420
+UI_ALT_TELEMETRY_MAX_WIDTH = 640
+UI_ALT_CAMERA_MIN_WIDTH = 480
+UI_ALT_HEADER_RESERVED_HEIGHT = 72
+UI_ALT_STACKED_EXTRA_HEIGHT_RATIO = 0.30
+UI_ALT_STACKED_MIN_EXTRA_HEIGHT = 240
+UI_ALT_STACKED_MAX_EXTRA_HEIGHT = 420
 TORQUE_RING_MAX_SPAN_DEG = 112.0
 TORQUE_RING_NEUTRAL_DEG = 270.0
 UI_ALT_LAT_ACCEL_MAX = 3.0
@@ -144,7 +154,7 @@ class RenderStep:
 class LayoutRects:
     road_rect: tuple[int, int, int, int]
     wide_rect: tuple[int, int, int, int] | None = None
-    footer_rect: tuple[int, int, int, int] | None = None
+    telemetry_rect: tuple[int, int, int, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -206,7 +216,13 @@ def parse_args() -> argparse.Namespace:
         "--layout-mode",
         choices=["default", "alt"],
         default="default",
-        help="UI layout mode. alt reserves a footer below the road view for a rotating steering wheel.",
+        help="UI layout mode. alt enables the telemetry-present `ui-alt` compositions.",
+    )
+    parser.add_argument(
+        "--ui-alt-variant",
+        choices=UI_ALT_VARIANTS,
+        default=DEFAULT_UI_ALT_VARIANT,
+        help="Alternate UI composition for `ui-alt` renders.",
     )
     args = parser.parse_args()
     if args.end <= args.start:
@@ -214,33 +230,64 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
+def compute_ui_alt_telemetry_width(width: int) -> int:
+    telemetry_width = int(width * UI_ALT_TELEMETRY_WIDTH_RATIO)
+    telemetry_width = max(UI_ALT_TELEMETRY_MIN_WIDTH, min(UI_ALT_TELEMETRY_MAX_WIDTH, telemetry_width))
+    return min(telemetry_width, max(1, width - UI_ALT_CAMERA_MIN_WIDTH))
+
+
+def compute_ui_alt_stacked_canvas_height(base_height: int) -> int:
+    extra_height = int(base_height * UI_ALT_STACKED_EXTRA_HEIGHT_RATIO)
+    extra_height = max(UI_ALT_STACKED_MIN_EXTRA_HEIGHT, min(UI_ALT_STACKED_MAX_EXTRA_HEIGHT, extra_height))
+    return base_height + extra_height
+
+
+def validate_ui_alt_stream_availability(ui_alt_variant: UIAltVariant, *, has_wide_stream: bool) -> None:
+    if is_stacked_ui_alt_variant(ui_alt_variant) and not has_wide_stream:
+        raise RuntimeError("Stacked `ui-alt` variants require wide video, but no wide stream was available.")
+
+
 def build_layout_rects(
     *,
     width: int,
     height: int,
     layout_mode: str,
-    show_wide_panel: bool = False,
-    footer_height_override: int | None = None,
+    ui_alt_variant: UIAltVariant = DEFAULT_UI_ALT_VARIANT,
 ) -> LayoutRects:
     if layout_mode == "default":
         return LayoutRects(road_rect=(0, 0, width, height))
     if layout_mode != "alt":
         raise ValueError(f"Unknown layout mode: {layout_mode}")
 
-    footer_height = footer_height_override if footer_height_override is not None else compute_ui_alt_footer_height(height)
-    road_height = height - footer_height
-    if show_wide_panel:
-        top_height = road_height - (road_height // 2)
-        bottom_height = road_height - top_height
+    telemetry_width = compute_ui_alt_telemetry_width(width)
+    camera_width = max(1, width - telemetry_width)
+    header_height = min(UI_ALT_HEADER_RESERVED_HEIGHT, max(0, height - 1))
+    content_y = header_height
+    content_height = max(1, height - header_height)
+    telemetry_rect = (camera_width, content_y, telemetry_width, content_height)
+    if ui_alt_variant == "device":
         return LayoutRects(
-            road_rect=(0, 0, width, top_height),
-            wide_rect=(0, top_height, width, bottom_height),
-            footer_rect=(0, road_height, width, footer_height),
+            road_rect=(0, content_y, camera_width, content_height),
+            telemetry_rect=telemetry_rect,
         )
-    return LayoutRects(
-        road_rect=(0, 0, width, road_height),
-        footer_rect=(0, road_height, width, footer_height),
-    )
+
+    top_height = content_height - (content_height // 2)
+    bottom_height = content_height - top_height
+    top_rect = (0, content_y, camera_width, top_height)
+    bottom_rect = (0, content_y + top_height, camera_width, bottom_height)
+    if ui_alt_variant == "stacked_forward_over_wide":
+        return LayoutRects(
+            road_rect=top_rect,
+            wide_rect=bottom_rect,
+            telemetry_rect=telemetry_rect,
+        )
+    if ui_alt_variant == "stacked_wide_over_forward":
+        return LayoutRects(
+            road_rect=bottom_rect,
+            wide_rect=top_rect,
+            telemetry_rect=telemetry_rect,
+        )
+    raise ValueError(f"Unknown ui-alt variant: {ui_alt_variant}")
 
 
 def extract_steering_angle_deg(state: Mapping[str, object]) -> float:
@@ -255,6 +302,10 @@ def extract_steering_angle_deg(state: Mapping[str, object]) -> float:
 
 def _clip01(value: float) -> float:
     return max(0.0, min(1.0, value))
+
+
+def ui_alt_blink_on(route_seconds: float) -> bool:
+    return int(route_seconds * 2.0) % 2 == 0
 
 
 def _footer_ui_status(*, enabled: bool, state: object) -> str:
@@ -1323,26 +1374,44 @@ class SteeringFooterRenderer:
             draw_dot(telemetry.steering_applied_deg, applied_torque_color, base_radius + 2)
         draw_dot(telemetry.steering_angle_deg, actual_color, base_radius - 10)
 
-    def _draw_blinker_arrows(self, *, center_x: float, center_y: float, wheel_size: int, telemetry: FooterTelemetry) -> None:
+    def _draw_blinker_arrows(
+        self,
+        *,
+        center_x: float,
+        center_y: float,
+        wheel_size: int,
+        telemetry: FooterTelemetry,
+        blink_on: bool,
+        content_top_y: float,
+    ) -> None:
         import pyray as rl
 
         inactive_color = rl.Color(255, 255, 255, 60)
-        active_color = rl.Color(94, 214, 135, 255)
-        hazard_color = rl.Color(255, 176, 87, 255)
+        active_color = rl.Color(255, 255, 255, 255)
         shadow_color = rl.Color(0, 0, 0, 210)
+        active_bg = rl.Color(26, 198, 102, 255)
         display_half_extent = (wheel_size / 2) + UI_ALT_STEERING_DISPLAY_RING_PAD
         box_left = center_x - display_half_extent
         box_right = center_x + display_half_extent
-        box_top = center_y - display_half_extent
-        arrow_center_y = box_top + UI_ALT_BLINKER_CORNER_INSET_Y
+        arrow_center_y = max(
+            (center_y - display_half_extent) + UI_ALT_BLINKER_CORNER_INSET_Y,
+            content_top_y + 18.0,
+        )
 
-        def draw_chevron(*, tip_x: float, direction: int, color) -> None:
+        def draw_chevron(*, tip_x: float, direction: int, color, active: bool) -> None:
             arm_len = 18
             arm_rise = 14
             line_width = 7
-
             apex_x = tip_x
             outer_x = tip_x - (direction * (arm_len + 8))
+            bg_width = 46
+            bg_height = 34
+            bg_center_x = (apex_x + outer_x) / 2
+            bg_x = bg_center_x - (bg_width / 2)
+            bg_y = arrow_center_y - (bg_height / 2)
+
+            if active:
+                rl.draw_rectangle_rounded(rl.Rectangle(bg_x, bg_y, bg_width, bg_height), 0.4, 10, active_bg)
 
             for dx, dy, draw_color in ((2, 2, shadow_color), (0, 0, color)):
                 rl.draw_line_ex(
@@ -1358,15 +1427,13 @@ class SteeringFooterRenderer:
                     draw_color,
                 )
 
-        left_color = hazard_color if telemetry.left_blinker and telemetry.right_blinker else (
-            active_color if telemetry.left_blinker else inactive_color
-        )
-        right_color = hazard_color if telemetry.left_blinker and telemetry.right_blinker else (
-            active_color if telemetry.right_blinker else inactive_color
-        )
+        left_active = telemetry.left_blinker and blink_on
+        right_active = telemetry.right_blinker and blink_on
+        left_color = active_color if left_active else inactive_color
+        right_color = active_color if right_active else inactive_color
 
-        draw_chevron(tip_x=box_left, direction=-1, color=left_color)
-        draw_chevron(tip_x=box_right, direction=1, color=right_color)
+        draw_chevron(tip_x=box_left, direction=-1, color=left_color, active=left_active)
+        draw_chevron(tip_x=box_right, direction=1, color=right_color, active=right_active)
 
     def _draw_steering_summary(self, rect, *, telemetry: FooterTelemetry) -> None:
         import pyray as rl
@@ -1576,7 +1643,7 @@ class SteeringFooterRenderer:
             code_padding_y=4.0,
         )
 
-    def render(self, rect, *, telemetry: FooterTelemetry) -> None:
+    def render(self, rect, *, telemetry: FooterTelemetry, route_seconds: float) -> None:
         import pyray as rl
 
         panel_bg = rl.Color(5, 12, 18, 255)
@@ -1585,7 +1652,39 @@ class SteeringFooterRenderer:
         text_dim = rl.Color(255, 255, 255, 150)
         green = rl.Color(94, 214, 135, 255)
         orange = rl.Color(255, 176, 87, 255)
-        layout = build_footer_panel_layout(rect)
+        confidence_width = min(UI_ALT_CONFIDENCE_RAIL_WIDTH, max(54.0, rect.width * 0.16))
+        inner_x = rect.x + UI_ALT_FOOTER_OUTER_PAD_X
+        inner_y = rect.y + UI_ALT_FOOTER_OUTER_PAD_Y
+        inner_w = max(1.0, rect.width - (2 * UI_ALT_FOOTER_OUTER_PAD_X))
+        inner_h = max(1.0, rect.height - (2 * UI_ALT_FOOTER_OUTER_PAD_Y))
+        confidence_x = rect.x + rect.width - UI_ALT_FOOTER_OUTER_PAD_X - confidence_width
+        content_right = confidence_x - UI_ALT_CONFIDENCE_RAIL_GAP
+        content_w = max(1.0, content_right - inner_x)
+        header_content_y = inner_y + UI_ALT_TELEMETRY_HEADER_HEIGHT
+        wheel_size = max(124, min(int(content_w * 0.78), int(rect.height * 0.22)))
+        wheel_center_x = inner_x + (content_w / 2)
+        wheel_center_y = header_content_y + (wheel_size / 2) + 8.0
+        steering_summary_y = header_content_y + wheel_size + 28.0
+        steering_summary_h = max(112.0, min(250.0, rect.height * 0.28))
+        meters_title_y = steering_summary_y + steering_summary_h + 24.0
+        meter_grid_y = meters_title_y + 32.0
+        meter_gap_x = 18.0
+        meter_gap_y = 16.0
+        meter_cols = 2 if content_w >= 250.0 else 1
+        meter_w = max(96.0, (content_w - (meter_gap_x if meter_cols == 2 else 0.0)) / meter_cols)
+        meter_h = 56.0
+        first_row_y = meter_grid_y
+        second_row_y = first_row_y + meter_h + meter_gap_y
+        accel_y = second_row_y + meter_h + 20.0
+        accel_h = 52.0
+        cta_h = min(84.0, max(54.0, rect.height * 0.09))
+        cta_y = rect.y + rect.height - UI_ALT_FOOTER_OUTER_PAD_Y - cta_h
+        confidence_rect = (
+            confidence_x,
+            header_content_y,
+            confidence_width,
+            max(120.0, cta_y - header_content_y - 14.0),
+        )
 
         rl.draw_rectangle_gradient_v(
             int(rect.x),
@@ -1602,14 +1701,6 @@ class SteeringFooterRenderer:
             int(rect.y),
             divider,
         )
-
-        steering_content_top_y = rect.y + UI_ALT_FOOTER_OUTER_PAD_Y
-        steering_content_bottom_y = rect.y + rect.height - UI_ALT_FOOTER_BOTTOM_SAFE_PAD - 12
-        steering_content_height = max(120.0, steering_content_bottom_y - steering_content_top_y)
-        wheel_size = min(int(steering_content_height * 0.82), int(rect.width * 0.14))
-        wheel_size = max(124, wheel_size)
-        wheel_center_x = rect.x + layout.wheel_col_w * 0.72
-        wheel_center_y = steering_content_top_y + (steering_content_height / 2) + 2
         src_rect = rl.Rectangle(0, 0, self._wheel_texture.width, self._wheel_texture.height)
         dest_rect = rl.Rectangle(wheel_center_x, wheel_center_y, wheel_size, wheel_size)
         origin = (wheel_size / 2, wheel_size / 2)
@@ -1626,86 +1717,114 @@ class SteeringFooterRenderer:
             center_y=wheel_center_y,
             wheel_size=wheel_size,
             telemetry=telemetry,
+            blink_on=ui_alt_blink_on(route_seconds),
+            content_top_y=header_content_y,
         )
 
-        rl.draw_text_ex(
-            self._label_font,
-            "STEERING",
-            rl.Vector2(rect.x + UI_ALT_FOOTER_OUTER_PAD_X, rect.y + UI_ALT_FOOTER_OUTER_PAD_Y),
-            22,
-            0,
-            text_dim,
-        )
+        rl.draw_text_ex(self._label_font, "TELEMETRY", rl.Vector2(inner_x, inner_y), 22, 0, text_dim)
         self._draw_steering_summary(
             rl.Rectangle(
-                rect.x + UI_ALT_FOOTER_OUTER_PAD_X,
-                rect.y + UI_ALT_FOOTER_OUTER_PAD_Y + 26,
-                layout.wheel_col_w - 108,
-                steering_content_height - 26,
+                inner_x,
+                steering_summary_y,
+                content_w,
+                steering_summary_h,
             ),
             telemetry=telemetry,
         )
         rl.draw_line(
-            int(rect.x + layout.wheel_col_w),
-            int(rect.y + UI_ALT_FOOTER_OUTER_PAD_Y),
-            int(rect.x + layout.wheel_col_w),
-            int(rect.y + rect.height - UI_ALT_FOOTER_BOTTOM_SAFE_PAD),
+            int(confidence_x - (UI_ALT_CONFIDENCE_RAIL_GAP / 2)),
+            int(header_content_y),
+            int(confidence_x - (UI_ALT_CONFIDENCE_RAIL_GAP / 2)),
+            int(cta_y - 12),
             divider,
         )
 
-        section_title_y = rect.y + UI_ALT_FOOTER_OUTER_PAD_Y
-        first_meter_y = section_title_y + 34
-        second_meter_y = first_meter_y + 74
-
-        rl.draw_text_ex(self._label_font, "DRIVER", rl.Vector2(layout.driver_col_x, section_title_y), 22, 0, text_dim)
-        rl.draw_text_ex(self._label_font, "OPENPILOT", rl.Vector2(layout.op_col_x, section_title_y), 22, 0, text_dim)
-
-        self._draw_meter(
-            rl.Rectangle(layout.driver_col_x, first_meter_y, layout.meter_w, 56),
-            label="GAS",
-            value=telemetry.driver_gas,
-            color=green,
-            value_text="ON" if telemetry.driver_gas_pressed else "OFF",
-            active=telemetry.driver_gas_pressed,
-        )
-        self._draw_meter(
-            rl.Rectangle(layout.driver_col_x, second_meter_y, layout.meter_w, 56),
-            label="BRAKE",
-            value=telemetry.driver_brake,
-            color=orange,
-            value_text="ON" if telemetry.driver_brake_pressed else "OFF",
-            active=telemetry.driver_brake_pressed,
-        )
-        self._draw_meter(
-            rl.Rectangle(layout.op_col_x, first_meter_y, layout.meter_w, 56),
-            label="THROTTLE",
-            value=telemetry.op_gas,
-            color=green,
-            value_text=f"{telemetry.op_gas * 100:.0f}%",
-            active=telemetry.op_gas > 0,
-        )
-        self._draw_meter(
-            rl.Rectangle(layout.op_col_x, second_meter_y, layout.meter_w, 56),
-            label="BRAKE",
-            value=telemetry.op_brake,
-            color=orange,
-            value_text=f"{telemetry.op_brake * 100:.0f}%",
-            active=telemetry.op_brake > 0,
-        )
+        if meter_cols == 2:
+            driver_x = inner_x
+            op_x = inner_x + meter_w + meter_gap_x
+            rl.draw_text_ex(self._label_font, "DRIVER", rl.Vector2(driver_x, meters_title_y), 20, 0, text_dim)
+            rl.draw_text_ex(self._label_font, "OPENPILOT", rl.Vector2(op_x, meters_title_y), 20, 0, text_dim)
+            self._draw_meter(
+                rl.Rectangle(driver_x, first_row_y, meter_w, meter_h),
+                label="GAS",
+                value=telemetry.driver_gas,
+                color=green,
+                value_text="ON" if telemetry.driver_gas_pressed else "OFF",
+                active=telemetry.driver_gas_pressed,
+            )
+            self._draw_meter(
+                rl.Rectangle(driver_x, second_row_y, meter_w, meter_h),
+                label="BRAKE",
+                value=telemetry.driver_brake,
+                color=orange,
+                value_text="ON" if telemetry.driver_brake_pressed else "OFF",
+                active=telemetry.driver_brake_pressed,
+            )
+            self._draw_meter(
+                rl.Rectangle(op_x, first_row_y, meter_w, meter_h),
+                label="THROTTLE",
+                value=telemetry.op_gas,
+                color=green,
+                value_text=f"{telemetry.op_gas * 100:.0f}%",
+                active=telemetry.op_gas > 0,
+            )
+            self._draw_meter(
+                rl.Rectangle(op_x, second_row_y, meter_w, meter_h),
+                label="BRAKE",
+                value=telemetry.op_brake,
+                color=orange,
+                value_text=f"{telemetry.op_brake * 100:.0f}%",
+                active=telemetry.op_brake > 0,
+            )
+        else:
+            rl.draw_text_ex(self._label_font, "PEDALS", rl.Vector2(inner_x, meters_title_y), 20, 0, text_dim)
+            self._draw_meter(
+                rl.Rectangle(inner_x, first_row_y, content_w, meter_h),
+                label="DRIVER GAS",
+                value=telemetry.driver_gas,
+                color=green,
+                value_text="ON" if telemetry.driver_gas_pressed else "OFF",
+                active=telemetry.driver_gas_pressed,
+            )
+            self._draw_meter(
+                rl.Rectangle(inner_x, second_row_y, content_w, meter_h),
+                label="DRIVER BRAKE",
+                value=telemetry.driver_brake,
+                color=orange,
+                value_text="ON" if telemetry.driver_brake_pressed else "OFF",
+                active=telemetry.driver_brake_pressed,
+            )
+            self._draw_meter(
+                rl.Rectangle(inner_x, second_row_y + meter_h + meter_gap_y, content_w, meter_h),
+                label="OPENPILOT THROTTLE",
+                value=telemetry.op_gas,
+                color=green,
+                value_text=f"{telemetry.op_gas * 100:.0f}%",
+                active=telemetry.op_gas > 0,
+            )
+            accel_y = second_row_y + (2 * (meter_h + meter_gap_y)) + 16.0
+            self._draw_meter(
+                rl.Rectangle(inner_x, accel_y - meter_h - 16.0, content_w, meter_h),
+                label="OPENPILOT BRAKE",
+                value=telemetry.op_brake,
+                color=orange,
+                value_text=f"{telemetry.op_brake * 100:.0f}%",
+                active=telemetry.op_brake > 0,
+            )
         self._draw_accel_summary(
-            rl.Rectangle(*layout.accel_rect),
+            rl.Rectangle(inner_x, accel_y, content_w, accel_h),
             telemetry=telemetry,
         )
         self._draw_confidence_rail(
-            rl.Rectangle(*layout.confidence_rect),
+            rl.Rectangle(*confidence_rect),
             telemetry=telemetry,
         )
         self._draw_footer_cta(
             rl.Rectangle(
-                rect.x + UI_ALT_FOOTER_OUTER_PAD_X,
-                rect.y + rect.height - UI_ALT_FOOTER_BOTTOM_SAFE_PAD,
-                rect.width - (2 * UI_ALT_FOOTER_OUTER_PAD_X),
-                UI_ALT_FOOTER_BOTTOM_SAFE_PAD,
+                inner_x,
+                cta_y,
+                inner_w,
+                cta_h,
             )
         )
 
@@ -1723,6 +1842,7 @@ def clip(
     show_time: bool,
     use_qcam: bool,
     layout_mode: str,
+    ui_alt_variant: UIAltVariant,
 ) -> None:
     import tqdm
     import pyray as rl
@@ -1763,6 +1883,8 @@ def clip(
             use_qcam=use_qcam,
         )
         has_wide_stream = bool(wide_paths) and any(step.wide_camera_ref is not None for step in render_steps)
+        if layout_mode == "alt":
+            validate_ui_alt_stream_availability(ui_alt_variant, has_wide_stream=has_wide_stream)
         wide_frame_queue = None
         if has_wide_stream:
             wide_frame_queue = IndexedFrameQueue(
@@ -1778,13 +1900,11 @@ def clip(
         vipc.start_listener()
 
         patch_submaster(render_steps, ui_state)
-        footer_height_override = None
-        if layout_mode == "alt" and has_wide_stream:
-            footer_height_override = compute_ui_alt_footer_height(gui_app.height)
+        if layout_mode == "alt" and is_stacked_ui_alt_variant(ui_alt_variant):
             _configure_gui_app_canvas(
                 gui_app,
                 width=gui_app.width,
-                height=compute_ui_alt_dual_canvas_height(gui_app.height),
+                height=compute_ui_alt_stacked_canvas_height(gui_app.height),
             )
         gui_app.init_window("repo-owned clip", fps=FRAMERATE)
         _reapply_hidden_window_flag(headless=headless)
@@ -1793,8 +1913,7 @@ def clip(
             width=gui_app.width,
             height=gui_app.height,
             layout_mode=layout_mode,
-            show_wide_panel=layout_mode == "alt" and has_wide_stream,
-            footer_height_override=footer_height_override,
+            ui_alt_variant=ui_alt_variant,
         )
         road_view = AugmentedRoadView()
         wide_view = None
@@ -1810,7 +1929,7 @@ def clip(
             wide_view.set_rect(rl.Rectangle(*layout_rects.wide_rect))
         font = gui_app.font(FontWeight.NORMAL)
         steering_footer = None
-        if layout_rects.footer_rect is not None:
+        if layout_rects.telemetry_rect is not None:
             steering_footer = SteeringFooterRenderer(
                 gui_app=gui_app,
                 label_font=gui_app.font(FontWeight.MEDIUM),
@@ -1869,10 +1988,11 @@ def clip(
                             int(layout_rects.wide_rect[1]),
                             rl.Color(255, 255, 255, 24),
                         )
-                    if layout_rects.footer_rect is not None and steering_footer is not None:
+                    if layout_rects.telemetry_rect is not None and steering_footer is not None:
                         steering_footer.render(
-                            rl.Rectangle(*layout_rects.footer_rect),
+                            rl.Rectangle(*layout_rects.telemetry_rect),
                             telemetry=extract_footer_telemetry(step.state),
+                            route_seconds=step.route_seconds,
                         )
                     render_overlays(
                         gui_app,
@@ -1941,6 +2061,7 @@ def main() -> int:
         show_time=not args.no_time_overlay,
         use_qcam=args.qcam,
         layout_mode=args.layout_mode,
+        ui_alt_variant=args.ui_alt_variant,
     )
     return 0
 

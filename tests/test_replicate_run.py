@@ -45,6 +45,7 @@ def test_build_input_uses_cog_field_names() -> None:
         jwt_token="",
         file_format="auto",
         render_type="ui",
+        ui_alt_variant=None,
         smear_amount=3,
         anonymization_profile="none",
         passenger_redaction_style="blur",
@@ -66,6 +67,7 @@ def test_build_input_allows_ui_alt_render_type() -> None:
         jwt_token="",
         file_format="auto",
         render_type="ui-alt",
+        ui_alt_variant=None,
         smear_amount=3,
         anonymization_profile="none",
         passenger_redaction_style="blur",
@@ -73,6 +75,25 @@ def test_build_input_allows_ui_alt_render_type() -> None:
 
     payload = replicate_run.build_input(args)
     assert payload["renderType"] == "ui-alt"
+
+
+def test_build_input_includes_ui_alt_variant() -> None:
+    args = SimpleNamespace(
+        notes="",
+        url="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496",
+        file_size=9,
+        jwt_token="",
+        file_format="auto",
+        render_type="ui-alt",
+        ui_alt_variant="device",
+        smear_amount=3,
+        anonymization_profile="none",
+        passenger_redaction_style="blur",
+    )
+
+    payload = replicate_run.build_input(args)
+    assert payload["renderType"] == "ui-alt"
+    assert payload["uiAltVariant"] == "device"
 
 
 def test_build_input_allows_driver_debug_render_type() -> None:
@@ -83,6 +104,7 @@ def test_build_input_allows_driver_debug_render_type() -> None:
         jwt_token="",
         file_format="auto",
         render_type="driver-debug",
+        ui_alt_variant=None,
         smear_amount=3,
         forward_upon_wide_h=2.2,
         anonymization_profile="driver unchanged, passenger hidden",
@@ -103,6 +125,7 @@ def test_build_input_allows_ir_tint_redaction_style() -> None:
         jwt_token="",
         file_format="auto",
         render_type="driver",
+        ui_alt_variant=None,
         smear_amount=3,
         anonymization_profile="driver face swap, passenger hidden",
         passenger_redaction_style="ir_tint",
@@ -110,6 +133,28 @@ def test_build_input_allows_ir_tint_redaction_style() -> None:
 
     payload = replicate_run.build_input(args)
     assert payload["passengerRedactionStyle"] == "ir_tint"
+
+
+def test_build_input_rejects_ui_alt_variant_for_other_render_types() -> None:
+    args = SimpleNamespace(
+        notes="",
+        url="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496",
+        file_size=9,
+        jwt_token="",
+        file_format="auto",
+        render_type="ui",
+        ui_alt_variant="device",
+        smear_amount=3,
+        anonymization_profile="none",
+        passenger_redaction_style="blur",
+    )
+
+    try:
+        replicate_run.build_input(args)
+    except SystemExit as exc:
+        assert "ui-alt" in str(exc)
+    else:
+        raise AssertionError("expected SystemExit")
 
 
 def test_encode_replicate_route_input_preserves_existing_literal_prefix() -> None:
