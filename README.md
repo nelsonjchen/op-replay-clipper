@@ -293,6 +293,12 @@ BIG UI smoke test:
 uv run python clip.py ui --demo --qcam --length-seconds 2 --output ./shared/demo-big-ui-clip.mp4
 ```
 
+UI variant matrix smoke test:
+
+```bash
+./scripts/smoke_ui_alt_matrix.sh
+```
+
 Exact-sync BIG UI smoke test:
 
 ```bash
