@@ -544,6 +544,23 @@ def test_lateral_accel_ring_endpoint_angle_is_mirrored_relative_to_torque() -> N
     )
 
 
+def test_compute_torque_ring_bands_uses_uniform_thickness_and_gap() -> None:
+    bands = big_ui_engine.compute_torque_ring_bands(100.0)
+
+    ordered = [
+        bands["applied_torque"],
+        bands["target_torque"],
+        bands["actual_lateral_accel"],
+        bands["desired_lateral_accel"],
+    ]
+
+    for inner_radius, outer_radius in ordered:
+        assert outer_radius - inner_radius == pytest.approx(big_ui_engine.TORQUE_RING_THICKNESS)
+
+    for (_, previous_outer), (next_inner, _) in zip(ordered, ordered[1:]):
+        assert next_inner - previous_outer == pytest.approx(big_ui_engine.TORQUE_RING_GAP)
+
+
 def test_extract_footer_telemetry_reads_driver_and_op_inputs() -> None:
     state = {
         "carState": FakeMsg(

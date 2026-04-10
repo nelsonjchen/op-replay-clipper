@@ -66,6 +66,8 @@ UI_ALT_STACKED_MIN_EXTRA_HEIGHT = 240
 UI_ALT_STACKED_MAX_EXTRA_HEIGHT = 420
 TORQUE_RING_MAX_SPAN_DEG = 112.0
 TORQUE_RING_NEUTRAL_DEG = 270.0
+TORQUE_RING_THICKNESS = 6.0
+TORQUE_RING_GAP = 4.0
 UI_ALT_LAT_ACCEL_MAX = 3.0
 MODEL_INPUT_OVERLAY_COLOR = (0, 255, 204, 255)
 MODEL_INPUT_OVERLAY_SHADOW = (0, 0, 0, 180)
@@ -437,6 +439,21 @@ def lateral_accel_ring_endpoint_angle(
     normalized = 0.0 if max_accel <= 0 else (float(value) / max_accel)
     clamped = max(-1.0, min(1.0, normalized))
     return TORQUE_RING_NEUTRAL_DEG + (clamped * max_span_deg)
+
+
+def compute_torque_ring_bands(base_radius: float) -> dict[str, tuple[float, float]]:
+    inner_start = base_radius + 2.0
+
+    def band(offset_index: int) -> tuple[float, float]:
+        inner_radius = inner_start + (offset_index * (TORQUE_RING_THICKNESS + TORQUE_RING_GAP))
+        return inner_radius, inner_radius + TORQUE_RING_THICKNESS
+
+    return {
+        "applied_torque": band(0),
+        "target_torque": band(1),
+        "actual_lateral_accel": band(2),
+        "desired_lateral_accel": band(3),
+    }
 
 
 def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
@@ -1265,6 +1282,7 @@ class SteeringFooterRenderer:
         applied_torque_color = rl.Color(255, 132, 72, 255)
         orbit_color = rl.Color(255, 255, 255, 36)
         base_radius = (wheel_size / 2) + 16
+        torque_ring_bands = compute_torque_ring_bands(base_radius)
 
         center = rl.Vector2(center_x, center_y)
         rl.draw_ring(center, base_radius - 2, base_radius + 2, 0, 360, 64, orbit_color)
@@ -1311,33 +1329,43 @@ class SteeringFooterRenderer:
         if telemetry.steering_control_kind == "torque":
             track_start = TORQUE_RING_NEUTRAL_DEG - TORQUE_RING_MAX_SPAN_DEG
             track_end = TORQUE_RING_NEUTRAL_DEG + TORQUE_RING_MAX_SPAN_DEG
-            rl.draw_ring(center, base_radius + 28, base_radius + 38, track_start, track_end, 48, rl.Color(255, 255, 255, 24))
-            rl.draw_ring(center, base_radius + 16, base_radius + 24, track_start, track_end, 48, rl.Color(255, 255, 255, 20))
-            rl.draw_ring(center, base_radius + 6, base_radius + 12, track_start, track_end, 48, rl.Color(255, 255, 255, 18))
+            track_alphas = {
+                "desired_lateral_accel": 24,
+                "actual_lateral_accel": 22,
+                "target_torque": 20,
+                "applied_torque": 18,
+            }
+            for band_name, alpha in track_alphas.items():
+                inner_radius, outer_radius = torque_ring_bands[band_name]
+                rl.draw_ring(center, inner_radius, outer_radius, track_start, track_end, 48, rl.Color(255, 255, 255, alpha))
 
+            desired_lat_inner, desired_lat_outer = torque_ring_bands["desired_lateral_accel"]
             desired_lat_endpoint = draw_lateral_accel_arc(
                 telemetry.desired_lateral_accel,
                 desired_lat_color,
-                inner_radius=base_radius + 28,
-                outer_radius=base_radius + 38,
+                inner_radius=desired_lat_inner,
+                outer_radius=desired_lat_outer,
             )
+            actual_lat_inner, actual_lat_outer = torque_ring_bands["actual_lateral_accel"]
             actual_lat_endpoint = draw_lateral_accel_arc(
                 telemetry.actual_lateral_accel,
                 actual_lat_color,
-                inner_radius=base_radius + 16,
-                outer_radius=base_radius + 24,
+                inner_radius=actual_lat_inner,
+                outer_radius=actual_lat_outer,
             )
+            target_torque_inner, target_torque_outer = torque_ring_bands["target_torque"]
             target_endpoint = draw_torque_arc(
                 telemetry.steering_target_torque,
                 target_torque_color,
-                inner_radius=base_radius + 10,
-                outer_radius=base_radius + 14,
+                inner_radius=target_torque_inner,
+                outer_radius=target_torque_outer,
             )
+            applied_torque_inner, applied_torque_outer = torque_ring_bands["applied_torque"]
             applied_endpoint = draw_torque_arc(
                 telemetry.steering_applied_torque,
                 applied_torque_color,
-                inner_radius=base_radius + 2,
-                outer_radius=base_radius + 8,
+                inner_radius=applied_torque_inner,
+                outer_radius=applied_torque_outer,
             )
 
             if desired_lat_endpoint is not None and actual_lat_endpoint is not None:
