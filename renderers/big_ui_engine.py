@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Mapping
+import importlib
 import logging
 import math
 import os
@@ -67,6 +68,7 @@ UI_ALT_HEADER_RESERVED_HEIGHT = 72
 UI_ALT_STACKED_EXTRA_HEIGHT_RATIO = 0.30
 UI_ALT_STACKED_MIN_EXTRA_HEIGHT = 240
 UI_ALT_STACKED_MAX_EXTRA_HEIGHT = 420
+UI_ALT_STACKED_HUD_SCALE_TWEAK = 1.08
 TORQUE_RING_MAX_SPAN_DEG = 112.0
 TORQUE_RING_NEUTRAL_DEG = 270.0
 TORQUE_RING_THICKNESS = 6.0
@@ -247,6 +249,38 @@ def compute_ui_alt_stacked_canvas_height(base_height: int) -> int:
     return base_height + extra_height
 
 
+def compute_ui_alt_stacked_canvas_width(*, base_width: int, base_height: int, target_aspect_ratio: float) -> int:
+    if base_width <= 0 or base_height <= 0:
+        raise ValueError("base_width and base_height must be positive")
+    if target_aspect_ratio <= 0.0:
+        raise ValueError("target_aspect_ratio must be positive")
+
+    stacked_height = compute_ui_alt_stacked_canvas_height(base_height)
+    header_height = min(UI_ALT_HEADER_RESERVED_HEIGHT, max(0, stacked_height - 1))
+    content_height = max(1, stacked_height - header_height)
+    pane_height = content_height - (content_height // 2)
+    target_camera_width = max(1, int(round(pane_height * target_aspect_ratio)))
+
+    min_width = target_camera_width + UI_ALT_TELEMETRY_MIN_WIDTH
+    max_width = target_camera_width + UI_ALT_TELEMETRY_MAX_WIDTH
+    best_width = max(base_width, min_width)
+    best_excess = None
+
+    for width in range(min_width, max_width + 1):
+        telemetry_width = compute_ui_alt_telemetry_width(width)
+        camera_width = width - telemetry_width
+        if camera_width < target_camera_width:
+            continue
+        excess = camera_width - target_camera_width
+        if best_excess is None or excess < best_excess:
+            best_width = width
+            best_excess = excess
+            if excess == 0:
+                break
+
+    return best_width
+
+
 def validate_ui_alt_stream_availability(ui_alt_variant: UIAltVariant, *, has_wide_stream: bool) -> None:
     if is_stacked_ui_alt_variant(ui_alt_variant) and not has_wide_stream:
         raise RuntimeError("Stacked `ui-alt` variants require wide video, but no wide stream was available.")
@@ -379,6 +413,36 @@ def compute_ui_alt_panel_label_position(rect: tuple[int, int, int, int]) -> tupl
         int(rect[0] + UI_ALT_PANEL_LABEL_INSET_X),
         int(rect[1] + UI_ALT_PANEL_LABEL_INSET_Y),
     )
+
+
+def compute_fitted_rect_with_aspect(
+    slot_rect: tuple[int, int, int, int], *, target_aspect_ratio: float, border_size: int = 0
+) -> tuple[int, int, int, int]:
+    if target_aspect_ratio <= 0.0:
+        raise ValueError("target_aspect_ratio must be positive")
+    if border_size < 0:
+        raise ValueError("border_size must be non-negative")
+
+    _ = border_size
+    slot_x, slot_y, slot_width, slot_height = slot_rect
+    fitted_width = min(max(1, slot_width), int(round(max(1, slot_height) * target_aspect_ratio)))
+    fitted_height = min(max(1, slot_height), int(round(fitted_width / target_aspect_ratio)))
+    return (
+        int(round(slot_x + (slot_width - fitted_width) / 2)),
+        int(round(slot_y + (slot_height - fitted_height) / 2)),
+        max(1, fitted_width),
+        max(1, fitted_height),
+    )
+
+
+def compute_stacked_ui_border_size(*, default_border_size: int, panel_height: int, reference_height: int) -> int:
+    if default_border_size <= 0:
+        raise ValueError("default_border_size must be positive")
+    if panel_height <= 0 or reference_height <= 0:
+        raise ValueError("panel_height and reference_height must be positive")
+
+    scaled_border_size = int(round(default_border_size * (panel_height / reference_height)))
+    return max(1, min(default_border_size, scaled_border_size))
 
 
 def compute_time_overlay_position(*, gui_width: int, time_width: int, big: bool) -> tuple[int, int]:
@@ -626,7 +690,7 @@ def compute_camera_view_video_transform(view, *, use_wide_camera: bool) -> tuple
     if calibration is None:
         return None
 
-    zoom = 2.0 if use_wide_camera else 1.1
+    zoom = (2.0 if use_wide_camera else 1.1) * float(getattr(view, "_ui_alt_camera_zoom_scale", 1.0) or 1.0)
     calib_transform = _mat3_mul(intrinsic, calibration)
     kep = _mat3_vec_mul(calib_transform, INF_POINT)
 
@@ -713,35 +777,28 @@ def draw_model_input_overlay(quad: tuple[tuple[float, float], ...] | None, *, cl
             rl.end_scissor_mode()
 
 
-def draw_ui_alt_model_input_overlays(road_view, wide_view, state: Mapping[str, object]) -> None:
-    road_quad = compute_model_input_overlay_quad(
-        road_view,
+def draw_ui_alt_model_input_overlay(view, state: Mapping[str, object], *, use_wide_camera: bool, bigmodel_frame: bool) -> None:
+    quad = compute_model_input_overlay_quad(
+        view,
         state,
-        use_wide_camera=False,
-        bigmodel_frame=False,
+        use_wide_camera=use_wide_camera,
+        bigmodel_frame=bigmodel_frame,
     )
-    if road_quad is not None:
-        draw_model_input_overlay(road_quad, clip_rect=getattr(road_view, "_content_rect", None))
+    if quad is not None:
+        draw_model_input_overlay(quad, clip_rect=getattr(view, "_content_rect", None))
 
-    if wide_view is None:
-        return
 
-    wide_quad = compute_model_input_overlay_quad(
-        wide_view,
-        state,
-        use_wide_camera=True,
-        bigmodel_frame=True,
-    )
-    if wide_quad is not None:
-        draw_model_input_overlay(wide_quad, clip_rect=getattr(wide_view, "_content_rect", None))
+def redraw_ui_alt_view_overlays(view, state: Mapping[str, object], *, use_wide_camera: bool, bigmodel_frame: bool) -> None:
+    overlay_scale = float(getattr(view, "_ui_alt_hud_scale", 1.0) or 1.0)
+    draw_ui_alt_model_input_overlay(view, state, use_wide_camera=use_wide_camera, bigmodel_frame=bigmodel_frame)
+    redraw_hud_overlay(view, scale=overlay_scale)
+    redraw_driver_state_overlay(view, scale=overlay_scale)
 
 
 def redraw_ui_alt_dual_view_overlays(road_view, wide_view, state: Mapping[str, object]) -> None:
-    draw_ui_alt_model_input_overlays(road_view, wide_view, state)
-    redraw_hud_overlay(road_view)
+    redraw_ui_alt_view_overlays(road_view, state, use_wide_camera=False, bigmodel_frame=False)
     if wide_view is not None:
-        redraw_hud_overlay(wide_view)
-        draw_current_speed_overlay(wide_view)
+        redraw_ui_alt_view_overlays(wide_view, state, use_wide_camera=True, bigmodel_frame=True)
 
 
 def redraw_ui_alt_dual_view_borders(road_view, wide_view, layout_rects: LayoutRects) -> None:
@@ -1033,6 +1090,89 @@ def _reapply_hidden_window_flag(*, headless: bool) -> None:
     set_window_state(int(rl.ConfigFlags.FLAG_WINDOW_HIDDEN))
 
 
+def _override_module_attr(module, attr_name: str, value):
+    original_value = getattr(module, attr_name, None)
+    if original_value is None:
+        return None
+    setattr(module, attr_name, value)
+    return original_value
+
+
+def _patch_augmented_road_view_zoom() -> None:
+    from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView
+
+    original_method = getattr(AugmentedRoadView, "_clipper_original_calc_frame_matrix", None)
+    if original_method is not None:
+        return
+
+    original_method = AugmentedRoadView._calc_frame_matrix
+
+    def _calc_frame_matrix_with_zoom_scale(self, rect):
+        zoom_scale = float(getattr(self, "_ui_alt_camera_zoom_scale", 1.0) or 1.0)
+        if abs(zoom_scale - 1.0) < 1e-6:
+            return original_method(self, rect)
+
+        import numpy as np
+        from openpilot.selfdrive.ui.onroad.augmented_road_view import DEFAULT_DEVICE_CAMERA, INF_POINT, ROAD_CAM, WIDE_CAM
+        from openpilot.selfdrive.ui.ui_state import ui_state
+
+        cache_key = (
+            ui_state.sm.recv_frame["liveCalibration"],
+            self._content_rect.width,
+            self._content_rect.height,
+            self.stream_type,
+            zoom_scale,
+        )
+        if cache_key == self._matrix_cache_key and self._cached_matrix is not None:
+            return self._cached_matrix
+
+        device_camera = self.device_camera or DEFAULT_DEVICE_CAMERA
+        is_wide_camera = self.stream_type == WIDE_CAM
+        intrinsic = device_camera.ecam.intrinsics if is_wide_camera else device_camera.fcam.intrinsics
+        calibration = self.view_from_wide_calib if is_wide_camera else self.view_from_calib
+        zoom = (2.0 if is_wide_camera else 1.1) * zoom_scale
+
+        calib_transform = intrinsic @ calibration
+        kep = calib_transform @ INF_POINT
+
+        x, y = self._content_rect.x, self._content_rect.y
+        w, h = self._content_rect.width, self._content_rect.height
+        cx, cy = intrinsic[0, 2], intrinsic[1, 2]
+
+        zoom = max(zoom, w / (2 * cx), h / (2 * cy))
+
+        margin = 5
+        max_x_offset = max(0.0, cx * zoom - w / 2 - margin)
+        max_y_offset = max(0.0, cy * zoom - h / 2 - margin)
+
+        try:
+            if abs(kep[2]) > 1e-6:
+                x_offset = np.clip((kep[0] / kep[2] - cx) * zoom, -max_x_offset, max_x_offset)
+                y_offset = np.clip((kep[1] / kep[2] - cy) * zoom, -max_y_offset, max_y_offset)
+            else:
+                x_offset, y_offset = 0, 0
+        except (ZeroDivisionError, OverflowError):
+            x_offset, y_offset = 0, 0
+
+        self._matrix_cache_key = cache_key
+        self._cached_matrix = np.array([
+            [zoom * 2 * cx / w, 0, -x_offset / w * 2],
+            [0, zoom * 2 * cy / h, -y_offset / h * 2],
+            [0, 0, 1.0],
+        ])
+
+        video_transform = np.array([
+            [zoom, 0.0, (w / 2 + x - x_offset) - (cx * zoom)],
+            [0.0, zoom, (h / 2 + y - y_offset) - (cy * zoom)],
+            [0.0, 0.0, 1.0],
+        ])
+        self.model_renderer.set_transform(video_transform @ calib_transform)
+        return self._cached_matrix
+
+    AugmentedRoadView._clipper_original_calc_frame_matrix = original_method
+    AugmentedRoadView._calc_frame_matrix = _calc_frame_matrix_with_zoom_scale
+
+
 def draw_text_box(text, x, y, size, gui_app, font, color=None, center=False) -> None:
     import pyray as rl
     from openpilot.system.ui.lib.text_measure import measure_text_cached
@@ -1053,7 +1193,26 @@ def draw_text_box(text, x, y, size, gui_app, font, color=None, center=False) -> 
     rl.draw_text_ex(font, text, rl.Vector2(x, y), size, 0, text_color)
 
 
-def draw_current_speed_overlay(road_view) -> None:
+def _draw_with_scaled_overlay_space(content_rect, scale: float, draw_fn) -> None:
+    import pyray as rl
+
+    if scale <= 0.0:
+        return
+    if abs(scale - 1.0) < 1e-6:
+        draw_fn(content_rect)
+        return
+
+    virtual_rect = rl.Rectangle(0, 0, content_rect.width / scale, content_rect.height / scale)
+    rl.rl_push_matrix()
+    try:
+        rl.rl_translatef(float(content_rect.x), float(content_rect.y), 0.0)
+        rl.rl_scalef(scale, scale, 1.0)
+        draw_fn(virtual_rect)
+    finally:
+        rl.rl_pop_matrix()
+
+
+def draw_current_speed_overlay(road_view, *, scale: float = 1.0) -> None:
     hud_renderer = getattr(road_view, "_hud_renderer", None)
     content_rect = getattr(road_view, "_content_rect", None)
     if hud_renderer is None or content_rect is None:
@@ -1069,29 +1228,89 @@ def draw_current_speed_overlay(road_view) -> None:
     from openpilot.system.ui.lib.multilang import tr
     from openpilot.system.ui.lib.text_measure import measure_text_cached
 
-    speed_text = str(round(float(speed)))
-    speed_size = measure_text_cached(font_bold, speed_text, 176)
-    speed_pos = rl.Vector2(
-        content_rect.x + content_rect.width / 2 - speed_size.x / 2,
-        content_rect.y + 180 - speed_size.y / 2,
-    )
-    rl.draw_text_ex(font_bold, speed_text, speed_pos, 176, 0, rl.WHITE)
+    def _draw(rect) -> None:
+        speed_text = str(round(float(speed)))
+        speed_size = measure_text_cached(font_bold, speed_text, 176)
+        speed_pos = rl.Vector2(
+            rect.x + rect.width / 2 - speed_size.x / 2,
+            rect.y + 180 - speed_size.y / 2,
+        )
+        rl.draw_text_ex(font_bold, speed_text, speed_pos, 176, 0, rl.WHITE)
 
-    unit_text = tr("km/h") if ui_state.is_metric else tr("mph")
-    unit_size = measure_text_cached(font_medium, unit_text, 66)
-    unit_pos = rl.Vector2(
-        content_rect.x + content_rect.width / 2 - unit_size.x / 2,
-        content_rect.y + 290 - unit_size.y / 2,
-    )
-    rl.draw_text_ex(font_medium, unit_text, unit_pos, 66, 0, rl.Color(255, 255, 255, 200))
+        unit_text = tr("km/h") if ui_state.is_metric else tr("mph")
+        unit_size = measure_text_cached(font_medium, unit_text, 66)
+        unit_pos = rl.Vector2(
+            rect.x + rect.width / 2 - unit_size.x / 2,
+            rect.y + 290 - unit_size.y / 2,
+        )
+        rl.draw_text_ex(font_medium, unit_text, unit_pos, 66, 0, rl.Color(255, 255, 255, 200))
+
+    _draw_with_scaled_overlay_space(content_rect, scale, _draw)
 
 
-def redraw_hud_overlay(view) -> None:
+def _suppress_hud_current_speed(hud_renderer):
+    original_draw_current_speed = getattr(hud_renderer, "_draw_current_speed", None)
+    if not callable(original_draw_current_speed):
+        return None
+    setattr(hud_renderer, "_draw_current_speed", lambda rect: None)
+    return original_draw_current_speed
+
+
+def _suppress_renderer_render(renderer):
+    original_render = getattr(renderer, "render", None)
+    if not callable(original_render):
+        return None
+    setattr(renderer, "render", lambda rect: None)
+    return original_render
+
+
+def render_view(view, *, draw_current_speed: bool = True, draw_hud: bool = True, draw_driver_state: bool = True) -> None:
+    hud_renderer = getattr(view, "_hud_renderer", None)
+    driver_state_renderer = getattr(view, "driver_state_renderer", None)
+
+    original_draw_current_speed = None
+    original_hud_render = None
+    if hud_renderer is not None:
+        if not draw_hud:
+            original_hud_render = _suppress_renderer_render(hud_renderer)
+        elif not draw_current_speed:
+            original_draw_current_speed = _suppress_hud_current_speed(hud_renderer)
+
+    original_driver_state_render = None
+    if not draw_driver_state and driver_state_renderer is not None:
+        original_driver_state_render = _suppress_renderer_render(driver_state_renderer)
+    try:
+        view.render()
+    finally:
+        if original_hud_render is not None:
+            setattr(hud_renderer, "render", original_hud_render)
+        if original_draw_current_speed is not None:
+            setattr(hud_renderer, "_draw_current_speed", original_draw_current_speed)
+        if original_driver_state_render is not None:
+            setattr(driver_state_renderer, "render", original_driver_state_render)
+
+
+def redraw_hud_overlay(view, *, draw_current_speed: bool = True, scale: float = 1.0) -> None:
     hud_renderer = getattr(view, "_hud_renderer", None)
     content_rect = getattr(view, "_content_rect", None)
     if hud_renderer is None or content_rect is None:
         return
-    hud_renderer.render(content_rect)
+
+    original_draw_current_speed = None if draw_current_speed else _suppress_hud_current_speed(hud_renderer)
+    try:
+        _draw_with_scaled_overlay_space(content_rect, scale, hud_renderer.render)
+    finally:
+        if original_draw_current_speed is not None:
+            setattr(hud_renderer, "_draw_current_speed", original_draw_current_speed)
+
+
+def redraw_driver_state_overlay(view, *, scale: float = 1.0) -> None:
+    driver_state_renderer = getattr(view, "driver_state_renderer", None)
+    content_rect = getattr(view, "_content_rect", None)
+    if driver_state_renderer is None or content_rect is None:
+        return
+
+    _draw_with_scaled_overlay_space(content_rect, scale, driver_state_renderer.render)
 
 
 def compute_shader_gradient_vectors(origin_rect, gradient, *, screen_height: float) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -1930,6 +2149,7 @@ def clip(
     from msgq.visionipc import VisionIpcServer, VisionStreamType
     from openpilot.common.prefix import OpenpilotPrefix
     from openpilot.common.utils import Timer
+    from openpilot.selfdrive.ui import UI_BORDER_SIZE
     from openpilot.selfdrive.ui.ui_state import ui_state
     from openpilot.system.ui.lib.application import FontWeight, gui_app
 
@@ -1955,6 +2175,7 @@ def clip(
 
     with OpenpilotPrefix(shared_download_cache=True):
         metadata = load_route_metadata(route) if show_metadata else None
+        ui_reference_panel_height = gui_app.height
         camera_paths = route.qcamera_paths() if use_qcam else route.camera_paths()
         wide_camera_paths = [] if use_qcam else route.ecamera_paths()
         wide_paths = wide_camera_paths[seg_start:seg_end] if wide_camera_paths else []
@@ -1981,10 +2202,15 @@ def clip(
         vipc.start_listener()
 
         patch_submaster(render_steps, ui_state)
+        ui_reference_panel_aspect_ratio = gui_app.width / gui_app.height
         if layout_mode == "alt" and is_stacked_ui_alt_variant(ui_alt_variant):
             _configure_gui_app_canvas(
                 gui_app,
-                width=gui_app.width,
+                width=compute_ui_alt_stacked_canvas_width(
+                    base_width=gui_app.width,
+                    base_height=gui_app.height,
+                    target_aspect_ratio=ui_reference_panel_aspect_ratio,
+                ),
                 height=compute_ui_alt_stacked_canvas_height(gui_app.height),
             )
         gui_app.init_window("repo-owned clip", fps=FRAMERATE)
@@ -1996,6 +2222,39 @@ def clip(
             layout_mode=layout_mode,
             ui_alt_variant=ui_alt_variant,
         )
+        presented_layout_rects = layout_rects
+        if layout_rects.wide_rect is not None and is_stacked_ui_alt_variant(ui_alt_variant):
+            presented_layout_rects = LayoutRects(
+                road_rect=compute_fitted_rect_with_aspect(
+                    layout_rects.road_rect,
+                    target_aspect_ratio=ui_reference_panel_aspect_ratio,
+                    border_size=UI_BORDER_SIZE,
+                ),
+                wide_rect=compute_fitted_rect_with_aspect(
+                    layout_rects.wide_rect,
+                    target_aspect_ratio=ui_reference_panel_aspect_ratio,
+                    border_size=UI_BORDER_SIZE,
+                ),
+                telemetry_rect=layout_rects.telemetry_rect,
+            )
+        stacked_dual_view = layout_rects.wide_rect is not None and is_stacked_ui_alt_variant(ui_alt_variant)
+        overridden_border_module = None
+        original_border_size = None
+        if stacked_dual_view and big:
+            _patch_augmented_road_view_zoom()
+            stacked_ui_border_size = compute_stacked_ui_border_size(
+                default_border_size=UI_BORDER_SIZE,
+                panel_height=presented_layout_rects.road_rect[3],
+                reference_height=ui_reference_panel_height,
+            )
+            augmented_road_view_module = importlib.import_module(AugmentedRoadView.__module__)
+            original_border_size = _override_module_attr(
+                augmented_road_view_module,
+                "UI_BORDER_SIZE",
+                stacked_ui_border_size,
+            )
+            if original_border_size is not None:
+                overridden_border_module = augmented_road_view_module
         road_view = AugmentedRoadView()
         wide_view = None
         if layout_rects.wide_rect is not None:
@@ -2005,9 +2264,20 @@ def clip(
             wide_view = AugmentedRoadView(stream_type=VisionStreamType.VISION_STREAM_WIDE_ROAD)
             wide_view._switch_stream_if_needed = lambda sm: None
             wide_view._pm.send = lambda *args, **kwargs: None
-        road_view.set_rect(rl.Rectangle(*layout_rects.road_rect))
+        road_view.set_rect(rl.Rectangle(*presented_layout_rects.road_rect))
         if wide_view is not None and layout_rects.wide_rect is not None:
-            wide_view.set_rect(rl.Rectangle(*layout_rects.wide_rect))
+            assert presented_layout_rects.wide_rect is not None
+            wide_view.set_rect(rl.Rectangle(*presented_layout_rects.wide_rect))
+        if stacked_dual_view:
+            reference_content_height = max(1, ui_reference_panel_height - (2 * UI_BORDER_SIZE))
+            effective_border_size = stacked_ui_border_size if big else UI_BORDER_SIZE
+            stacked_content_height = max(1, presented_layout_rects.road_rect[3] - (2 * effective_border_size))
+            stacked_hud_scale = (stacked_content_height / reference_content_height) * UI_ALT_STACKED_HUD_SCALE_TWEAK
+            setattr(road_view, "_ui_alt_hud_scale", stacked_hud_scale)
+            setattr(road_view, "_ui_alt_camera_zoom_scale", stacked_content_height / reference_content_height)
+            if wide_view is not None:
+                setattr(wide_view, "_ui_alt_hud_scale", stacked_hud_scale)
+                setattr(wide_view, "_ui_alt_camera_zoom_scale", stacked_content_height / reference_content_height)
         font = gui_app.font(FontWeight.NORMAL)
         steering_footer = None
         if layout_rects.telemetry_rect is not None:
@@ -2022,90 +2292,99 @@ def clip(
         render_started_at = time.perf_counter()
         last_log_at = render_started_at
         last_log_frame_idx = 0
-        with tqdm.tqdm(total=len(render_steps), desc="Rendering", unit="frame") as progress:
-            for should_render in gui_app.render():
-                if frame_idx >= len(render_steps):
-                    break
-                step = render_steps[frame_idx]
-                camera_ref, frame_bytes = road_frame_queue.get()
-                if camera_ref != step.camera_ref:
-                    raise RuntimeError(f"Camera frame order mismatch: expected {step.camera_ref}, got {camera_ref}")
-                vipc.send(
-                    VisionStreamType.VISION_STREAM_ROAD,
-                    frame_bytes,
-                    camera_ref.route_frame_id,
-                    camera_ref.timestamp_sof,
-                    camera_ref.timestamp_eof,
-                )
-                if wide_frame_queue is not None and step.wide_camera_ref is not None:
-                    wide_camera_ref, wide_frame_bytes = wide_frame_queue.get()
-                    if wide_camera_ref != step.wide_camera_ref:
-                        raise RuntimeError(
-                            f"Wide camera frame order mismatch: expected {step.wide_camera_ref}, got {wide_camera_ref}"
-                        )
+        try:
+            with tqdm.tqdm(total=len(render_steps), desc="Rendering", unit="frame") as progress:
+                for should_render in gui_app.render():
+                    if frame_idx >= len(render_steps):
+                        break
+                    step = render_steps[frame_idx]
+                    camera_ref, frame_bytes = road_frame_queue.get()
+                    if camera_ref != step.camera_ref:
+                        raise RuntimeError(f"Camera frame order mismatch: expected {step.camera_ref}, got {camera_ref}")
                     vipc.send(
-                        VisionStreamType.VISION_STREAM_WIDE_ROAD,
-                        wide_frame_bytes,
-                        wide_camera_ref.route_frame_id,
-                        wide_camera_ref.timestamp_sof,
-                        wide_camera_ref.timestamp_eof,
+                        VisionStreamType.VISION_STREAM_ROAD,
+                        frame_bytes,
+                        camera_ref.route_frame_id,
+                        camera_ref.timestamp_sof,
+                        camera_ref.timestamp_eof,
                     )
-                ui_state.update()
-                if should_render:
-                    road_view.render()
-                    if wide_view is not None:
-                        wide_view.render()
-                        redraw_ui_alt_dual_view_overlays(road_view, wide_view, step.state)
-                        redraw_ui_alt_dual_view_borders(road_view, wide_view, layout_rects)
-                        road_label_x, road_label_y = compute_ui_alt_panel_label_position(layout_rects.road_rect)
-                        draw_text_box("ROAD", road_label_x, road_label_y, 22, gui_app, font)
-                        assert layout_rects.wide_rect is not None
-                        wide_label_x, wide_label_y = compute_ui_alt_panel_label_position(layout_rects.wide_rect)
-                        draw_text_box("WIDE", wide_label_x, wide_label_y, 22, gui_app, font)
-                        rl.draw_line(
-                            int(layout_rects.wide_rect[0]),
-                            int(layout_rects.wide_rect[1]),
-                            int(layout_rects.wide_rect[0] + layout_rects.wide_rect[2]),
-                            int(layout_rects.wide_rect[1]),
-                            rl.Color(255, 255, 255, 24),
+                    if wide_frame_queue is not None and step.wide_camera_ref is not None:
+                        wide_camera_ref, wide_frame_bytes = wide_frame_queue.get()
+                        if wide_camera_ref != step.wide_camera_ref:
+                            raise RuntimeError(
+                                f"Wide camera frame order mismatch: expected {step.wide_camera_ref}, got {wide_camera_ref}"
+                            )
+                        vipc.send(
+                            VisionStreamType.VISION_STREAM_WIDE_ROAD,
+                            wide_frame_bytes,
+                            wide_camera_ref.route_frame_id,
+                            wide_camera_ref.timestamp_sof,
+                            wide_camera_ref.timestamp_eof,
                         )
-                    if layout_rects.telemetry_rect is not None and steering_footer is not None:
-                        steering_footer.render(
-                            rl.Rectangle(*layout_rects.telemetry_rect),
-                            telemetry=extract_footer_telemetry(step.state),
-                            route_seconds=step.route_seconds,
+                    ui_state.update()
+                    if should_render:
+                        render_view(
+                            road_view,
+                            draw_current_speed=wide_view is None,
+                            draw_hud=wide_view is None,
+                            draw_driver_state=wide_view is None,
                         )
-                    render_overlays(
-                        gui_app,
-                        font,
-                        big,
-                        metadata,
-                        title,
-                        step.route_seconds,
-                        show_metadata,
-                        show_time,
-                    )
-                frame_idx += 1
-                progress.update(1)
-                now = time.perf_counter()
-                if frame_idx == len(render_steps) or now - last_log_at >= 5.0:
-                    total_elapsed = max(now - render_started_at, 1e-6)
-                    interval_elapsed = max(now - last_log_at, 1e-6)
-                    avg_fps = frame_idx / total_elapsed
-                    interval_fps = (frame_idx - last_log_frame_idx) / interval_elapsed
-                    emit_runtime_log(
-                        f"Render progress: {frame_idx}/{len(render_steps)} frames, "
-                        f"avg {avg_fps:.2f} fps, recent {interval_fps:.2f} fps, "
-                        f"route {step.route_seconds:.2f}s"
-                    )
-                    last_log_at = now
-                    last_log_frame_idx = frame_idx
-        timer.lap("render")
+                        if wide_view is not None:
+                            render_view(wide_view, draw_current_speed=False, draw_hud=False, draw_driver_state=False)
+                            redraw_ui_alt_dual_view_overlays(road_view, wide_view, step.state)
+                            redraw_ui_alt_dual_view_borders(road_view, wide_view, presented_layout_rects)
+                            road_label_x, road_label_y = compute_ui_alt_panel_label_position(presented_layout_rects.road_rect)
+                            draw_text_box("ROAD", road_label_x, road_label_y, 22, gui_app, font)
+                            assert presented_layout_rects.wide_rect is not None
+                            wide_label_x, wide_label_y = compute_ui_alt_panel_label_position(presented_layout_rects.wide_rect)
+                            draw_text_box("WIDE", wide_label_x, wide_label_y, 22, gui_app, font)
+                            rl.draw_line(
+                                int(presented_layout_rects.wide_rect[0]),
+                                int(presented_layout_rects.wide_rect[1]),
+                                int(presented_layout_rects.wide_rect[0] + presented_layout_rects.wide_rect[2]),
+                                int(presented_layout_rects.wide_rect[1]),
+                                rl.Color(255, 255, 255, 24),
+                            )
+                        if layout_rects.telemetry_rect is not None and steering_footer is not None:
+                            steering_footer.render(
+                                rl.Rectangle(*layout_rects.telemetry_rect),
+                                telemetry=extract_footer_telemetry(step.state),
+                                route_seconds=step.route_seconds,
+                            )
+                        render_overlays(
+                            gui_app,
+                            font,
+                            big,
+                            metadata,
+                            title,
+                            step.route_seconds,
+                            show_metadata,
+                            show_time,
+                        )
+                    frame_idx += 1
+                    progress.update(1)
+                    now = time.perf_counter()
+                    if frame_idx == len(render_steps) or now - last_log_at >= 5.0:
+                        total_elapsed = max(now - render_started_at, 1e-6)
+                        interval_elapsed = max(now - last_log_at, 1e-6)
+                        avg_fps = frame_idx / total_elapsed
+                        interval_fps = (frame_idx - last_log_frame_idx) / interval_elapsed
+                        emit_runtime_log(
+                            f"Render progress: {frame_idx}/{len(render_steps)} frames, "
+                            f"avg {avg_fps:.2f} fps, recent {interval_fps:.2f} fps, "
+                            f"route {step.route_seconds:.2f}s"
+                        )
+                        last_log_at = now
+                        last_log_frame_idx = frame_idx
 
-        road_frame_queue.stop()
-        if wide_frame_queue is not None:
-            wide_frame_queue.stop()
-        gui_app.close()
+            timer.lap("render")
+        finally:
+            if overridden_border_module is not None and original_border_size is not None:
+                setattr(overridden_border_module, "UI_BORDER_SIZE", original_border_size)
+            road_frame_queue.stop()
+            if wide_frame_queue is not None:
+                wide_frame_queue.stop()
+            gui_app.close()
         timer.lap("ffmpeg")
 
     logger.info("Clip saved to: %s", Path(output).resolve())

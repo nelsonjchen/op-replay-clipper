@@ -312,6 +312,76 @@ def test_compute_ui_alt_panel_label_position_uses_safe_inset() -> None:
     assert big_ui_engine.compute_ui_alt_panel_label_position((0, 1080, 2160, 1080)) == (32, 1108)
 
 
+def test_compute_fitted_rect_with_aspect_centers_letterboxed_content() -> None:
+    assert big_ui_engine.compute_fitted_rect_with_aspect(
+        (0, 44, 1472, 680),
+        target_aspect_ratio=2.0,
+        border_size=30,
+    ) == (
+        56,
+        44,
+        1360,
+        680,
+    )
+
+
+def test_compute_stacked_ui_border_size_scales_with_panel_height() -> None:
+    assert big_ui_engine.compute_stacked_ui_border_size(
+        default_border_size=30,
+        panel_height=680,
+        reference_height=1080,
+    ) == 19
+
+
+def test_compute_ui_alt_stacked_canvas_width_matches_ui_aspect_camera_column() -> None:
+    width = big_ui_engine.compute_ui_alt_stacked_canvas_width(
+        base_width=2160,
+        base_height=1080,
+        target_aspect_ratio=2.0,
+    )
+
+    telemetry_width = big_ui_engine.compute_ui_alt_telemetry_width(width)
+    camera_width = width - telemetry_width
+    stacked_height = big_ui_engine.compute_ui_alt_stacked_canvas_height(1080)
+    header_height = min(big_ui_engine.UI_ALT_HEADER_RESERVED_HEIGHT, stacked_height - 1)
+    content_height = stacked_height - header_height
+    pane_height = content_height - (content_height // 2)
+
+    assert camera_width == pane_height * 2
+
+
+def test_redraw_ui_alt_view_overlays_uses_view_overlay_scale(monkeypatch) -> None:
+    calls: list[tuple[str, object]] = []
+    view = SimpleNamespace(_ui_alt_hud_scale=0.63)
+    state = {}
+
+    monkeypatch.setattr(
+        big_ui_engine,
+        "draw_ui_alt_model_input_overlay",
+        lambda current_view, current_state, *, use_wide_camera, bigmodel_frame: calls.append(
+            ("model", use_wide_camera, bigmodel_frame)
+        ),
+    )
+    monkeypatch.setattr(
+        big_ui_engine,
+        "redraw_hud_overlay",
+        lambda current_view, *, draw_current_speed=True, scale=1.0: calls.append(("hud", draw_current_speed, scale)),
+    )
+    monkeypatch.setattr(
+        big_ui_engine,
+        "redraw_driver_state_overlay",
+        lambda current_view, *, scale=1.0: calls.append(("driver", scale)),
+    )
+
+    big_ui_engine.redraw_ui_alt_view_overlays(view, state, use_wide_camera=True, bigmodel_frame=True)
+
+    assert calls == [
+        ("model", True, True),
+        ("hud", True, 0.63),
+        ("driver", 0.63),
+    ]
+
+
 def test_redraw_ui_alt_dual_view_borders_redraws_both_panels(monkeypatch) -> None:
     calls: list[tuple[str, object]] = []
 
@@ -362,19 +432,17 @@ def test_redraw_ui_alt_dual_view_overlays_redraws_both_huds(monkeypatch) -> None
 
     monkeypatch.setattr(
         big_ui_engine,
-        "draw_ui_alt_model_input_overlays",
-        lambda road, wide, current_state: calls.append(("model", (road, wide, current_state))),
+        "redraw_ui_alt_view_overlays",
+        lambda view, current_state, *, use_wide_camera, bigmodel_frame: calls.append(
+            ("view", (view, current_state, use_wide_camera, bigmodel_frame))
+        ),
     )
-    monkeypatch.setattr(big_ui_engine, "redraw_hud_overlay", lambda view: calls.append(("hud", view)))
-    monkeypatch.setattr(big_ui_engine, "draw_current_speed_overlay", lambda view: calls.append(("speed", view)))
 
     big_ui_engine.redraw_ui_alt_dual_view_overlays(road_view, wide_view, state)
 
     assert calls == [
-        ("model", (road_view, wide_view, state)),
-        ("hud", road_view),
-        ("hud", wide_view),
-        ("speed", wide_view),
+        ("view", (road_view, state, False, False)),
+        ("view", (wide_view, state, True, True)),
     ]
 
 
@@ -460,7 +528,57 @@ def test_compute_model_input_overlay_quad_returns_none_without_live_calibration(
     assert quad is None
 
 
-def test_draw_ui_alt_model_input_overlays_draws_road_and_wide(monkeypatch) -> None:
+def test_redraw_ui_alt_view_overlays_draws_model_hud_and_driver_state(monkeypatch) -> None:
+    calls: list[tuple[object, ...]] = []
+    view = object()
+    state = {}
+
+    monkeypatch.setattr(
+        big_ui_engine,
+        "draw_ui_alt_model_input_overlay",
+        lambda current_view, current_state, *, use_wide_camera, bigmodel_frame: calls.append(
+            (use_wide_camera, bigmodel_frame)
+        ),
+    )
+    monkeypatch.setattr(
+        big_ui_engine,
+        "redraw_hud_overlay",
+        lambda current_view, *, draw_current_speed=True, scale=1.0: calls.append(("hud", draw_current_speed, scale)),
+    )
+    monkeypatch.setattr(
+        big_ui_engine,
+        "redraw_driver_state_overlay",
+        lambda current_view, *, scale=1.0: calls.append(("driver", current_view, scale)),
+    )
+
+    big_ui_engine.redraw_ui_alt_view_overlays(view, state, use_wide_camera=True, bigmodel_frame=True)
+
+    assert calls == [(True, True), ("hud", True, 1.0), ("driver", view, 1.0)]
+
+
+def test_render_view_can_suppress_hud_and_driver_state(monkeypatch) -> None:
+    events: list[tuple[str, object]] = []
+    hud_renderer = SimpleNamespace(
+        render=lambda rect: events.append(("hud-render", rect)),
+        _draw_current_speed=lambda rect: events.append(("speed", rect)),
+    )
+    driver_state_renderer = SimpleNamespace(render=lambda rect: events.append(("driver-render", rect)))
+    view = SimpleNamespace(
+        render=lambda: (
+            hud_renderer.render("hud-rect"),
+            driver_state_renderer.render("driver-rect"),
+            events.append(("view-render", None)),
+        ),
+        _hud_renderer=hud_renderer,
+        driver_state_renderer=driver_state_renderer,
+    )
+
+    big_ui_engine.render_view(view, draw_hud=False, draw_driver_state=False)
+
+    assert events == [("view-render", None)]
+
+
+def test_draw_ui_alt_model_input_overlay_draws_with_clip_rect(monkeypatch) -> None:
     calls: list[tuple[bool, bool]] = []
     drawn: list[tuple[tuple[tuple[float, float], ...], object]] = []
 
@@ -475,19 +593,16 @@ def test_draw_ui_alt_model_input_overlays_draws_road_and_wide(monkeypatch) -> No
         lambda quad, *, clip_rect=None: drawn.append((quad, clip_rect)),
     )
 
-    road_rect = SimpleNamespace(x=1, y=2, width=3, height=4)
-    wide_rect = SimpleNamespace(x=5, y=6, width=7, height=8)
-    big_ui_engine.draw_ui_alt_model_input_overlays(
-        SimpleNamespace(_content_rect=road_rect),
-        SimpleNamespace(_content_rect=wide_rect),
+    clip_rect = SimpleNamespace(x=1, y=2, width=3, height=4)
+    big_ui_engine.draw_ui_alt_model_input_overlay(
+        SimpleNamespace(_content_rect=clip_rect),
         {},
+        use_wide_camera=True,
+        bigmodel_frame=True,
     )
 
-    assert calls == [(False, False), (True, True)]
-    assert drawn == [
-        (((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)), road_rect),
-        (((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)), wide_rect),
-    ]
+    assert calls == [(True, True)]
+    assert drawn == [(((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)), clip_rect)]
 
 
 def test_draw_model_input_overlay_scissors_to_clip_rect(monkeypatch) -> None:
