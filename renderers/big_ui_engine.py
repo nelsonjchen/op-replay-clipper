@@ -60,8 +60,8 @@ UI_ALT_CONTROL_MODE_CHIP_RIGHT_SLACK = 4.0
 UI_ALT_FOOTER_CTA_LINE = "Make your own `ui-alt` clips with"
 UI_ALT_FOOTER_CTA_URL = "https://github.com/nelsonjchen/op-replay-clipper"
 UI_ALT_FOOTER_CTA_URL_DISPLAY = "github.com/nelsonjchen/op-replay-clipper"
-UI_ALT_FOOTER_CTA_STACK_THRESHOLD = 1000.0
-UI_ALT_FOOTER_CTA_HEIGHT_STACKED = 164.0
+UI_ALT_FOOTER_CTA_HEIGHT_MIN = 56.0
+UI_ALT_FOOTER_CTA_HEIGHT_MAX = 64.0
 UI_ALT_TELEMETRY_WIDTH_RATIO = 0.30
 UI_ALT_TELEMETRY_MIN_WIDTH = 420
 UI_ALT_TELEMETRY_MAX_WIDTH = 640
@@ -447,15 +447,9 @@ def compute_stacked_ui_border_size(*, default_border_size: int, panel_height: in
     return max(1, min(default_border_size, scaled_border_size))
 
 
-def should_stack_footer_cta(panel_width: float) -> bool:
-    return panel_width < UI_ALT_FOOTER_CTA_STACK_THRESHOLD
-
-
 def compute_footer_cta_height(*, panel_height: float, panel_width: float) -> float:
-    base_height = min(84.0, max(54.0, panel_height * 0.09))
-    if should_stack_footer_cta(panel_width):
-        return max(base_height, UI_ALT_FOOTER_CTA_HEIGHT_STACKED)
-    return base_height
+    _ = panel_width
+    return min(UI_ALT_FOOTER_CTA_HEIGHT_MAX, max(UI_ALT_FOOTER_CTA_HEIGHT_MIN, panel_height * 0.06))
 
 
 def compute_time_overlay_position(*, gui_width: int, time_width: int, big: bool) -> tuple[int, int]:
@@ -1915,120 +1909,65 @@ class SteeringFooterRenderer:
 
         lead_text = UI_ALT_FOOTER_CTA_LINE
         url = UI_ALT_FOOTER_CTA_URL_DISPLAY
-        font_size = 31
-        panel_fill = rl.Color(255, 255, 255, 8)
-        panel_border = rl.Color(118, 210, 255, 60)
         lead_color = rl.Color(255, 255, 255, 195)
         url_color = rl.Color(118, 210, 255, 255)
         code_fill = rl.Color(255, 255, 255, 18)
         code_border = rl.Color(255, 255, 255, 45)
         panel_rect = rl.Rectangle(rect.x, rect.y + UI_ALT_FOOTER_CTA_PAD_Y, rect.width, max(0.0, rect.height - (2 * UI_ALT_FOOTER_CTA_PAD_Y)))
-        rl.draw_rectangle_rounded(panel_rect, 0.16, 16, panel_fill)
-        rl.draw_rectangle_rounded_lines_ex(panel_rect, 0.16, 16, 2, panel_border)
-        target_width = max(1.0, panel_rect.width - 80.0)
+        target_width = max(1.0, panel_rect.width - 32.0)
+        lead_runs = parse_inline_text(lead_text)
+        url_runs = [StyledTextRun(url, StyledTextState(), color=url_color)]
+        lead_font_size = 18
+        url_font_size = 16
 
-        if should_stack_footer_cta(panel_rect.width):
-            lead_runs = parse_inline_text("Make your own `ui-alt` clips with")
-            url_runs = [StyledTextRun(url, StyledTextState(), color=url_color)]
-
-            lead_font_size = 18
-            url_font_size = 16
-
-            def _fit_runs(runs, starting_size: int) -> tuple[int, object]:
-                metrics = measure_styled_text_line(
-                    fonts=self._styled_fonts,
-                    text=runs,
-                    font_size=starting_size,
-                    spacing=0,
-                    code_padding_x=10.0,
-                    code_padding_y=4.0,
-                )
-                fitted_size = starting_size
-                if metrics.width > target_width and metrics.width > 0:
-                    fitted_size = max(14, int(starting_size * (target_width / metrics.width)))
-                    metrics = measure_styled_text_line(
-                        fonts=self._styled_fonts,
-                        text=runs,
-                        font_size=fitted_size,
-                        spacing=0,
-                        code_padding_x=10.0,
-                        code_padding_y=4.0,
-                    )
-                return fitted_size, metrics
-
-            lead_font_size, lead_metrics = _fit_runs(lead_runs, lead_font_size)
-            url_font_size, url_metrics = _fit_runs(url_runs, url_font_size)
-
-            line_gap = 6.0
-            lines = [
-                (lead_runs, lead_font_size, lead_metrics, lead_color),
-                (url_runs, url_font_size, url_metrics, url_color),
-            ]
-
-            total_height = sum(metrics.height for _, _, metrics, _ in lines) + (line_gap * (len(lines) - 1))
-            line_y = float(int(round(panel_rect.y + ((panel_rect.height - total_height) / 2))))
-
-            for runs, current_font_size, metrics, text_run_color in lines:
-                line_x = float(int(round(panel_rect.x + max(0.0, (panel_rect.width - metrics.width) / 2))))
-                draw_styled_text_line(
-                    fonts=self._styled_fonts,
-                    text=runs,
-                    position=rl.Vector2(line_x, line_y),
-                    font_size=current_font_size,
-                    spacing=0,
-                    paint=StyledTextPaint(
-                        color=text_run_color,
-                        code_text_color=rl.WHITE,
-                        code_fill_color=code_fill,
-                        code_border_color=code_border,
-                    ),
-                    code_padding_x=10.0,
-                    code_padding_y=4.0,
-                )
-                line_y += metrics.height + line_gap
-            return
-
-        cta_runs = parse_inline_text(f"{lead_text} ")
-        cta_runs.append(StyledTextRun(url, StyledTextState(), color=url_color))
-        line_metrics = measure_styled_text_line(
-            fonts=self._styled_fonts,
-            text=cta_runs,
-            font_size=font_size,
-            spacing=0,
-            code_padding_x=12.0,
-            code_padding_y=4.0,
-        )
-        total_width = line_metrics.width
-        if total_width > target_width and total_width > 0:
-            font_size = max(18, int(font_size * (target_width / total_width)))
-            line_metrics = measure_styled_text_line(
+        def _fit_runs(runs, starting_size: int) -> tuple[int, object]:
+            metrics = measure_styled_text_line(
                 fonts=self._styled_fonts,
-                text=cta_runs,
-                font_size=font_size,
+                text=runs,
+                font_size=starting_size,
                 spacing=0,
                 code_padding_x=10.0,
                 code_padding_y=4.0,
             )
-        text_height = line_metrics.height
-        line_top_y = float(int(round(panel_rect.y + ((panel_rect.height - text_height) / 2))))
-        total_width = line_metrics.width
-        start_x = float(int(round(panel_rect.x + max(0.0, (panel_rect.width - total_width) / 2))))
+            fitted_size = starting_size
+            if metrics.width > target_width and metrics.width > 0:
+                fitted_size = max(14, int(starting_size * (target_width / metrics.width)))
+                metrics = measure_styled_text_line(
+                    fonts=self._styled_fonts,
+                    text=runs,
+                    font_size=fitted_size,
+                    spacing=0,
+                    code_padding_x=10.0,
+                    code_padding_y=4.0,
+                )
+            return fitted_size, metrics
 
-        draw_styled_text_line(
-            fonts=self._styled_fonts,
-            text=cta_runs,
-            position=rl.Vector2(start_x, line_top_y),
-            font_size=font_size,
-            spacing=0,
-            paint=StyledTextPaint(
-                color=lead_color,
-                code_text_color=rl.WHITE,
-                code_fill_color=code_fill,
-                code_border_color=code_border,
-            ),
-            code_padding_x=10.0,
-            code_padding_y=4.0,
-        )
+        lead_font_size, lead_metrics = _fit_runs(lead_runs, lead_font_size)
+        url_font_size, url_metrics = _fit_runs(url_runs, url_font_size)
+        line_gap = 4.0
+        text_height = lead_metrics.height + line_gap + url_metrics.height
+        line_y = float(int(round(panel_rect.y + max(0.0, panel_rect.height - text_height))))
+        for runs, current_font_size, metrics, text_run_color in (
+            (lead_runs, lead_font_size, lead_metrics, lead_color),
+            (url_runs, url_font_size, url_metrics, url_color),
+        ):
+            line_x = float(int(round(panel_rect.x + max(0.0, (panel_rect.width - metrics.width) / 2))))
+            draw_styled_text_line(
+                fonts=self._styled_fonts,
+                text=runs,
+                position=rl.Vector2(line_x, line_y),
+                font_size=current_font_size,
+                spacing=0,
+                paint=StyledTextPaint(
+                    color=text_run_color,
+                    code_text_color=rl.WHITE,
+                    code_fill_color=code_fill,
+                    code_border_color=code_border,
+                ),
+                code_padding_x=10.0,
+                code_padding_y=4.0,
+            )
+            line_y += metrics.height + line_gap
 
     def render(self, rect, *, telemetry: FooterTelemetry, route_seconds: float) -> None:
         import pyray as rl

@@ -350,15 +350,9 @@ def test_compute_ui_alt_stacked_canvas_width_matches_ui_aspect_camera_column() -
     assert camera_width == pane_height * 2
 
 
-def test_should_stack_footer_cta_uses_narrow_width_threshold() -> None:
-    assert big_ui_engine.should_stack_footer_cta(400.0) is True
-    assert big_ui_engine.should_stack_footer_cta(980.0) is True
-    assert big_ui_engine.should_stack_footer_cta(1200.0) is False
-
-
-def test_compute_footer_cta_height_grows_for_stacked_narrow_panels() -> None:
-    assert big_ui_engine.compute_footer_cta_height(panel_height=600.0, panel_width=400.0) == 164.0
-    assert big_ui_engine.compute_footer_cta_height(panel_height=1200.0, panel_width=1200.0) == 84.0
+def test_compute_footer_cta_height_uses_shared_inline_bounds() -> None:
+    assert big_ui_engine.compute_footer_cta_height(panel_height=400.0, panel_width=400.0) == 56.0
+    assert big_ui_engine.compute_footer_cta_height(panel_height=1200.0, panel_width=1200.0) == 64.0
 
 
 def test_patch_pyray_headless_window_flags_forces_hidden(monkeypatch) -> None:
