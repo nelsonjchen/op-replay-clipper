@@ -60,6 +60,8 @@ UI_ALT_CONTROL_MODE_CHIP_RIGHT_SLACK = 4.0
 UI_ALT_FOOTER_CTA_LINE = "Make your own `ui-alt` clips with"
 UI_ALT_FOOTER_CTA_URL = "https://github.com/nelsonjchen/op-replay-clipper"
 UI_ALT_FOOTER_CTA_URL_DISPLAY = "github.com/nelsonjchen/op-replay-clipper"
+UI_ALT_FOOTER_CTA_STACK_THRESHOLD = 1000.0
+UI_ALT_FOOTER_CTA_HEIGHT_STACKED = 164.0
 UI_ALT_TELEMETRY_WIDTH_RATIO = 0.30
 UI_ALT_TELEMETRY_MIN_WIDTH = 420
 UI_ALT_TELEMETRY_MAX_WIDTH = 640
@@ -443,6 +445,17 @@ def compute_stacked_ui_border_size(*, default_border_size: int, panel_height: in
 
     scaled_border_size = int(round(default_border_size * (panel_height / reference_height)))
     return max(1, min(default_border_size, scaled_border_size))
+
+
+def should_stack_footer_cta(panel_width: float) -> bool:
+    return panel_width < UI_ALT_FOOTER_CTA_STACK_THRESHOLD
+
+
+def compute_footer_cta_height(*, panel_height: float, panel_width: float) -> float:
+    base_height = min(84.0, max(54.0, panel_height * 0.09))
+    if should_stack_footer_cta(panel_width):
+        return max(base_height, UI_ALT_FOOTER_CTA_HEIGHT_STACKED)
+    return base_height
 
 
 def compute_time_overlay_position(*, gui_width: int, time_width: int, big: bool) -> tuple[int, int]:
@@ -1088,6 +1101,26 @@ def _reapply_hidden_window_flag(*, headless: bool) -> None:
     if set_window_state is None:
         return
     set_window_state(int(rl.ConfigFlags.FLAG_WINDOW_HIDDEN))
+
+
+def _patch_pyray_headless_window_flags(*, headless: bool) -> None:
+    if not headless:
+        return
+
+    import pyray as rl
+
+    if getattr(rl, "_clipper_hidden_window_flag_patch", False):
+        return
+
+    original_set_config_flags = getattr(rl, "set_config_flags", None)
+    if not callable(original_set_config_flags):
+        return
+
+    def _set_config_flags_with_hidden(flags):
+        return original_set_config_flags(flags | rl.ConfigFlags.FLAG_WINDOW_HIDDEN)
+
+    rl.set_config_flags = _set_config_flags_with_hidden
+    rl._clipper_hidden_window_flag_patch = True
 
 
 def _override_module_attr(module, attr_name: str, value):
@@ -1890,6 +1923,71 @@ class SteeringFooterRenderer:
         code_fill = rl.Color(255, 255, 255, 18)
         code_border = rl.Color(255, 255, 255, 45)
         panel_rect = rl.Rectangle(rect.x, rect.y + UI_ALT_FOOTER_CTA_PAD_Y, rect.width, max(0.0, rect.height - (2 * UI_ALT_FOOTER_CTA_PAD_Y)))
+        rl.draw_rectangle_rounded(panel_rect, 0.16, 16, panel_fill)
+        rl.draw_rectangle_rounded_lines_ex(panel_rect, 0.16, 16, 2, panel_border)
+        target_width = max(1.0, panel_rect.width - 80.0)
+
+        if should_stack_footer_cta(panel_rect.width):
+            lead_runs = parse_inline_text("Make your own `ui-alt` clips with")
+            url_runs = [StyledTextRun(url, StyledTextState(), color=url_color)]
+
+            lead_font_size = 18
+            url_font_size = 16
+
+            def _fit_runs(runs, starting_size: int) -> tuple[int, object]:
+                metrics = measure_styled_text_line(
+                    fonts=self._styled_fonts,
+                    text=runs,
+                    font_size=starting_size,
+                    spacing=0,
+                    code_padding_x=10.0,
+                    code_padding_y=4.0,
+                )
+                fitted_size = starting_size
+                if metrics.width > target_width and metrics.width > 0:
+                    fitted_size = max(14, int(starting_size * (target_width / metrics.width)))
+                    metrics = measure_styled_text_line(
+                        fonts=self._styled_fonts,
+                        text=runs,
+                        font_size=fitted_size,
+                        spacing=0,
+                        code_padding_x=10.0,
+                        code_padding_y=4.0,
+                    )
+                return fitted_size, metrics
+
+            lead_font_size, lead_metrics = _fit_runs(lead_runs, lead_font_size)
+            url_font_size, url_metrics = _fit_runs(url_runs, url_font_size)
+
+            line_gap = 6.0
+            lines = [
+                (lead_runs, lead_font_size, lead_metrics, lead_color),
+                (url_runs, url_font_size, url_metrics, url_color),
+            ]
+
+            total_height = sum(metrics.height for _, _, metrics, _ in lines) + (line_gap * (len(lines) - 1))
+            line_y = float(int(round(panel_rect.y + ((panel_rect.height - total_height) / 2))))
+
+            for runs, current_font_size, metrics, text_run_color in lines:
+                line_x = float(int(round(panel_rect.x + max(0.0, (panel_rect.width - metrics.width) / 2))))
+                draw_styled_text_line(
+                    fonts=self._styled_fonts,
+                    text=runs,
+                    position=rl.Vector2(line_x, line_y),
+                    font_size=current_font_size,
+                    spacing=0,
+                    paint=StyledTextPaint(
+                        color=text_run_color,
+                        code_text_color=rl.WHITE,
+                        code_fill_color=code_fill,
+                        code_border_color=code_border,
+                    ),
+                    code_padding_x=10.0,
+                    code_padding_y=4.0,
+                )
+                line_y += metrics.height + line_gap
+            return
+
         cta_runs = parse_inline_text(f"{lead_text} ")
         cta_runs.append(StyledTextRun(url, StyledTextState(), color=url_color))
         line_metrics = measure_styled_text_line(
@@ -1901,7 +1999,6 @@ class SteeringFooterRenderer:
             code_padding_y=4.0,
         )
         total_width = line_metrics.width
-        target_width = panel_rect.width - 80.0
         if total_width > target_width and total_width > 0:
             font_size = max(18, int(font_size * (target_width / total_width)))
             line_metrics = measure_styled_text_line(
@@ -1917,8 +2014,6 @@ class SteeringFooterRenderer:
         total_width = line_metrics.width
         start_x = float(int(round(panel_rect.x + max(0.0, (panel_rect.width - total_width) / 2))))
 
-        rl.draw_rectangle_rounded(panel_rect, 0.16, 16, panel_fill)
-        rl.draw_rectangle_rounded_lines_ex(panel_rect, 0.16, 16, 2, panel_border)
         draw_styled_text_line(
             fonts=self._styled_fonts,
             text=cta_runs,
@@ -1969,7 +2064,7 @@ class SteeringFooterRenderer:
         second_row_y = first_row_y + meter_h + meter_gap_y
         accel_y = second_row_y + meter_h + 20.0
         accel_h = 52.0
-        cta_h = min(84.0, max(54.0, rect.height * 0.09))
+        cta_h = compute_footer_cta_height(panel_height=rect.height, panel_width=content_w)
         cta_y = rect.y + rect.height - UI_ALT_FOOTER_OUTER_PAD_Y - cta_h
         confidence_rect = (
             confidence_x,
@@ -2170,8 +2265,7 @@ def clip(
     render_steps = build_render_steps(messages_by_segment, seg_start=seg_start, start=start, end=end)
     timer.lap("logs")
 
-    if headless:
-        rl.set_config_flags(rl.ConfigFlags.FLAG_WINDOW_HIDDEN)
+    _patch_pyray_headless_window_flags(headless=headless)
 
     with OpenpilotPrefix(shared_download_cache=True):
         metadata = load_route_metadata(route) if show_metadata else None

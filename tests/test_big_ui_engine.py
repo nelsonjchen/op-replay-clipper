@@ -350,6 +350,32 @@ def test_compute_ui_alt_stacked_canvas_width_matches_ui_aspect_camera_column() -
     assert camera_width == pane_height * 2
 
 
+def test_should_stack_footer_cta_uses_narrow_width_threshold() -> None:
+    assert big_ui_engine.should_stack_footer_cta(400.0) is True
+    assert big_ui_engine.should_stack_footer_cta(980.0) is True
+    assert big_ui_engine.should_stack_footer_cta(1200.0) is False
+
+
+def test_compute_footer_cta_height_grows_for_stacked_narrow_panels() -> None:
+    assert big_ui_engine.compute_footer_cta_height(panel_height=600.0, panel_width=400.0) == 164.0
+    assert big_ui_engine.compute_footer_cta_height(panel_height=1200.0, panel_width=1200.0) == 84.0
+
+
+def test_patch_pyray_headless_window_flags_forces_hidden(monkeypatch) -> None:
+    calls: list[object] = []
+    fake_flags = SimpleNamespace(FLAG_WINDOW_HIDDEN=8)
+    fake_rl = SimpleNamespace(
+        ConfigFlags=fake_flags,
+        set_config_flags=lambda flags: calls.append(flags),
+    )
+    monkeypatch.setitem(sys.modules, "pyray", fake_rl)
+
+    big_ui_engine._patch_pyray_headless_window_flags(headless=True)
+    fake_rl.set_config_flags(2)
+
+    assert calls == [10]
+
+
 def test_redraw_ui_alt_view_overlays_uses_view_overlay_scale(monkeypatch) -> None:
     calls: list[tuple[str, object]] = []
     view = SimpleNamespace(_ui_alt_hud_scale=0.63)
