@@ -245,9 +245,9 @@ def test_load_route_metadata_falls_back_without_uploaded_logs(monkeypatch) -> No
 def test_build_layout_rects_alt_device_uses_sidebar_telemetry() -> None:
     rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="alt", ui_alt_variant="device")
 
-    assert rects.road_rect == (0, 72, 1344, 1008)
+    assert rects.road_rect == (0, 82, 1344, 998)
     assert rects.wide_rect is None
-    assert rects.telemetry_rect == (1344, 72, 576, 1008)
+    assert rects.telemetry_rect == (1344, 82, 576, 998)
 
 
 def test_build_layout_rects_alt_stacked_forward_over_wide_splits_camera_area() -> None:
@@ -258,9 +258,9 @@ def test_build_layout_rects_alt_stacked_forward_over_wide_splits_camera_area() -
         ui_alt_variant="stacked_forward_over_wide",
     )
 
-    assert rects.road_rect == (0, 72, 1344, 504)
-    assert rects.wide_rect == (0, 576, 1344, 504)
-    assert rects.telemetry_rect == (1344, 72, 576, 1008)
+    assert rects.road_rect == (0, 82, 1344, 499)
+    assert rects.wide_rect == (0, 581, 1344, 499)
+    assert rects.telemetry_rect == (1344, 82, 576, 998)
 
 
 def test_build_layout_rects_alt_stacked_wide_over_forward_swaps_camera_order() -> None:
@@ -271,9 +271,9 @@ def test_build_layout_rects_alt_stacked_wide_over_forward_swaps_camera_order() -
         ui_alt_variant="stacked_wide_over_forward",
     )
 
-    assert rects.road_rect == (0, 576, 1344, 504)
-    assert rects.wide_rect == (0, 72, 1344, 504)
-    assert rects.telemetry_rect == (1344, 72, 576, 1008)
+    assert rects.road_rect == (0, 581, 1344, 499)
+    assert rects.wide_rect == (0, 82, 1344, 499)
+    assert rects.telemetry_rect == (1344, 82, 576, 998)
 
 
 def test_compute_ui_alt_dual_canvas_height_preserves_full_height_views() -> None:

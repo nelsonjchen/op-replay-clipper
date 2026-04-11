@@ -62,11 +62,13 @@ UI_ALT_FOOTER_CTA_URL = "https://github.com/nelsonjchen/op-replay-clipper"
 UI_ALT_FOOTER_CTA_URL_DISPLAY = "github.com/nelsonjchen/op-replay-clipper"
 UI_ALT_FOOTER_CTA_HEIGHT_MIN = 56.0
 UI_ALT_FOOTER_CTA_HEIGHT_MAX = 64.0
+UI_ALT_HEADER_RIGHT_SAFE_PAD = 56
+UI_ALT_HEADER_TEXT_DRAW_OVERHANG_PAD = 20
 UI_ALT_TELEMETRY_WIDTH_RATIO = 0.30
 UI_ALT_TELEMETRY_MIN_WIDTH = 420
 UI_ALT_TELEMETRY_MAX_WIDTH = 640
 UI_ALT_CAMERA_MIN_WIDTH = 480
-UI_ALT_HEADER_RESERVED_HEIGHT = 72
+UI_ALT_HEADER_RESERVED_HEIGHT = 82
 UI_ALT_STACKED_EXTRA_HEIGHT_RATIO = 0.30
 UI_ALT_STACKED_MIN_EXTRA_HEIGHT = 240
 UI_ALT_STACKED_MAX_EXTRA_HEIGHT = 420
@@ -464,6 +466,74 @@ def format_route_timer_text(route_seconds: float, *, prefix: str = "") -> str:
     whole_seconds = int(route_seconds)
     timer_text = f"{whole_seconds // 60:02d}:{whole_seconds % 60:02d} • {whole_seconds}s"
     return f"{prefix}{timer_text}" if prefix else timer_text
+
+
+def _humanize_git_remote_header(text: str) -> str:
+    if not text:
+        return "unknown"
+    if text.endswith(".git"):
+        text = text[:-4]
+    if text.startswith("git@") and ":" in text:
+        text = text.split(":", 1)[1]
+    elif "github.com/" in text:
+        text = text.split("github.com/", 1)[1]
+    return text.rsplit("/", 2)[-2] + "/" + text.rsplit("/", 1)[-1] if "/" in text else text
+
+
+def _ui_alt_git_metadata_text(metadata: dict[str, str] | None) -> str:
+    if not metadata:
+        return ""
+    remote = _humanize_git_remote_header(metadata.get("remote", ""))
+    branch = str(metadata.get("branch", "") or "unknown")
+    commit = str(metadata.get("commit", "") or "unknown")
+    dirty = str(metadata.get("dirty", "") or "unknown")
+    if dirty == "false":
+        dirty_text = "clean"
+    elif dirty == "true":
+        dirty_text = "dirty"
+    else:
+        dirty_text = f"dirty {dirty}"
+    return f"{remote}  •  {branch}  •  {commit}  •  {dirty_text}"
+
+
+def _draw_right_aligned_overlay_text(*, right_x: float, y: float, text: str, font, font_size: int, color) -> None:
+    import pyray as rl
+
+    if not text:
+        return
+    text_size = rl.measure_text_ex(font, text, font_size, 0)
+    rl.draw_text_ex(
+        font,
+        text,
+        rl.Vector2(right_x - text_size.x - UI_ALT_HEADER_TEXT_DRAW_OVERHANG_PAD, y),
+        font_size,
+        0,
+        color,
+    )
+
+
+def _fit_overlay_text_to_width(*, text: str, font, font_size: int, max_width: float, min_font_size: int = 10) -> tuple[str, int]:
+    import pyray as rl
+
+    if not text:
+        return "", font_size
+
+    current_size = font_size
+    text_width = rl.measure_text_ex(font, text, current_size, 0).x
+    while text_width > max_width and current_size > min_font_size:
+        current_size -= 1
+        text_width = rl.measure_text_ex(font, text, current_size, 0).x
+    if text_width <= max_width:
+        return text, current_size
+
+    ellipsis = "..."
+    fitted = text
+    while fitted:
+        candidate = fitted + ellipsis
+        if rl.measure_text_ex(font, candidate, current_size, 0).x <= max_width:
+            return candidate, current_size
+        fitted = fitted[:-1]
+    return ellipsis, current_size
 
 
 def _extract_nested_attr(obj: object, path: tuple[str, ...]) -> object | None:
@@ -1409,9 +1479,110 @@ def patch_shader_polygon_gradient_coordinates() -> None:
     shader_polygon._clipper_gradient_patch = True
 
 
-def render_overlays(gui_app, font, big, metadata, title, route_seconds, show_metadata, show_time) -> None:
+def render_ui_alt_header(gui_app, font, big, metadata, title, route_seconds, show_metadata, show_time) -> None:
+    import pyray as rl
+
+    white = rl.Color(255, 255, 255, 255)
+    dim = rl.Color(255, 255, 255, 210)
+    blue = rl.Color(118, 210, 255, 255)
+    divider = rl.Color(255, 255, 255, 24)
+    strip_top = rl.Color(2, 6, 10, 255)
+    strip_bottom = rl.Color(6, 16, 24, 255)
+
+    header_height = min(UI_ALT_HEADER_RESERVED_HEIGHT, max(1, gui_app.height))
+    outer_pad_x = 28 if big else 18
+    top_y = 10 if big else 8
+    left_x = outer_pad_x
+    right_x = gui_app.width - outer_pad_x - UI_ALT_HEADER_RIGHT_SAFE_PAD
+    right_col_left = max(int(gui_app.width * 0.58), left_x + 340)
+    right_col_width = max(120.0, right_x - right_col_left)
+
+    rl.draw_rectangle_gradient_v(0, 0, gui_app.width, int(header_height), strip_top, strip_bottom)
+    rl.draw_line(0, int(header_height), gui_app.width, int(header_height), divider)
+
+    if show_time:
+        rl.draw_text_ex(font, "UI ALT", rl.Vector2(left_x, top_y), 18 if big else 14, 0, blue)
+        rl.draw_text_ex(
+            font,
+            format_route_timer_text(route_seconds),
+            rl.Vector2(left_x, top_y + (22 if big else 18)),
+            28 if big else 20,
+            0,
+            white,
+        )
+    elif title:
+        rl.draw_text_ex(font, title, rl.Vector2(left_x, top_y + 10), 24 if big else 18, 0, white)
+
+    if show_metadata and metadata:
+        meta_text = "  •  ".join(part for part in [metadata.get("device_type", ""), metadata.get("platform", "")] if part)
+        route_label = str(metadata.get("route", "") or "")
+        git_text = _ui_alt_git_metadata_text(metadata)
+        if meta_text:
+            meta_text, meta_size = _fit_overlay_text_to_width(
+                text=meta_text,
+                font=font,
+                font_size=20 if big else 16,
+                max_width=right_col_width,
+                min_font_size=13 if big else 11,
+            )
+            _draw_right_aligned_overlay_text(
+                right_x=right_x,
+                y=top_y + 2,
+                text=meta_text,
+                font=font,
+                font_size=meta_size,
+                color=white,
+            )
+        if route_label:
+            route_label, route_size = _fit_overlay_text_to_width(
+                text=route_label,
+                font=font,
+                font_size=16 if big else 13,
+                max_width=right_col_width,
+                min_font_size=11,
+            )
+            _draw_right_aligned_overlay_text(
+                right_x=right_x,
+                y=top_y + 24,
+                text=route_label,
+                font=font,
+                font_size=route_size,
+                color=white,
+            )
+        if git_text:
+            git_text, git_size = _fit_overlay_text_to_width(
+                text=git_text,
+                font=font,
+                font_size=14 if big else 11,
+                max_width=right_col_width,
+                min_font_size=10,
+            )
+            _draw_right_aligned_overlay_text(
+                right_x=right_x,
+                y=top_y + 46,
+                text=git_text,
+                font=font,
+                font_size=git_size,
+                color=white,
+            )
+    elif title and show_time:
+        _draw_right_aligned_overlay_text(
+            right_x=right_x,
+            y=top_y + 24,
+            text=title,
+            font=font,
+            font_size=14 if big else 11,
+            color=dim,
+        )
+
+
+def render_overlays(gui_app, font, big, metadata, title, route_seconds, show_metadata, show_time, layout_mode="default") -> None:
     from openpilot.system.ui.lib.text_measure import measure_text_cached
     from openpilot.system.ui.lib.wrap_text import wrap_text
+
+    if layout_mode == "alt":
+        render_ui_alt_header(gui_app, font, big, metadata, title, route_seconds, show_metadata, show_time)
+        return
 
     metadata_size = 16 if big else 12
     title_size = 32 if big else 24
@@ -2393,6 +2564,7 @@ def clip(
                             step.route_seconds,
                             show_metadata,
                             show_time,
+                            layout_mode=layout_mode,
                         )
                     frame_idx += 1
                     progress.update(1)
