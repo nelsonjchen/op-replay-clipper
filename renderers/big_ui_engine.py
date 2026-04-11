@@ -52,7 +52,10 @@ UI_ALT_CONFIDENCE_RAIL_GAP = 24.0
 UI_ALT_CONFIDENCE_LABEL_NUDGE_X = -4.0
 UI_ALT_BLINKER_CORNER_INSET_Y = 20
 UI_ALT_STEERING_DISPLAY_RING_PAD = 52
-UI_ALT_TELEMETRY_HEADER_HEIGHT = 44.0
+UI_ALT_TELEMETRY_HEADER_HEIGHT = 92.0
+UI_ALT_CONTROL_MODE_CHIP_PAD_X = 13.0
+UI_ALT_CONTROL_MODE_CHIP_PAD_Y = 5.0
+UI_ALT_CONTROL_MODE_CHIP_RIGHT_SLACK = 4.0
 UI_ALT_FOOTER_CTA_LINE = "Make your own `ui-alt` clips with"
 UI_ALT_FOOTER_CTA_URL = "https://github.com/nelsonjchen/op-replay-clipper"
 UI_ALT_FOOTER_CTA_URL_DISPLAY = "github.com/nelsonjchen/op-replay-clipper"
@@ -1613,6 +1616,48 @@ class SteeringFooterRenderer:
             rl.BLACK,
         )
 
+    def _control_mode_chip_layout(self, *, telemetry: FooterTelemetry) -> tuple[str, int, float, float]:
+        import pyray as rl
+
+        label = "TORQUE" if telemetry.steering_control_kind == "torque" else "ANGLE"
+        font_size = 13
+        text_size = rl.measure_text_ex(self._label_font, label, font_size, 0)
+        chip_width = text_size.x + (UI_ALT_CONTROL_MODE_CHIP_PAD_X * 2) + UI_ALT_CONTROL_MODE_CHIP_RIGHT_SLACK
+        chip_height = text_size.y + (UI_ALT_CONTROL_MODE_CHIP_PAD_Y * 2)
+        return label, font_size, chip_width, chip_height
+
+    def _draw_control_mode_chip(self, *, x: float, y: float, telemetry: FooterTelemetry) -> float:
+        import pyray as rl
+
+        if telemetry.steering_control_kind == "torque":
+            fill = rl.Color(255, 176, 87, 48)
+            border = rl.Color(255, 176, 87, 112)
+            text_color = rl.Color(255, 212, 102, 255)
+        else:
+            fill = rl.Color(118, 210, 255, 42)
+            border = rl.Color(118, 210, 255, 104)
+            text_color = rl.Color(118, 210, 255, 255)
+
+        label, font_size, chip_width, chip_height = self._control_mode_chip_layout(telemetry=telemetry)
+        chip_rect = rl.Rectangle(
+            x,
+            y,
+            chip_width,
+            chip_height,
+        )
+
+        rl.draw_rectangle_rounded(chip_rect, 0.45, 10, fill)
+        rl.draw_rectangle_rounded_lines_ex(chip_rect, 0.45, 10, 1.5, border)
+        rl.draw_text_ex(
+            self._label_font,
+            label,
+            rl.Vector2(x + UI_ALT_CONTROL_MODE_CHIP_PAD_X, y + UI_ALT_CONTROL_MODE_CHIP_PAD_Y),
+            font_size,
+            0,
+            text_color,
+        )
+        return chip_rect.width
+
     def _draw_footer_cta(self, rect) -> None:
         import pyray as rl
 
@@ -1691,7 +1736,7 @@ class SteeringFooterRenderer:
         header_content_y = inner_y + UI_ALT_TELEMETRY_HEADER_HEIGHT
         wheel_size = max(124, min(int(content_w * 0.78), int(rect.height * 0.22)))
         wheel_center_x = inner_x + (content_w / 2)
-        wheel_center_y = header_content_y + (wheel_size / 2) + 8.0
+        wheel_center_y = header_content_y + (wheel_size / 2)
         steering_summary_y = header_content_y + wheel_size + 28.0
         steering_summary_h = max(112.0, min(250.0, rect.height * 0.28))
         meters_title_y = steering_summary_y + steering_summary_h + 24.0
@@ -1750,6 +1795,14 @@ class SteeringFooterRenderer:
         )
 
         rl.draw_text_ex(self._label_font, "TELEMETRY", rl.Vector2(inner_x, inner_y), 22, 0, text_dim)
+        telemetry_header_width = rl.measure_text_ex(self._label_font, "TELEMETRY", 22, 0).x
+        chip_y = inner_y + 2.0
+        _, _, chip_width, _ = self._control_mode_chip_layout(telemetry=telemetry)
+        self._draw_control_mode_chip(
+            x=max(inner_x + telemetry_header_width + 18.0, content_right - chip_width),
+            y=chip_y,
+            telemetry=telemetry,
+        )
         self._draw_steering_summary(
             rl.Rectangle(
                 inner_x,
