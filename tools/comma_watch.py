@@ -31,6 +31,15 @@ FILE_TYPE_NAMES = {
 }
 BOOKMARK_EVENT_TYPES = {"user_flag", "user_bookmark", "bookmark"}
 USER_PROMPT_ALERT_STATUSES = {1, "1", "userPrompt", "user_prompt"}
+DM_ALERT_HINTS = (
+    "driver",
+    "distract",
+    "toodistracted",
+    "toounresponsive",
+    "predriverdistracted",
+    "predriverunresponsive",
+    "promptdriver",
+)
 
 
 @dataclass(frozen=True)
@@ -71,6 +80,7 @@ class SegmentEvent:
     segment: int
     event_time: datetime
     max_segment: int
+    category: str = "generic"
 
 
 @dataclass(frozen=True)
@@ -82,6 +92,7 @@ class SegmentTarget:
 @dataclass(frozen=True)
 class PriorityEvents:
     bookmark_events: list[SegmentEvent]
+    dm_alert_events: list[SegmentEvent]
     alert_events: list[SegmentEvent]
 
 
@@ -340,10 +351,25 @@ def event_time_for_route(route: Route, event: dict[str, Any], *, default_segment
     return route_start + timedelta(milliseconds=offset)
 
 
+def is_dm_alert_event(event: dict[str, Any]) -> bool:
+    data = event.get("data") or {}
+    haystacks = (
+        str(event.get("type", "")),
+        str(data.get("alertType", "")),
+        str(data.get("alertText1", "")),
+        str(data.get("alertText2", "")),
+        str(data.get("event", "")),
+        str(data.get("name", "")),
+    )
+    lowered = " ".join(haystacks).lower()
+    return any(hint in lowered for hint in DM_ALERT_HINTS)
+
+
 def categorize_segment_events(
     route: Route, events: Iterable[dict[str, Any]], *, segment: int
-) -> tuple[dict[int, datetime], dict[int, datetime]]:
+) -> tuple[dict[int, datetime], dict[int, datetime], dict[int, datetime]]:
     bookmarks: dict[int, datetime] = {}
+    dm_alerts: dict[int, datetime] = {}
     alerts: dict[int, datetime] = {}
 
     for event in events:
@@ -357,15 +383,17 @@ def categorize_segment_events(
             if existing is None or event_time > existing:
                 bookmarks[target_segment] = event_time
         if data.get("alertStatus") in USER_PROMPT_ALERT_STATUSES:
-            existing = alerts.get(target_segment)
+            target_alerts = dm_alerts if is_dm_alert_event(event) else alerts
+            existing = target_alerts.get(target_segment)
             if existing is None or event_time < existing:
-                alerts[target_segment] = event_time
+                target_alerts[target_segment] = event_time
 
-    return bookmarks, alerts
+    return bookmarks, dm_alerts, alerts
 
 
 def collect_priority_events(api: CommaApi, route: Route) -> PriorityEvents:
     bookmark_segments: dict[int, datetime] = {}
+    dm_alert_segments: dict[int, datetime] = {}
     alert_segments: dict[int, datetime] = {}
 
     for seg in range(parsed_segment_upper_bound(route) + 1):
@@ -374,11 +402,15 @@ def collect_priority_events(api: CommaApi, route: Route) -> PriorityEvents:
         except requests.RequestException as exc:
             print(f"Skipping events for {route.route_id} seg={seg}: {exc}")
             continue
-        bookmarks, alerts = categorize_segment_events(route, events, segment=seg)
+        bookmarks, dm_alerts, alerts = categorize_segment_events(route, events, segment=seg)
         for target_segment, event_time in bookmarks.items():
             existing = bookmark_segments.get(target_segment)
             if existing is None or event_time > existing:
                 bookmark_segments[target_segment] = event_time
+        for target_segment, event_time in dm_alerts.items():
+            existing = dm_alert_segments.get(target_segment)
+            if existing is None or event_time < existing:
+                dm_alert_segments[target_segment] = event_time
         for target_segment, event_time in alerts.items():
             existing = alert_segments.get(target_segment)
             if existing is None or event_time < existing:
@@ -386,11 +418,33 @@ def collect_priority_events(api: CommaApi, route: Route) -> PriorityEvents:
 
     return PriorityEvents(
         bookmark_events=[
-            SegmentEvent(route_id=route.route_id, segment=segment, event_time=event_time, max_segment=route.maxqlog)
+            SegmentEvent(
+                route_id=route.route_id,
+                segment=segment,
+                event_time=event_time,
+                max_segment=route.maxqlog,
+                category="bookmark",
+            )
             for segment, event_time in bookmark_segments.items()
         ],
+        dm_alert_events=[
+            SegmentEvent(
+                route_id=route.route_id,
+                segment=segment,
+                event_time=event_time,
+                max_segment=route.maxqlog,
+                category="dm_alert",
+            )
+            for segment, event_time in dm_alert_segments.items()
+        ],
         alert_events=[
-            SegmentEvent(route_id=route.route_id, segment=segment, event_time=event_time, max_segment=route.maxqlog)
+            SegmentEvent(
+                route_id=route.route_id,
+                segment=segment,
+                event_time=event_time,
+                max_segment=route.maxqlog,
+                category="alert",
+            )
             for segment, event_time in alert_segments.items()
         ],
     )
@@ -450,6 +504,7 @@ def dedupe_segment_targets(segment_targets: Iterable[SegmentTarget]) -> list[Seg
 def combine_priority_segments(
     *,
     bookmark_events: Iterable[SegmentEvent],
+    dm_alert_events: Iterable[SegmentEvent],
     alert_events: Iterable[SegmentEvent],
     previous_segments: int,
     next_segments: int,
@@ -459,6 +514,7 @@ def combine_priority_segments(
     bookmark_events_sorted = sorted(bookmark_events, key=lambda event: event.event_time)
     recent_bookmark_events = list(reversed(bookmark_events_sorted[-recent_bookmark_count:]))
     older_bookmark_events = bookmark_events_sorted[:-recent_bookmark_count]
+    dm_alert_events_sorted = sorted(dm_alert_events, key=lambda event: event.event_time)
     alert_events_sorted = sorted(alert_events, key=lambda event: event.event_time)
 
     grouped_targets: list[list[SegmentTarget]] = []
@@ -474,6 +530,16 @@ def combine_priority_segments(
             ):
                 targets.append(SegmentTarget(route_id=event.route_id, segment=segment))
         grouped_targets.append(dedupe_segment_targets(targets))
+
+    dm_alert_targets: list[SegmentTarget] = []
+    for event in dm_alert_events_sorted:
+        for segment in alert_segments_with_lookback(
+            event.segment,
+            previous_segments=alert_lookback_segments,
+            max_segment=event.max_segment,
+        ):
+            dm_alert_targets.append(SegmentTarget(route_id=event.route_id, segment=segment))
+    grouped_targets.append(dedupe_segment_targets(dm_alert_targets))
 
     alert_targets: list[SegmentTarget] = []
     for event in alert_events_sorted:
@@ -618,15 +684,18 @@ def target_queue_refresh_needed(
     online_queue: list[dict[str, Any]],
     *,
     desired_pending_paths: list[str],
+    missing_paths: list[str],
     target_paths: set[str],
 ) -> bool:
     if not desired_pending_paths:
         return False
+    if not missing_paths:
+        return False
     ordered_paths = ordered_online_queue_paths(online_queue)
-    queued_target_paths = [path for path in ordered_paths if path in target_paths]
-    if queued_target_paths != desired_pending_paths:
+    expected_queue_tail = athena_enqueue_order(desired_pending_paths)
+    if len(ordered_paths) < len(expected_queue_tail):
         return True
-    return any(path not in target_paths for path in ordered_paths)
+    return ordered_paths[-len(expected_queue_tail) :] != expected_queue_tail
 
 
 def should_clear_queue_while_waiting(*, prioritized_segments: list[SegmentTarget], has_pending_priority: bool) -> bool:
@@ -646,27 +715,50 @@ def generate_candidate_paths(route: Route, segments: Iterable[int], file_types: 
 
 
 def generate_candidate_paths_by_priority(
-    segment_groups: Iterable[Iterable[SegmentTarget]], file_types: Iterable[str]
+    segment_groups: Iterable[Iterable[SegmentTarget]], file_types: Iterable[Iterable[str] | str]
 ) -> list[str]:
     candidates: list[str] = []
-    for segments in segment_groups:
+    segment_group_list = [list(group) for group in segment_groups]
+    file_type_groups = list(file_types)
+    if file_type_groups and isinstance(file_type_groups[0], str):
+        file_type_groups = [list(file_type_groups) for _ in segment_group_list]
+
+    for segments, group_file_types in zip(segment_group_list, file_type_groups, strict=True):
         segment_list = list(segments)
-        for file_type in file_types:
-            if file_type == "logs":
-                for segment in segment_list:
+        for segment in segment_list:
+            for file_type in group_file_types:
+                if file_type == "logs":
                     candidates.append(f"{segment.route_id}--{segment.segment}/rlog.zst")
-                continue
-            for segment in segment_list:
+                    continue
                 for filename in FILE_TYPE_NAMES[file_type]:
                     candidates.append(f"{segment.route_id}--{segment.segment}/{filename}")
     return candidates
 
 
+def first_pending_phase(
+    phase_specs: Iterable[tuple[str, list[SegmentTarget], list[str]]],
+    uploaded_paths: set[str],
+) -> tuple[str, list[SegmentTarget], list[str], list[str], list[str]] | None:
+    for phase_name, phase_targets, phase_file_types in phase_specs:
+        if not phase_targets:
+            continue
+        desired_paths = generate_candidate_paths_by_priority([phase_targets], [phase_file_types])
+        pending_paths = desired_pending_paths(desired_paths, uploaded_paths)
+        if pending_paths:
+            return phase_name, phase_targets, phase_file_types, desired_paths, pending_paths
+    return None
+
+
+def athena_enqueue_order(paths: Iterable[str]) -> list[str]:
+    return list(reversed(list(paths)))
+
+
 def request_uploads(api: CommaApi, dongle_id: str, paths: list[str]) -> dict[str, Any]:
-    upload_metadata = api.request_upload_urls(dongle_id, paths)
+    ordered_paths = athena_enqueue_order(paths)
+    upload_metadata = api.request_upload_urls(dongle_id, ordered_paths)
     files = [
         UploadFile(file_path=path, url=metadata["url"], headers=metadata["headers"])
-        for path, metadata in zip(paths, upload_metadata, strict=True)
+        for path, metadata in zip(ordered_paths, upload_metadata, strict=True)
     ]
     payload = {
         "files_data": [
@@ -723,6 +815,7 @@ def scan_once(
         target_paths: set[str] = set()
         uploaded_paths: set[str] = set()
         bookmark_events: list[SegmentEvent] = []
+        dm_alert_events: list[SegmentEvent] = []
         alert_events: list[SegmentEvent] = []
 
         for route in routes:
@@ -749,21 +842,25 @@ def scan_once(
             uploaded_paths.update(normalize_uploaded_paths(route_files))
             priority_events = collect_priority_events(api, hydrated_route)
             bookmark_segments = sorted({event.segment for event in priority_events.bookmark_events})
+            dm_alert_segments = sorted({event.segment for event in priority_events.dm_alert_events})
             alert_segments = sorted({event.segment for event in priority_events.alert_events})
             print(f"Bookmarked segments: {bookmark_segments}")
+            print(f"DM alert segments: {dm_alert_segments}")
             print(f"Alert segments: {alert_segments}")
-            if priority_events.bookmark_events or priority_events.alert_events:
+            if priority_events.bookmark_events or priority_events.dm_alert_events or priority_events.alert_events:
                 targets_found = True
             bookmark_events.extend(priority_events.bookmark_events)
+            dm_alert_events.extend(priority_events.dm_alert_events)
             alert_events.extend(priority_events.alert_events)
 
         prioritized_segment_groups = combine_priority_segments(
             bookmark_events=bookmark_events,
+            dm_alert_events=dm_alert_events,
             alert_events=alert_events,
             previous_segments=previous_segments,
             next_segments=next_segments,
         )
-        recent_bookmark_targets, older_bookmark_targets, alert_targets = prioritized_segment_groups
+        recent_bookmark_targets, older_bookmark_targets, dm_alert_targets, alert_targets = prioritized_segment_groups
         prioritized_segments = [target for group in prioritized_segment_groups for target in group]
         print(
             "Recent bookmark targets:",
@@ -774,35 +871,68 @@ def scan_once(
             [f"{target.route_id}:{target.segment}" for target in older_bookmark_targets],
         )
         print(
+            "DM alert targets:",
+            [f"{target.route_id}:{target.segment}" for target in dm_alert_targets],
+        )
+        print(
             "Alert targets:",
             [f"{target.route_id}:{target.segment}" for target in alert_targets],
         )
         if prioritized_segments:
-            priority_paths = generate_candidate_paths_by_priority(prioritized_segment_groups, file_types)
-            target_paths.update(priority_paths)
-            pending_priority_paths = desired_pending_paths(priority_paths, uploaded_paths)
-            has_pending_priority = bool(pending_priority_paths)
-            fill_phase_groups: list[list[SegmentTarget]] = []
-            if not has_pending_priority:
+            dm_boost_file_types = [file_type for file_type in ("cameras", "logs", "dcameras", "ecameras") if file_type in file_types]
+            priority_phase = first_pending_phase(
+                [
+                    ("recent_bookmarks", recent_bookmark_targets, file_types),
+                    ("older_bookmarks", older_bookmark_targets, file_types),
+                    ("dm_alerts", dm_alert_targets, dm_boost_file_types),
+                    ("alerts", alert_targets, file_types),
+                ],
+                uploaded_paths,
+            )
+
+            active_phase_name: str | None = None
+            active_phase_targets: list[SegmentTarget] = []
+            desired_paths: list[str] = []
+            pending_paths: list[str] = []
+
+            if priority_phase is not None:
+                active_phase_name, active_phase_targets, _active_phase_file_types, desired_paths, pending_paths = priority_phase
+            else:
                 fill_targets = combine_bookmark_route_fill_segments(
                     bookmark_events=bookmark_events,
                     recent_bookmark_targets=recent_bookmark_targets,
                     older_bookmark_targets=older_bookmark_targets,
                 )
-                fill_phase_groups = [fill_targets.recent_fill_targets, fill_targets.older_fill_targets]
                 print(
                     "Bookmark route fill targets:",
-                    [f"{target.route_id}:{target.segment}" for group in fill_phase_groups for target in group],
+                    [
+                        f"{target.route_id}:{target.segment}"
+                        for target in (fill_targets.recent_fill_targets + fill_targets.older_fill_targets)
+                    ],
                 )
-            desired_paths = priority_paths + generate_candidate_paths_by_priority(fill_phase_groups, file_types)
-            target_paths.update(desired_paths)
-            pending_paths = desired_pending_paths(desired_paths, uploaded_paths)
+                fill_phase = first_pending_phase(
+                    [
+                        ("bookmark_fill_recent", fill_targets.recent_fill_targets, file_types),
+                        ("bookmark_fill_older", fill_targets.older_fill_targets, file_types),
+                    ],
+                    uploaded_paths,
+                )
+                if fill_phase is not None:
+                    active_phase_name, active_phase_targets, _active_phase_file_types, desired_paths, pending_paths = fill_phase
+
+            target_paths = set(desired_paths)
+            has_pending_priority = priority_phase is not None
             has_pending_targets = bool(pending_paths)
-            missing_paths = [path for path in desired_paths if path not in uploaded_paths and path not in queued_paths]
+            missing_paths = [path for path in pending_paths if path not in queued_paths]
             print(
                 "Global segment priority order:",
                 [f"{target.route_id}:{target.segment}" for target in prioritized_segments],
             )
+            if active_phase_name is not None:
+                print(
+                    f"Active phase: {active_phase_name}",
+                    [f"{target.route_id}:{target.segment}" for target in active_phase_targets],
+                )
             print(
                 f"Desired files={len(desired_paths)} uploaded={len(uploaded_paths)} queued={len(queued_paths)} missing={len(missing_paths)}"
             )
@@ -810,6 +940,7 @@ def scan_once(
             if exclusive_bookmark_priority and target_queue_refresh_needed(
                 online_queue,
                 desired_pending_paths=pending_paths,
+                missing_paths=missing_paths,
                 target_paths=target_paths,
             ):
                 cancel_ids = [item["id"] for item in online_queue if item.get("id")]

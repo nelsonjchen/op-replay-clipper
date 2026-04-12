@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from tools.comma_watch import (
+    athena_enqueue_order,
     categorize_segment_events,
     combine_bookmark_route_fill_segments,
     combine_priority_segments,
@@ -13,6 +14,7 @@ from tools.comma_watch import (
     generate_candidate_paths,
     generate_candidate_paths_by_priority,
     is_owned_online_device,
+    is_dm_alert_event,
     ordered_online_queue_paths,
     prioritize_segments,
     radiate_remaining_route_segments,
@@ -54,9 +56,38 @@ def test_categorize_segment_events_splits_bookmark_and_alert() -> None:
         {"type": "user_bookmark", "route_offset_millis": 301000, "data": {}},
         {"type": "state", "route_offset_millis": 361000, "data": {"alertStatus": 1, "state": "enabled"}},
     ]
-    bookmarks, alerts = categorize_segment_events(route, events, segment=5)
+    bookmarks, dm_alerts, alerts = categorize_segment_events(route, events, segment=5)
     assert sorted(bookmarks) == [5]
+    assert sorted(dm_alerts) == []
     assert sorted(alerts) == [6]
+
+
+def test_categorize_segment_events_splits_dm_alerts() -> None:
+    route = Route(
+        fullname="fde53c3c109fb4c0|0000026f--c5469f881d",
+        route_id="0000026f--c5469f881d",
+        start_time="2026-03-28T04:59:16",
+        end_time="2026-03-28T05:19:16",
+        maxqlog=10,
+        procqlog=10,
+        url="https://example.test/route",
+    )
+    events = [
+        {
+            "type": "state",
+            "route_offset_millis": 361000,
+            "data": {"alertStatus": 1, "alertType": "driverDistracted"},
+        },
+    ]
+    bookmarks, dm_alerts, alerts = categorize_segment_events(route, events, segment=5)
+    assert sorted(bookmarks) == []
+    assert sorted(dm_alerts) == [6]
+    assert sorted(alerts) == []
+
+
+def test_is_dm_alert_event_detects_driver_monitoring_strings() -> None:
+    assert is_dm_alert_event({"data": {"alertType": "driverUnresponsive"}}) is True
+    assert is_dm_alert_event({"data": {"alertType": "controlsUnresponsive"}}) is False
 
 
 def test_combine_priority_segments_orders_recent_bookmarks_then_older_then_alerts() -> None:
@@ -75,6 +106,7 @@ def test_combine_priority_segments_orders_recent_bookmarks_then_older_then_alert
     ]
     prioritized_groups = combine_priority_segments(
         bookmark_events=bookmark_events,
+        dm_alert_events=[],
         alert_events=alert_events,
         previous_segments=3,
         next_segments=1,
@@ -115,6 +147,8 @@ def test_combine_priority_segments_orders_recent_bookmarks_then_older_then_alert
             SegmentTarget("route-b", 1),
             SegmentTarget("route-b", 3),
             SegmentTarget("route-b", 0),
+        ],
+        [
         ],
         [
             SegmentTarget("route-h", 8),
@@ -232,13 +266,14 @@ def test_desired_pending_paths_skips_uploaded_files() -> None:
 
 def test_target_queue_refresh_needed_when_order_is_wrong() -> None:
     online_queue = [
-        {"id": "1", "path": "/data/media/0/realdata/route--2/rlog.zst"},
-        {"id": "2", "path": "/data/media/0/realdata/route--2/fcamera.hevc"},
+        {"id": "1", "path": "/data/media/0/realdata/route--2/fcamera.hevc"},
+        {"id": "2", "path": "/data/media/0/realdata/route--2/rlog.zst"},
     ]
     assert (
         target_queue_refresh_needed(
             online_queue,
             desired_pending_paths=["route--2/fcamera.hevc", "route--2/rlog.zst"],
+            missing_paths=["route--2/fcamera.hevc"],
             target_paths={"route--2/fcamera.hevc", "route--2/rlog.zst"},
         )
         is True
@@ -247,13 +282,15 @@ def test_target_queue_refresh_needed_when_order_is_wrong() -> None:
 
 def test_target_queue_refresh_not_needed_when_order_matches() -> None:
     online_queue = [
-        {"id": "1", "path": "/data/media/0/realdata/route--2/fcamera.hevc"},
+        {"id": "1", "path": "/data/media/0/realdata/lower--1/fcamera.hevc"},
         {"id": "2", "path": "/data/media/0/realdata/route--2/rlog.zst"},
+        {"id": "3", "path": "/data/media/0/realdata/route--2/fcamera.hevc"},
     ]
     assert (
         target_queue_refresh_needed(
             online_queue,
             desired_pending_paths=["route--2/fcamera.hevc", "route--2/rlog.zst"],
+            missing_paths=["route--2/fcamera.hevc"],
             target_paths={"route--2/fcamera.hevc", "route--2/rlog.zst"},
         )
         is False
@@ -269,6 +306,23 @@ def test_target_queue_refresh_not_needed_when_no_pending_targets_remain() -> Non
         target_queue_refresh_needed(
             online_queue,
             desired_pending_paths=[],
+            missing_paths=[],
+            target_paths={"route--2/fcamera.hevc", "route--2/rlog.zst"},
+        )
+        is False
+    )
+
+
+def test_target_queue_refresh_not_needed_when_all_desired_paths_are_already_queued() -> None:
+    online_queue = [
+        {"id": "1", "path": "/data/media/0/realdata/route--2/rlog.zst"},
+        {"id": "2", "path": "/data/media/0/realdata/route--2/fcamera.hevc"},
+    ]
+    assert (
+        target_queue_refresh_needed(
+            online_queue,
+            desired_pending_paths=["route--2/fcamera.hevc", "route--2/rlog.zst"],
+            missing_paths=[],
             target_paths={"route--2/fcamera.hevc", "route--2/rlog.zst"},
         )
         is False
@@ -333,17 +387,65 @@ def test_generate_candidate_paths_by_priority_orders_file_types_within_each_tier
         ["cameras", "logs", "ecameras", "dcameras"],
     ) == [
         "0000026f--c5469f881d--5/fcamera.hevc",
-        "0000026f--c5469f881d--4/fcamera.hevc",
         "0000026f--c5469f881d--5/rlog.zst",
-        "0000026f--c5469f881d--4/rlog.zst",
         "0000026f--c5469f881d--5/ecamera.hevc",
-        "0000026f--c5469f881d--4/ecamera.hevc",
         "0000026f--c5469f881d--5/dcamera.hevc",
+        "0000026f--c5469f881d--4/fcamera.hevc",
+        "0000026f--c5469f881d--4/rlog.zst",
+        "0000026f--c5469f881d--4/ecamera.hevc",
         "0000026f--c5469f881d--4/dcamera.hevc",
         "00000270--abc--8/fcamera.hevc",
         "00000270--abc--8/rlog.zst",
         "00000270--abc--8/ecamera.hevc",
         "00000270--abc--8/dcamera.hevc",
+    ]
+
+
+def test_generate_candidate_paths_by_priority_supports_dm_boost_file_order() -> None:
+    assert generate_candidate_paths_by_priority(
+        [
+            [SegmentTarget("route-bookmark", 5)],
+            [SegmentTarget("route-old-bookmark", 4)],
+            [SegmentTarget("route-dm", 3)],
+            [SegmentTarget("route-alert", 2)],
+        ],
+        [
+            ["cameras", "logs", "ecameras", "dcameras"],
+            ["cameras", "logs", "ecameras", "dcameras"],
+            ["cameras", "logs", "dcameras", "ecameras"],
+            ["cameras", "logs", "ecameras", "dcameras"],
+        ],
+    ) == [
+        "route-bookmark--5/fcamera.hevc",
+        "route-bookmark--5/rlog.zst",
+        "route-bookmark--5/ecamera.hevc",
+        "route-bookmark--5/dcamera.hevc",
+        "route-old-bookmark--4/fcamera.hevc",
+        "route-old-bookmark--4/rlog.zst",
+        "route-old-bookmark--4/ecamera.hevc",
+        "route-old-bookmark--4/dcamera.hevc",
+        "route-dm--3/fcamera.hevc",
+        "route-dm--3/rlog.zst",
+        "route-dm--3/dcamera.hevc",
+        "route-dm--3/ecamera.hevc",
+        "route-alert--2/fcamera.hevc",
+        "route-alert--2/rlog.zst",
+        "route-alert--2/ecamera.hevc",
+        "route-alert--2/dcamera.hevc",
+    ]
+
+
+def test_athena_enqueue_order_reverses_priority_paths_for_tail_first_queue() -> None:
+    assert athena_enqueue_order(
+        [
+            "route--2/fcamera.hevc",
+            "route--2/rlog.zst",
+            "route--1/fcamera.hevc",
+        ]
+    ) == [
+        "route--1/fcamera.hevc",
+        "route--2/rlog.zst",
+        "route--2/fcamera.hevc",
     ]
 
 
