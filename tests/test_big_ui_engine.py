@@ -389,6 +389,11 @@ def test_redraw_ui_alt_view_overlays_uses_view_overlay_scale(monkeypatch) -> Non
     )
     monkeypatch.setattr(
         big_ui_engine,
+        "redraw_alert_overlay",
+        lambda current_view, *, scale=1.0: calls.append(("alert", scale)),
+    )
+    monkeypatch.setattr(
+        big_ui_engine,
         "redraw_driver_state_overlay",
         lambda current_view, *, scale=1.0: calls.append(("driver", scale)),
     )
@@ -398,6 +403,7 @@ def test_redraw_ui_alt_view_overlays_uses_view_overlay_scale(monkeypatch) -> Non
     assert calls == [
         ("model", True, True),
         ("hud", True, 0.63),
+        ("alert", 0.63),
         ("driver", 0.63),
     ]
 
@@ -567,33 +573,41 @@ def test_redraw_ui_alt_view_overlays_draws_model_hud_and_driver_state(monkeypatc
     )
     monkeypatch.setattr(
         big_ui_engine,
+        "redraw_alert_overlay",
+        lambda current_view, *, scale=1.0: calls.append(("alert", current_view, scale)),
+    )
+    monkeypatch.setattr(
+        big_ui_engine,
         "redraw_driver_state_overlay",
         lambda current_view, *, scale=1.0: calls.append(("driver", current_view, scale)),
     )
 
     big_ui_engine.redraw_ui_alt_view_overlays(view, state, use_wide_camera=True, bigmodel_frame=True)
 
-    assert calls == [(True, True), ("hud", True, 1.0), ("driver", view, 1.0)]
+    assert calls == [(True, True), ("hud", True, 1.0), ("alert", view, 1.0), ("driver", view, 1.0)]
 
 
-def test_render_view_can_suppress_hud_and_driver_state(monkeypatch) -> None:
+def test_render_view_can_suppress_hud_alerts_and_driver_state(monkeypatch) -> None:
     events: list[tuple[str, object]] = []
     hud_renderer = SimpleNamespace(
         render=lambda rect: events.append(("hud-render", rect)),
         _draw_current_speed=lambda rect: events.append(("speed", rect)),
     )
+    alert_renderer = SimpleNamespace(render=lambda rect: events.append(("alert-render", rect)))
     driver_state_renderer = SimpleNamespace(render=lambda rect: events.append(("driver-render", rect)))
     view = SimpleNamespace(
         render=lambda: (
             hud_renderer.render("hud-rect"),
+            alert_renderer.render("alert-rect"),
             driver_state_renderer.render("driver-rect"),
             events.append(("view-render", None)),
         ),
         _hud_renderer=hud_renderer,
+        alert_renderer=alert_renderer,
         driver_state_renderer=driver_state_renderer,
     )
 
-    big_ui_engine.render_view(view, draw_hud=False, draw_driver_state=False)
+    big_ui_engine.render_view(view, draw_hud=False, draw_alerts=False, draw_driver_state=False)
 
     assert events == [("view-render", None)]
 

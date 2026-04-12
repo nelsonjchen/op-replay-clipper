@@ -869,6 +869,7 @@ def redraw_ui_alt_view_overlays(view, state: Mapping[str, object], *, use_wide_c
     overlay_scale = float(getattr(view, "_ui_alt_hud_scale", 1.0) or 1.0)
     draw_ui_alt_model_input_overlay(view, state, use_wide_camera=use_wide_camera, bigmodel_frame=bigmodel_frame)
     redraw_hud_overlay(view, scale=overlay_scale)
+    redraw_alert_overlay(view, scale=overlay_scale)
     redraw_driver_state_overlay(view, scale=overlay_scale)
 
 
@@ -1361,8 +1362,16 @@ def _suppress_renderer_render(renderer):
     return original_render
 
 
-def render_view(view, *, draw_current_speed: bool = True, draw_hud: bool = True, draw_driver_state: bool = True) -> None:
+def render_view(
+    view,
+    *,
+    draw_current_speed: bool = True,
+    draw_hud: bool = True,
+    draw_alerts: bool = True,
+    draw_driver_state: bool = True,
+) -> None:
     hud_renderer = getattr(view, "_hud_renderer", None)
+    alert_renderer = getattr(view, "alert_renderer", None)
     driver_state_renderer = getattr(view, "driver_state_renderer", None)
 
     original_draw_current_speed = None
@@ -1372,6 +1381,10 @@ def render_view(view, *, draw_current_speed: bool = True, draw_hud: bool = True,
             original_hud_render = _suppress_renderer_render(hud_renderer)
         elif not draw_current_speed:
             original_draw_current_speed = _suppress_hud_current_speed(hud_renderer)
+
+    original_alert_render = None
+    if not draw_alerts and alert_renderer is not None:
+        original_alert_render = _suppress_renderer_render(alert_renderer)
 
     original_driver_state_render = None
     if not draw_driver_state and driver_state_renderer is not None:
@@ -1383,6 +1396,8 @@ def render_view(view, *, draw_current_speed: bool = True, draw_hud: bool = True,
             setattr(hud_renderer, "render", original_hud_render)
         if original_draw_current_speed is not None:
             setattr(hud_renderer, "_draw_current_speed", original_draw_current_speed)
+        if original_alert_render is not None:
+            setattr(alert_renderer, "render", original_alert_render)
         if original_driver_state_render is not None:
             setattr(driver_state_renderer, "render", original_driver_state_render)
 
@@ -1399,6 +1414,15 @@ def redraw_hud_overlay(view, *, draw_current_speed: bool = True, scale: float = 
     finally:
         if original_draw_current_speed is not None:
             setattr(hud_renderer, "_draw_current_speed", original_draw_current_speed)
+
+
+def redraw_alert_overlay(view, *, scale: float = 1.0) -> None:
+    alert_renderer = getattr(view, "alert_renderer", None)
+    content_rect = getattr(view, "_content_rect", None)
+    if alert_renderer is None or content_rect is None:
+        return
+
+    _draw_with_scaled_overlay_space(content_rect, scale, alert_renderer.render)
 
 
 def redraw_driver_state_overlay(view, *, scale: float = 1.0) -> None:
@@ -2531,10 +2555,17 @@ def clip(
                             road_view,
                             draw_current_speed=wide_view is None,
                             draw_hud=wide_view is None,
+                            draw_alerts=wide_view is None,
                             draw_driver_state=wide_view is None,
                         )
                         if wide_view is not None:
-                            render_view(wide_view, draw_current_speed=False, draw_hud=False, draw_driver_state=False)
+                            render_view(
+                                wide_view,
+                                draw_current_speed=False,
+                                draw_hud=False,
+                                draw_alerts=False,
+                                draw_driver_state=False,
+                            )
                             redraw_ui_alt_dual_view_overlays(road_view, wide_view, step.state)
                             redraw_ui_alt_dual_view_borders(road_view, wide_view, presented_layout_rects)
                             road_label_x, road_label_y = compute_ui_alt_panel_label_position(presented_layout_rects.road_rect)
