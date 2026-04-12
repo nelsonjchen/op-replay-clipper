@@ -169,6 +169,7 @@ def test_load_route_metadata_falls_back_to_car_fingerprint_when_platform_missing
                     gitRemote="https://github.com/commaai/openpilot.git",
                     gitBranch="nightly",
                     gitCommit="deadbeefcafebabe",
+                    gitCommitDate="'1732924800 2024-11-30 00:00:00 +0000'",
                     dirty=False,
                 )
             if which == "carParams":
@@ -195,8 +196,10 @@ def test_load_route_metadata_falls_back_to_car_fingerprint_when_platform_missing
 
     assert metadata["device_type"] == "tizi"
     assert metadata["platform"] == "TOYOTA_COROLLA_TSS2"
+    assert metadata["remote"] == "https://github.com/commaai/openpilot.git"
     assert metadata["branch"] == "nightly"
     assert metadata["commit"] == "deadbeef"
+    assert metadata["commit_date"] == "'1732924800 2024-11-30 00:00:00 +0000'"
 
 
 def test_reapply_hidden_window_flag_sets_hidden_state(monkeypatch) -> None:
@@ -212,6 +215,59 @@ def test_reapply_hidden_window_flag_sets_hidden_state(monkeypatch) -> None:
     assert called == [0x80]
 
 
+def test_device_type_display_label_adds_friendly_hardware_names() -> None:
+    assert big_ui_engine._device_type_display_label("tici") == "tici (comma 3)"
+    assert big_ui_engine._device_type_display_label("tizi") == "tizi (comma 3X)"
+    assert big_ui_engine._device_type_display_label("mici") == "mici (comma 4)"
+    assert big_ui_engine._device_type_display_label("pc") == "pc"
+
+
+def test_format_git_commit_date_uses_unix_timestamp_prefix_when_present() -> None:
+    assert big_ui_engine._format_git_commit_date("'1732924800 2024-11-30 00:00:00 +0000'") == "Nov 30 2024"
+
+
+def test_format_clip_start_datetime_uses_clip_start_when_available() -> None:
+    assert (
+        big_ui_engine._format_clip_start_datetime(
+            {
+                "clip_start_utc_millis": "1690488152496",
+            }
+        )
+        == "Jul 27 2023 20:02 UTC"
+    )
+
+
+def test_extract_gps_time_millis_from_state_uses_gps_location() -> None:
+    state = {
+        "gpsLocation": SimpleNamespace(gpsLocation=SimpleNamespace(unixTimestampMillis=1775958157406)),
+    }
+
+    assert big_ui_engine._extract_gps_time_millis_from_state(state) == "1775958157406"
+
+
+def test_ui_alt_dates_text_includes_segment_and_commit_dates() -> None:
+    assert (
+        big_ui_engine._ui_alt_dates_text(
+            {
+                "clip_start_utc_millis": "1690488152496",
+                "commit_date": "'1732924800 2024-11-30 00:00:00 +0000'",
+            }
+        )
+        == "segment Jul 27 2023 20:02 UTC  •  commit Nov 30 2024"
+    )
+
+
+def test_ui_alt_dates_text_uses_no_gps_fallback_when_clip_start_missing() -> None:
+    assert (
+        big_ui_engine._ui_alt_dates_text(
+            {
+                "commit_date": "'1732924800 2024-11-30 00:00:00 +0000'",
+            }
+        )
+        == "No GPS Time!  •  commit Nov 30 2024"
+    )
+
+
 def test_load_route_metadata_falls_back_without_uploaded_logs(monkeypatch) -> None:
     class FakeSegment:
         @staticmethod
@@ -221,6 +277,7 @@ def test_load_route_metadata_falls_back_without_uploaded_logs(monkeypatch) -> No
                 "git_remote": "origin",
                 "git_branch": "master",
                 "git_commit": "1234567890abcdef",
+                "start_time_utc_millis": 1_690_488_081_496,
             }
 
     monkeypatch.setitem(sys.modules, "openpilot", types.ModuleType("openpilot"))
@@ -240,14 +297,15 @@ def test_load_route_metadata_falls_back_without_uploaded_logs(monkeypatch) -> No
     assert metadata["platform"] == "tici"
     assert metadata["branch"] == "master"
     assert metadata["commit"] == "12345678"
+    assert metadata["route_start_utc_millis"] == "1690488081496"
 
 
 def test_build_layout_rects_alt_device_uses_sidebar_telemetry() -> None:
     rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="alt", ui_alt_variant="device")
 
-    assert rects.road_rect == (0, 82, 1344, 998)
+    assert rects.road_rect == (0, 124, 1344, 956)
     assert rects.wide_rect is None
-    assert rects.telemetry_rect == (1344, 82, 576, 998)
+    assert rects.telemetry_rect == (1344, 124, 576, 956)
 
 
 def test_build_layout_rects_alt_stacked_forward_over_wide_splits_camera_area() -> None:
@@ -258,9 +316,9 @@ def test_build_layout_rects_alt_stacked_forward_over_wide_splits_camera_area() -
         ui_alt_variant="stacked_forward_over_wide",
     )
 
-    assert rects.road_rect == (0, 82, 1344, 499)
-    assert rects.wide_rect == (0, 581, 1344, 499)
-    assert rects.telemetry_rect == (1344, 82, 576, 998)
+    assert rects.road_rect == (0, 124, 1344, 478)
+    assert rects.wide_rect == (0, 602, 1344, 478)
+    assert rects.telemetry_rect == (1344, 124, 576, 956)
 
 
 def test_build_layout_rects_alt_stacked_wide_over_forward_swaps_camera_order() -> None:
@@ -271,9 +329,9 @@ def test_build_layout_rects_alt_stacked_wide_over_forward_swaps_camera_order() -
         ui_alt_variant="stacked_wide_over_forward",
     )
 
-    assert rects.road_rect == (0, 581, 1344, 499)
-    assert rects.wide_rect == (0, 82, 1344, 499)
-    assert rects.telemetry_rect == (1344, 82, 576, 998)
+    assert rects.road_rect == (0, 602, 1344, 478)
+    assert rects.wide_rect == (0, 124, 1344, 478)
+    assert rects.telemetry_rect == (1344, 124, 576, 956)
 
 
 def test_compute_ui_alt_dual_canvas_height_preserves_full_height_views() -> None:
@@ -1296,7 +1354,82 @@ def test_render_overlays_includes_device_type_in_metadata(monkeypatch) -> None:
         show_time=False,
     )
 
-    assert any("mici" in text for text in calls)
+    assert any("mici (comma 4)" in text for text in calls)
+
+
+def test_ui_alt_git_metadata_text_preserves_full_remote_url() -> None:
+    assert (
+        big_ui_engine._ui_alt_git_metadata_text(
+            {
+                "remote": "https://github.com/commaai/openpilot.git",
+                "branch": "release3-staging",
+                "commit": "deadbeef",
+                "dirty": "false",
+            }
+        )
+        == "https://github.com/commaai/openpilot.git  •  release3-staging  •  deadbeef  •  clean"
+    )
+
+
+def test_draw_right_aligned_overlay_text_uses_openpilot_metrics(monkeypatch) -> None:
+    draw_calls: list[tuple[object, ...]] = []
+    font = object()
+    fake_rl = SimpleNamespace(
+        Vector2=lambda x, y: (x, y),
+        draw_text_ex=lambda current_font, text, position, font_size, spacing, color: draw_calls.append(
+            (current_font, text, position, font_size, spacing, color)
+        ),
+        measure_text_ex=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("raw metrics should not be used")),
+    )
+    monkeypatch.setitem(sys.modules, "pyray", fake_rl)
+    monkeypatch.setitem(
+        sys.modules,
+        "openpilot.system.ui.lib.text_measure",
+        SimpleNamespace(measure_text_cached=lambda _font, _text, _size, spacing=0: SimpleNamespace(x=123.5, y=18.0)),
+    )
+
+    big_ui_engine._draw_right_aligned_overlay_text(
+        right_x=400.0,
+        y=12.0,
+        text="route metadata",
+        font=font,
+        font_size=16,
+        color="white",
+    )
+
+    assert draw_calls == [
+        (
+            font,
+            "route metadata",
+            (400.0 - 123.5 - big_ui_engine.UI_ALT_HEADER_TEXT_DRAW_OVERHANG_PAD, 12.0),
+            16,
+            0,
+            "white",
+        )
+    ]
+
+
+def test_fit_overlay_text_to_width_uses_openpilot_metrics_for_truncation(monkeypatch) -> None:
+    fake_rl = SimpleNamespace(
+        measure_text_ex=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("raw metrics should not be used")),
+    )
+    monkeypatch.setitem(sys.modules, "pyray", fake_rl)
+    monkeypatch.setitem(
+        sys.modules,
+        "openpilot.system.ui.lib.text_measure",
+        SimpleNamespace(measure_text_cached=lambda _font, text, size, spacing=0: SimpleNamespace(x=len(text) * size, y=size)),
+    )
+
+    fitted_text, fitted_size = big_ui_engine._fit_overlay_text_to_width(
+        text="abcdef",
+        font=object(),
+        font_size=5,
+        max_width=10,
+        min_font_size=4,
+    )
+
+    assert fitted_text == "..."
+    assert fitted_size == 4
 
 
 def test_render_overlays_insets_timer_inside_video_frame(monkeypatch) -> None:

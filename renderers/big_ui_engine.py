@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Mapping
+import datetime
 import importlib
 import logging
 import math
@@ -62,13 +63,12 @@ UI_ALT_FOOTER_CTA_URL = "https://github.com/nelsonjchen/op-replay-clipper"
 UI_ALT_FOOTER_CTA_URL_DISPLAY = "github.com/nelsonjchen/op-replay-clipper"
 UI_ALT_FOOTER_CTA_HEIGHT_MIN = 56.0
 UI_ALT_FOOTER_CTA_HEIGHT_MAX = 64.0
-UI_ALT_HEADER_RIGHT_SAFE_PAD = 56
 UI_ALT_HEADER_TEXT_DRAW_OVERHANG_PAD = 20
 UI_ALT_TELEMETRY_WIDTH_RATIO = 0.30
 UI_ALT_TELEMETRY_MIN_WIDTH = 420
 UI_ALT_TELEMETRY_MAX_WIDTH = 640
 UI_ALT_CAMERA_MIN_WIDTH = 480
-UI_ALT_HEADER_RESERVED_HEIGHT = 82
+UI_ALT_HEADER_RESERVED_HEIGHT = 124
 UI_ALT_STACKED_EXTRA_HEIGHT_RATIO = 0.30
 UI_ALT_STACKED_MIN_EXTRA_HEIGHT = 240
 UI_ALT_STACKED_MAX_EXTRA_HEIGHT = 420
@@ -468,22 +468,10 @@ def format_route_timer_text(route_seconds: float, *, prefix: str = "") -> str:
     return f"{prefix}{timer_text}" if prefix else timer_text
 
 
-def _humanize_git_remote_header(text: str) -> str:
-    if not text:
-        return "unknown"
-    if text.endswith(".git"):
-        text = text[:-4]
-    if text.startswith("git@") and ":" in text:
-        text = text.split(":", 1)[1]
-    elif "github.com/" in text:
-        text = text.split("github.com/", 1)[1]
-    return text.rsplit("/", 2)[-2] + "/" + text.rsplit("/", 1)[-1] if "/" in text else text
-
-
 def _ui_alt_git_metadata_text(metadata: dict[str, str] | None) -> str:
     if not metadata:
         return ""
-    remote = _humanize_git_remote_header(metadata.get("remote", ""))
+    remote = str(metadata.get("remote", "") or "unknown").strip()
     branch = str(metadata.get("branch", "") or "unknown")
     commit = str(metadata.get("commit", "") or "unknown")
     dirty = str(metadata.get("dirty", "") or "unknown")
@@ -496,12 +484,114 @@ def _ui_alt_git_metadata_text(metadata: dict[str, str] | None) -> str:
     return f"{remote}  •  {branch}  •  {commit}  •  {dirty_text}"
 
 
+def _device_type_display_label(device_type: object) -> str:
+    normalized = str(device_type or "").strip().lower()
+    if not normalized:
+        return "unknown"
+
+    friendly_names = {
+        "tici": "comma 3",
+        "tizi": "comma 3X",
+        "mici": "comma 4",
+    }
+    friendly_name = friendly_names.get(normalized)
+    if not friendly_name:
+        return str(device_type).strip()
+    return f"{normalized} ({friendly_name})"
+
+
+def _format_git_commit_date(commit_date: object) -> str:
+    raw = str(commit_date or "").strip()
+    if not raw or raw == "unknown":
+        return ""
+
+    stripped = raw.strip("'")
+    try:
+        unix_ts = int(stripped.split()[0])
+        return datetime.datetime.fromtimestamp(unix_ts, tz=datetime.timezone.utc).strftime("%b %d %Y")
+    except (ValueError, IndexError):
+        pass
+
+    try:
+        parsed = datetime.datetime.fromisoformat(stripped.replace("Z", "+00:00"))
+        return parsed.astimezone(datetime.timezone.utc).strftime("%b %d %Y")
+    except ValueError:
+        return stripped
+
+
+def _format_clip_start_datetime(metadata: Mapping[str, object] | None) -> str:
+    if not metadata:
+        return ""
+
+    clip_start = metadata.get("clip_start_utc_millis")
+    if clip_start in (None, "", "unknown"):
+        return ""
+
+    try:
+        clip_start_ms = int(float(str(clip_start)))
+    except ValueError:
+        return ""
+
+    return datetime.datetime.fromtimestamp(
+        clip_start_ms / 1000.0, tz=datetime.timezone.utc
+    ).strftime("%b %d %Y %H:%M UTC")
+
+
+def _extract_gps_time_millis_from_state(state: Mapping[str, object] | None) -> str:
+    if not state:
+        return ""
+
+    for message_name in ("gpsLocation", "gpsLocationExternal"):
+        message = state.get(message_name)
+        payload = getattr(message, message_name, None) if message is not None else None
+        gps_time_millis = getattr(payload, "unixTimestampMillis", None)
+        if gps_time_millis in (None, "", "unknown"):
+            continue
+        return str(gps_time_millis)
+    return ""
+
+
+def _route_start_utc_millis_from_route_info(route_info: Mapping[str, object] | None) -> str:
+    if not route_info:
+        return ""
+
+    start_time_utc_millis = route_info.get("start_time_utc_millis")
+    if start_time_utc_millis not in (None, "", "unknown"):
+        return str(start_time_utc_millis)
+
+    start_time = str(route_info.get("start_time") or "").strip()
+    if not start_time:
+        return ""
+
+    try:
+        parsed = datetime.datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return str(int(round(parsed.astimezone(datetime.timezone.utc).timestamp() * 1000.0)))
+
+
+def _ui_alt_dates_text(metadata: Mapping[str, object] | None) -> str:
+    clip_start_text = _format_clip_start_datetime(metadata)
+    commit_date_text = _format_git_commit_date((metadata or {}).get("commit_date", ""))
+    return "  •  ".join(
+        part
+        for part in [
+            f"segment {clip_start_text}" if clip_start_text else "No GPS Time!",
+            f"commit {commit_date_text}" if commit_date_text else "",
+        ]
+        if part
+    )
+
+
 def _draw_right_aligned_overlay_text(*, right_x: float, y: float, text: str, font, font_size: int, color) -> None:
     import pyray as rl
+    from openpilot.system.ui.lib.text_measure import measure_text_cached
 
     if not text:
         return
-    text_size = rl.measure_text_ex(font, text, font_size, 0)
+    text_size = measure_text_cached(font, text, font_size)
     rl.draw_text_ex(
         font,
         text,
@@ -513,16 +603,16 @@ def _draw_right_aligned_overlay_text(*, right_x: float, y: float, text: str, fon
 
 
 def _fit_overlay_text_to_width(*, text: str, font, font_size: int, max_width: float, min_font_size: int = 10) -> tuple[str, int]:
-    import pyray as rl
+    from openpilot.system.ui.lib.text_measure import measure_text_cached
 
     if not text:
         return "", font_size
 
     current_size = font_size
-    text_width = rl.measure_text_ex(font, text, current_size, 0).x
+    text_width = measure_text_cached(font, text, current_size).x
     while text_width > max_width and current_size > min_font_size:
         current_size -= 1
-        text_width = rl.measure_text_ex(font, text, current_size, 0).x
+        text_width = measure_text_cached(font, text, current_size).x
     if text_width <= max_width:
         return text, current_size
 
@@ -530,7 +620,7 @@ def _fit_overlay_text_to_width(*, text: str, font, font_size: int, max_width: fl
     fitted = text
     while fitted:
         candidate = fitted + ellipsis
-        if rl.measure_text_ex(font, candidate, current_size, 0).x <= max_width:
+        if measure_text_cached(font, candidate, current_size).x <= max_width:
             return candidate, current_size
         fitted = fitted[:-1]
     return ellipsis, current_size
@@ -1137,6 +1227,8 @@ def load_route_metadata(route) -> dict[str, str]:
             "remote": route_info.get("git_remote") or "unknown",
             "branch": route_info.get("git_branch") or "unknown",
             "commit": str(route_info.get("git_commit") or "unknown")[:8],
+            "commit_date": str(route_info.get("git_commit_date") or ""),
+            "route_start_utc_millis": _route_start_utc_millis_from_route_info(route_info),
             "dirty": str(route_info.get("dirty", "unknown")).lower(),
         }
     lr = LogReader(path)
@@ -1152,6 +1244,8 @@ def load_route_metadata(route) -> dict[str, str]:
         "remote": init_data.gitRemote or route_info.get("git_remote") or "unknown",
         "branch": init_data.gitBranch or route_info.get("git_branch") or "unknown",
         "commit": (init_data.gitCommit or route_info.get("git_commit") or "unknown")[:8],
+        "commit_date": init_data.gitCommitDate or route_info.get("git_commit_date") or "",
+        "route_start_utc_millis": _route_start_utc_millis_from_route_info(route_info),
         "dirty": str(init_data.dirty).lower(),
     }
 
@@ -1517,85 +1611,124 @@ def render_ui_alt_header(gui_app, font, big, metadata, title, route_seconds, sho
     outer_pad_x = 28 if big else 18
     top_y = 10 if big else 8
     left_x = outer_pad_x
-    right_x = gui_app.width - outer_pad_x - UI_ALT_HEADER_RIGHT_SAFE_PAD
+    right_text_edge_x = gui_app.width - outer_pad_x
+    right_x = right_text_edge_x + UI_ALT_HEADER_TEXT_DRAW_OVERHANG_PAD
     right_col_left = max(int(gui_app.width * 0.58), left_x + 340)
-    right_col_width = max(120.0, right_x - right_col_left)
+    right_col_width = max(120.0, right_text_edge_x - right_col_left)
+    header_meta_y = top_y + 2
+    header_route_y = top_y + (32 if big else 28)
+    header_dates_y = top_y + (58 if big else 50)
+    header_git_y = top_y + (80 if big else 68)
+    medium_font = font
+    bold_font = font
+    if hasattr(gui_app, "font"):
+        try:
+            from openpilot.system.ui.lib.application import FontWeight
+
+            medium_font = gui_app.font(FontWeight.MEDIUM)
+            bold_font = gui_app.font(FontWeight.BOLD)
+        except (ImportError, AttributeError):
+            pass
 
     rl.draw_rectangle_gradient_v(0, 0, gui_app.width, int(header_height), strip_top, strip_bottom)
     rl.draw_line(0, int(header_height), gui_app.width, int(header_height), divider)
 
     if show_time:
-        rl.draw_text_ex(font, "UI ALT", rl.Vector2(left_x, top_y), 18 if big else 14, 0, blue)
+        rl.draw_text_ex(medium_font, "UI ALT", rl.Vector2(left_x, top_y), 20 if big else 16, 0, blue)
         rl.draw_text_ex(
-            font,
+            bold_font,
             format_route_timer_text(route_seconds),
             rl.Vector2(left_x, top_y + (22 if big else 18)),
-            28 if big else 20,
+            30 if big else 22,
             0,
             white,
         )
     elif title:
-        rl.draw_text_ex(font, title, rl.Vector2(left_x, top_y + 10), 24 if big else 18, 0, white)
+        rl.draw_text_ex(bold_font, title, rl.Vector2(left_x, top_y + 10), 26 if big else 20, 0, white)
 
     if show_metadata and metadata:
-        meta_text = "  •  ".join(part for part in [metadata.get("device_type", ""), metadata.get("platform", "")] if part)
+        meta_text = "  •  ".join(
+            part
+            for part in [
+                _device_type_display_label(metadata.get("device_type", "")),
+                metadata.get("platform", ""),
+            ]
+            if part
+        )
         route_label = str(metadata.get("route", "") or "")
+        dates_text = _ui_alt_dates_text(metadata)
         git_text = _ui_alt_git_metadata_text(metadata)
         if meta_text:
             meta_text, meta_size = _fit_overlay_text_to_width(
                 text=meta_text,
-                font=font,
-                font_size=20 if big else 16,
+                font=medium_font,
+                font_size=26 if big else 22,
                 max_width=right_col_width,
-                min_font_size=13 if big else 11,
+                min_font_size=18 if big else 15,
             )
             _draw_right_aligned_overlay_text(
                 right_x=right_x,
-                y=top_y + 2,
+                y=header_meta_y,
                 text=meta_text,
-                font=font,
+                font=medium_font,
                 font_size=meta_size,
                 color=white,
             )
         if route_label:
             route_label, route_size = _fit_overlay_text_to_width(
                 text=route_label,
-                font=font,
-                font_size=16 if big else 13,
+                font=bold_font,
+                font_size=22 if big else 19,
                 max_width=right_col_width,
-                min_font_size=11,
+                min_font_size=15,
             )
             _draw_right_aligned_overlay_text(
                 right_x=right_x,
-                y=top_y + 24,
+                y=header_route_y,
                 text=route_label,
-                font=font,
+                font=bold_font,
                 font_size=route_size,
                 color=white,
+            )
+        if dates_text:
+            dates_text, dates_size = _fit_overlay_text_to_width(
+                text=dates_text,
+                font=medium_font,
+                font_size=20 if big else 17,
+                max_width=right_col_width,
+                min_font_size=14,
+            )
+            _draw_right_aligned_overlay_text(
+                right_x=right_x,
+                y=header_dates_y,
+                text=dates_text,
+                font=medium_font,
+                font_size=dates_size,
+                color=dim,
             )
         if git_text:
             git_text, git_size = _fit_overlay_text_to_width(
                 text=git_text,
-                font=font,
-                font_size=14 if big else 11,
+                font=medium_font,
+                font_size=20 if big else 17,
                 max_width=right_col_width,
-                min_font_size=10,
+                min_font_size=14,
             )
             _draw_right_aligned_overlay_text(
                 right_x=right_x,
-                y=top_y + 46,
+                y=header_git_y,
                 text=git_text,
-                font=font,
+                font=medium_font,
                 font_size=git_size,
                 color=white,
             )
     elif title and show_time:
         _draw_right_aligned_overlay_text(
             right_x=right_x,
-            y=top_y + 24,
+            y=header_route_y,
             text=title,
-            font=font,
-            font_size=14 if big else 11,
+            font=medium_font,
+            font_size=16 if big else 13,
             color=dim,
         )
 
@@ -1631,7 +1764,7 @@ def render_overlays(gui_app, font, big, metadata, title, route_seconds, show_met
         text = ", ".join(
             [
                 f"route: {metadata['route']}",
-                metadata["device_type"],
+                _device_type_display_label(metadata["device_type"]),
                 metadata["platform"],
                 metadata["remote"],
                 metadata["branch"],
@@ -1670,8 +1803,8 @@ class SteeringFooterRenderer:
         track = rl.Color(255, 255, 255, 22)
         fill_alpha = 255 if active else 220
         fill_color = rl.Color(color.r, color.g, color.b, fill_alpha)
-        label_size = 20
-        value_size = 24
+        label_size = 22
+        value_size = 26
         bar_height = 16
         bar_y = rect.y + 34
 
@@ -1699,8 +1832,8 @@ class SteeringFooterRenderer:
 
         label_color = rl.Color(255, 255, 255, 150)
         value_color = rl.WHITE
-        label_size = 18
-        value_size = 24
+        label_size = 19
+        value_size = 26
         sections = []
         if telemetry.a_ego is not None:
             sections.append(("A EGO", f"{telemetry.a_ego:+.2f}"))
@@ -1714,7 +1847,7 @@ class SteeringFooterRenderer:
         for idx, (label, value) in enumerate(sections):
             x = rect.x + idx * section_width
             rl.draw_text_ex(self._label_font, label, rl.Vector2(x, rect.y), label_size, 0, label_color)
-            rl.draw_text_ex(self._value_font, value, rl.Vector2(x, rect.y + 24), value_size, 0, value_color)
+            rl.draw_text_ex(self._value_font, value, rl.Vector2(x, rect.y + 28), value_size, 0, value_color)
 
     def _draw_steering_dots(self, *, center_x: float, center_y: float, wheel_size: int, telemetry: FooterTelemetry) -> None:
         import pyray as rl
@@ -1916,10 +2049,10 @@ class SteeringFooterRenderer:
         actual_lat_color = rl.Color(112, 242, 168, 255)
         target_torque_color = rl.Color(255, 212, 102, 255)
         applied_torque_color = rl.Color(255, 132, 72, 255)
-        label_size = 18
-        value_size = 28
-        row_gap = 42
-        value_x = rect.x + 158
+        label_size = 19
+        value_size = 30
+        row_gap = 48
+        value_x = rect.x + 166
 
         rows: list[tuple[str, str, object]] = []
         if telemetry.steering_control_kind == "torque":
@@ -1996,7 +2129,7 @@ class SteeringFooterRenderer:
         track_color = rl.Color(255, 255, 255, 22)
         divider = rl.Color(255, 255, 255, 28)
         dot_radius = 24
-        label_size = 14
+        label_size = 16
         label_y = rect.y + 4
         label_text = "CONFIDENCE"
         label_width = rl.measure_text_ex(self._label_font, label_text, label_size, 0).x
@@ -2061,7 +2194,7 @@ class SteeringFooterRenderer:
         import pyray as rl
 
         label = "TORQUE" if telemetry.steering_control_kind == "torque" else "ANGLE"
-        font_size = 13
+        font_size = 14
         text_size = rl.measure_text_ex(self._label_font, label, font_size, 0)
         chip_width = text_size.x + (UI_ALT_CONTROL_MODE_CHIP_PAD_X * 2) + UI_ALT_CONTROL_MODE_CHIP_RIGHT_SLACK
         chip_height = text_size.y + (UI_ALT_CONTROL_MODE_CHIP_PAD_Y * 2)
@@ -2112,8 +2245,8 @@ class SteeringFooterRenderer:
         target_width = max(1.0, panel_rect.width - 32.0)
         lead_runs = parse_inline_text(lead_text)
         url_runs = [StyledTextRun(url, StyledTextState(), color=url_color)]
-        lead_font_size = 18
-        url_font_size = 16
+        lead_font_size = 20
+        url_font_size = 18
 
         def _fit_runs(runs, starting_size: int) -> tuple[int, object]:
             metrics = measure_styled_text_line(
@@ -2126,7 +2259,7 @@ class SteeringFooterRenderer:
             )
             fitted_size = starting_size
             if metrics.width > target_width and metrics.width > 0:
-                fitted_size = max(14, int(starting_size * (target_width / metrics.width)))
+                fitted_size = max(16, int(starting_size * (target_width / metrics.width)))
                 metrics = measure_styled_text_line(
                     fonts=self._styled_fonts,
                     text=runs,
@@ -2139,7 +2272,7 @@ class SteeringFooterRenderer:
 
         lead_font_size, lead_metrics = _fit_runs(lead_runs, lead_font_size)
         url_font_size, url_metrics = _fit_runs(url_runs, url_font_size)
-        line_gap = 4.0
+        line_gap = 6.0
         text_height = lead_metrics.height + line_gap + url_metrics.height
         line_y = float(int(round(panel_rect.y + max(0.0, panel_rect.height - text_height))))
         for runs, current_font_size, metrics, text_run_color in (
@@ -2242,8 +2375,8 @@ class SteeringFooterRenderer:
             content_top_y=header_content_y,
         )
 
-        rl.draw_text_ex(self._label_font, "TELEMETRY", rl.Vector2(inner_x, inner_y), 22, 0, text_dim)
-        telemetry_header_width = rl.measure_text_ex(self._label_font, "TELEMETRY", 22, 0).x
+        rl.draw_text_ex(self._label_font, "TELEMETRY", rl.Vector2(inner_x, inner_y), 24, 0, text_dim)
+        telemetry_header_width = rl.measure_text_ex(self._label_font, "TELEMETRY", 24, 0).x
         chip_y = inner_y + 2.0
         _, _, chip_width, _ = self._control_mode_chip_layout(telemetry=telemetry)
         self._draw_control_mode_chip(
@@ -2271,8 +2404,8 @@ class SteeringFooterRenderer:
         if meter_cols == 2:
             driver_x = inner_x
             op_x = inner_x + meter_w + meter_gap_x
-            rl.draw_text_ex(self._label_font, "DRIVER", rl.Vector2(driver_x, meters_title_y), 20, 0, text_dim)
-            rl.draw_text_ex(self._label_font, "OPENPILOT", rl.Vector2(op_x, meters_title_y), 20, 0, text_dim)
+            rl.draw_text_ex(self._label_font, "DRIVER", rl.Vector2(driver_x, meters_title_y), 22, 0, text_dim)
+            rl.draw_text_ex(self._label_font, "OPENPILOT", rl.Vector2(op_x, meters_title_y), 22, 0, text_dim)
             self._draw_meter(
                 rl.Rectangle(driver_x, first_row_y, meter_w, meter_h),
                 label="GAS",
@@ -2306,7 +2439,7 @@ class SteeringFooterRenderer:
                 active=telemetry.op_brake > 0,
             )
         else:
-            rl.draw_text_ex(self._label_font, "PEDALS", rl.Vector2(inner_x, meters_title_y), 20, 0, text_dim)
+            rl.draw_text_ex(self._label_font, "PEDALS", rl.Vector2(inner_x, meters_title_y), 22, 0, text_dim)
             self._draw_meter(
                 rl.Rectangle(inner_x, first_row_y, content_w, meter_h),
                 label="DRIVER GAS",
@@ -2403,6 +2536,10 @@ def clip(
 
     with OpenpilotPrefix(shared_download_cache=True):
         metadata = load_route_metadata(route) if show_metadata else None
+        if metadata and render_steps:
+            gps_clip_start_ms = _extract_gps_time_millis_from_state(render_steps[0].state)
+            if gps_clip_start_ms:
+                metadata["clip_start_utc_millis"] = gps_clip_start_ms
         ui_reference_panel_height = gui_app.height
         camera_paths = route.qcamera_paths() if use_qcam else route.camera_paths()
         wide_camera_paths = [] if use_qcam else route.ecamera_paths()
@@ -2507,6 +2644,7 @@ def clip(
                 setattr(wide_view, "_ui_alt_hud_scale", stacked_hud_scale)
                 setattr(wide_view, "_ui_alt_camera_zoom_scale", stacked_content_height / reference_content_height)
         font = gui_app.font(FontWeight.NORMAL)
+        overlay_label_font = gui_app.font(FontWeight.MEDIUM)
         steering_footer = None
         if layout_rects.telemetry_rect is not None:
             steering_footer = SteeringFooterRenderer(
@@ -2569,10 +2707,10 @@ def clip(
                             redraw_ui_alt_dual_view_overlays(road_view, wide_view, step.state)
                             redraw_ui_alt_dual_view_borders(road_view, wide_view, presented_layout_rects)
                             road_label_x, road_label_y = compute_ui_alt_panel_label_position(presented_layout_rects.road_rect)
-                            draw_text_box("ROAD", road_label_x, road_label_y, 22, gui_app, font)
+                            draw_text_box("ROAD", road_label_x, road_label_y, 24, gui_app, overlay_label_font)
                             assert presented_layout_rects.wide_rect is not None
                             wide_label_x, wide_label_y = compute_ui_alt_panel_label_position(presented_layout_rects.wide_rect)
-                            draw_text_box("WIDE", wide_label_x, wide_label_y, 22, gui_app, font)
+                            draw_text_box("WIDE", wide_label_x, wide_label_y, 24, gui_app, overlay_label_font)
                             rl.draw_line(
                                 int(presented_layout_rects.wide_rect[0]),
                                 int(presented_layout_rects.wide_rect[1]),
