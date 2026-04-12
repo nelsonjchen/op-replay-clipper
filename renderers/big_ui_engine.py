@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Mapping
 import importlib
 import logging
 import math
@@ -54,9 +53,6 @@ UI_ALT_CONFIDENCE_LABEL_NUDGE_X = -4.0
 UI_ALT_BLINKER_CORNER_INSET_Y = 20
 UI_ALT_STEERING_DISPLAY_RING_PAD = 52
 UI_ALT_TELEMETRY_HEADER_HEIGHT = 92.0
-UI_ALT_CONTROL_MODE_CHIP_PAD_X = 13.0
-UI_ALT_CONTROL_MODE_CHIP_PAD_Y = 5.0
-UI_ALT_CONTROL_MODE_CHIP_RIGHT_SLACK = 4.0
 UI_ALT_FOOTER_CTA_LINE = "Make your own `ui-alt` clips with"
 UI_ALT_FOOTER_CTA_URL = "https://github.com/nelsonjchen/op-replay-clipper"
 UI_ALT_FOOTER_CTA_URL_DISPLAY = "github.com/nelsonjchen/op-replay-clipper"
@@ -98,6 +94,15 @@ def _configure_gui_app_canvas(gui_app, *, width: int, height: int) -> None:
     gui_app._scaled_height = int(height * gui_app._scale)
     gui_app._scaled_width += gui_app._scaled_width % 2
     gui_app._scaled_height += gui_app._scaled_height % 2
+
+
+def _patch_openpilot_ui_recording_globals() -> None:
+    import openpilot.system.ui.lib.application as application
+
+    if not hasattr(application, "RECORD_FORCE_KEYFRAMES"):
+        application.RECORD_FORCE_KEYFRAMES = os.getenv("RECORD_FORCE_KEYFRAMES", "")
+    if not hasattr(application, "RECORD_GOP_FRAMES"):
+        application.RECORD_GOP_FRAMES = os.getenv("RECORD_GOP_FRAMES", "")
 
 
 def compute_ui_alt_footer_height(height: int) -> int:
@@ -600,6 +605,13 @@ def compute_torque_ring_bands(base_radius: float) -> dict[str, tuple[float, floa
     }
 
 
+def _driver_brake_meter_value(raw_brake: object, *, brake_pressed: bool) -> float:
+    brake_value = float(raw_brake or 0.0)
+    if 0.0 <= brake_value <= 1.0:
+        return _clip01(brake_value)
+    return 1.0 if brake_pressed else 0.0
+
+
 def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
     car_state_msg = state.get("carState")
     car_control_msg = state.get("carControl")
@@ -663,6 +675,8 @@ def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
         state=getattr(selfdrive_state, "state", None),
     )
 
+    driver_brake_pressed = bool(getattr(car_state, "brakePressed", False))
+
     return FooterTelemetry(
         steering_angle_deg=steering_angle_deg,
         steering_target_deg=steering_target_deg,
@@ -677,9 +691,12 @@ def extract_footer_telemetry(state: Mapping[str, object]) -> FooterTelemetry:
         left_blinker=bool(getattr(car_state, "leftBlinker", False)),
         right_blinker=bool(getattr(car_state, "rightBlinker", False)),
         driver_gas=_clip01(float(getattr(car_state, "gasDEPRECATED", 0.0) or 0.0)),
-        driver_brake=_clip01(float(getattr(car_state, "brake", 0.0) or 0.0)),
+        driver_brake=_driver_brake_meter_value(
+            getattr(car_state, "brake", 0.0),
+            brake_pressed=driver_brake_pressed,
+        ),
         driver_gas_pressed=bool(getattr(car_state, "gasPressed", False)),
-        driver_brake_pressed=bool(getattr(car_state, "brakePressed", False)),
+        driver_brake_pressed=driver_brake_pressed,
         op_gas=_clip01(accel_cmd / 4.0),
         op_brake=_clip01(-accel_cmd / 4.0),
         accel_cmd=accel_cmd,
@@ -1694,6 +1711,18 @@ class SteeringFooterRenderer:
         if fill_width > 0:
             rl.draw_rectangle_rounded(rl.Rectangle(rect.x, bar_y, fill_width, bar_height), 0.45, 10, fill_color)
 
+    def _draw_state_meter(self, rect, *, label: str, color, active: bool) -> None:
+        import pyray as rl
+
+        label_color = rl.Color(255, 255, 255, 150)
+        value_color = rl.WHITE if active else rl.Color(255, 255, 255, 210)
+        label_size = 20
+        value_size = 20
+
+        rl.draw_text_ex(self._label_font, label, rl.Vector2(rect.x, rect.y), label_size, 0, label_color)
+        state_text = "ON" if active else "OFF"
+        rl.draw_text_ex(self._label_font, state_text, rl.Vector2(rect.x, rect.y + 30.0), value_size, 0, color if active else value_color)
+
     def _draw_accel_summary(self, rect, *, telemetry: FooterTelemetry) -> None:
         import pyray as rl
 
@@ -2057,47 +2086,25 @@ class SteeringFooterRenderer:
             rl.BLACK,
         )
 
-    def _control_mode_chip_layout(self, *, telemetry: FooterTelemetry) -> tuple[str, int, float, float]:
+    def _control_mode_label_layout(self, *, telemetry: FooterTelemetry) -> tuple[str, int, float, float]:
         import pyray as rl
 
         label = "TORQUE" if telemetry.steering_control_kind == "torque" else "ANGLE"
         font_size = 13
         text_size = rl.measure_text_ex(self._label_font, label, font_size, 0)
-        chip_width = text_size.x + (UI_ALT_CONTROL_MODE_CHIP_PAD_X * 2) + UI_ALT_CONTROL_MODE_CHIP_RIGHT_SLACK
-        chip_height = text_size.y + (UI_ALT_CONTROL_MODE_CHIP_PAD_Y * 2)
-        return label, font_size, chip_width, chip_height
+        return label, font_size, text_size.x, text_size.y
 
-    def _draw_control_mode_chip(self, *, x: float, y: float, telemetry: FooterTelemetry) -> float:
+    def _draw_control_mode_label(self, *, x: float, y: float, telemetry: FooterTelemetry) -> float:
         import pyray as rl
 
         if telemetry.steering_control_kind == "torque":
-            fill = rl.Color(255, 176, 87, 48)
-            border = rl.Color(255, 176, 87, 112)
             text_color = rl.Color(255, 212, 102, 255)
         else:
-            fill = rl.Color(118, 210, 255, 42)
-            border = rl.Color(118, 210, 255, 104)
             text_color = rl.Color(118, 210, 255, 255)
 
-        label, font_size, chip_width, chip_height = self._control_mode_chip_layout(telemetry=telemetry)
-        chip_rect = rl.Rectangle(
-            x,
-            y,
-            chip_width,
-            chip_height,
-        )
-
-        rl.draw_rectangle_rounded(chip_rect, 0.45, 10, fill)
-        rl.draw_rectangle_rounded_lines_ex(chip_rect, 0.45, 10, 1.5, border)
-        rl.draw_text_ex(
-            self._label_font,
-            label,
-            rl.Vector2(x + UI_ALT_CONTROL_MODE_CHIP_PAD_X, y + UI_ALT_CONTROL_MODE_CHIP_PAD_Y),
-            font_size,
-            0,
-            text_color,
-        )
-        return chip_rect.width
+        label, font_size, text_width, _text_height = self._control_mode_label_layout(telemetry=telemetry)
+        rl.draw_text_ex(self._label_font, label, rl.Vector2(x, y), font_size, 0, text_color)
+        return text_width
 
     def _draw_footer_cta(self, rect) -> None:
         import pyray as rl
@@ -2245,9 +2252,9 @@ class SteeringFooterRenderer:
         rl.draw_text_ex(self._label_font, "TELEMETRY", rl.Vector2(inner_x, inner_y), 22, 0, text_dim)
         telemetry_header_width = rl.measure_text_ex(self._label_font, "TELEMETRY", 22, 0).x
         chip_y = inner_y + 2.0
-        _, _, chip_width, _ = self._control_mode_chip_layout(telemetry=telemetry)
-        self._draw_control_mode_chip(
-            x=max(inner_x + telemetry_header_width + 18.0, content_right - chip_width),
+        _, _, label_width, _ = self._control_mode_label_layout(telemetry=telemetry)
+        self._draw_control_mode_label(
+            x=max(inner_x + telemetry_header_width + 18.0, content_right - label_width),
             y=chip_y,
             telemetry=telemetry,
         )
@@ -2273,20 +2280,16 @@ class SteeringFooterRenderer:
             op_x = inner_x + meter_w + meter_gap_x
             rl.draw_text_ex(self._label_font, "DRIVER", rl.Vector2(driver_x, meters_title_y), 20, 0, text_dim)
             rl.draw_text_ex(self._label_font, "OPENPILOT", rl.Vector2(op_x, meters_title_y), 20, 0, text_dim)
-            self._draw_meter(
+            self._draw_state_meter(
                 rl.Rectangle(driver_x, first_row_y, meter_w, meter_h),
                 label="GAS",
-                value=telemetry.driver_gas,
                 color=green,
-                value_text="ON" if telemetry.driver_gas_pressed else "OFF",
                 active=telemetry.driver_gas_pressed,
             )
-            self._draw_meter(
+            self._draw_state_meter(
                 rl.Rectangle(driver_x, second_row_y, meter_w, meter_h),
                 label="BRAKE",
-                value=telemetry.driver_brake,
                 color=orange,
-                value_text="ON" if telemetry.driver_brake_pressed else "OFF",
                 active=telemetry.driver_brake_pressed,
             )
             self._draw_meter(
@@ -2307,20 +2310,16 @@ class SteeringFooterRenderer:
             )
         else:
             rl.draw_text_ex(self._label_font, "PEDALS", rl.Vector2(inner_x, meters_title_y), 20, 0, text_dim)
-            self._draw_meter(
+            self._draw_state_meter(
                 rl.Rectangle(inner_x, first_row_y, content_w, meter_h),
                 label="DRIVER GAS",
-                value=telemetry.driver_gas,
                 color=green,
-                value_text="ON" if telemetry.driver_gas_pressed else "OFF",
                 active=telemetry.driver_gas_pressed,
             )
-            self._draw_meter(
+            self._draw_state_meter(
                 rl.Rectangle(inner_x, second_row_y, content_w, meter_h),
                 label="DRIVER BRAKE",
-                value=telemetry.driver_brake,
                 color=orange,
-                value_text="ON" if telemetry.driver_brake_pressed else "OFF",
                 active=telemetry.driver_brake_pressed,
             )
             self._draw_meter(
@@ -2441,6 +2440,7 @@ def clip(
                 ),
                 height=compute_ui_alt_stacked_canvas_height(gui_app.height),
             )
+        _patch_openpilot_ui_recording_globals()
         gui_app.init_window("repo-owned clip", fps=FRAMERATE)
         _reapply_hidden_window_flag(headless=headless)
 

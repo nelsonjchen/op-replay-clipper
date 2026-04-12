@@ -787,6 +787,42 @@ def test_extract_footer_telemetry_reads_driver_and_op_inputs() -> None:
     assert telemetry.ui_status == "engaged"
 
 
+def test_extract_footer_telemetry_uses_brake_pressed_for_raw_driver_brake_signals() -> None:
+    state = {
+        "carState": FakeMsg(
+            "carState",
+            0,
+            SimpleNamespace(
+                brake=8.0,
+                brakePressed=False,
+            ),
+        ),
+    }
+
+    telemetry = big_ui_engine.extract_footer_telemetry(state)
+
+    assert telemetry.driver_brake == 0.0
+    assert telemetry.driver_brake_pressed is False
+
+
+def test_extract_footer_telemetry_preserves_pressed_state_for_raw_driver_brake_signals() -> None:
+    state = {
+        "carState": FakeMsg(
+            "carState",
+            0,
+            SimpleNamespace(
+                brake=8.0,
+                brakePressed=True,
+            ),
+        ),
+    }
+
+    telemetry = big_ui_engine.extract_footer_telemetry(state)
+
+    assert telemetry.driver_brake == 1.0
+    assert telemetry.driver_brake_pressed is True
+
+
 def test_extract_footer_telemetry_uses_controls_state_as_steering_target_fallback() -> None:
     state = {
         "carState": FakeMsg(
