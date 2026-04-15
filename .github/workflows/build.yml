@@ -115,3 +115,51 @@ jobs:
             shared/ci-e2e/mici-ui-smoke.json
           if-no-files-found: warn
           retention-days: 7
+
+  cog-build-smoke:
+    name: ubuntu-latest / Cog Build Smoke
+    if: github.ref == 'refs/heads/codex/add-github-actions-cog-build'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Free runner disk space
+        run: |
+          echo "Disk before cleanup:"
+          df -h
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache
+          sudo apt-get clean
+          docker system prune -af || true
+          docker builder prune -af || true
+          echo "Disk after cleanup:"
+          df -h
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.0"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Render Cog build artifacts
+        run: ./cog/render_artifacts.sh
+
+      - name: Set up Cog
+        uses: replicate/setup-cog@v2
+
+      - name: Print tool versions
+        run: |
+          python3 --version
+          uv --version
+          cog --version
+          docker version
+
+      - name: Build Cog image
+        run: cog build --progress plain -f cog.yaml
