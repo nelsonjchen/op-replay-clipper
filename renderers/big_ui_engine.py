@@ -70,6 +70,9 @@ UI_ALT_STACKED_EXTRA_HEIGHT_RATIO = 0.30
 UI_ALT_STACKED_MIN_EXTRA_HEIGHT = 240
 UI_ALT_STACKED_MAX_EXTRA_HEIGHT = 420
 UI_ALT_STACKED_HUD_SCALE_TWEAK = 1.08
+UPSTREAM_CURRENT_SPEED_CENTER_Y = 180.0
+UPSTREAM_SPEED_UNIT_CENTER_Y = 290.0
+UPSTREAM_CONTENT_TOP_INSET = 30.0
 TORQUE_RING_MAX_SPAN_DEG = 112.0
 TORQUE_RING_NEUTRAL_DEG = 270.0
 TORQUE_RING_THICKNESS = 6.0
@@ -976,13 +979,14 @@ def draw_ui_alt_model_input_overlay(view, state: Mapping[str, object], *, use_wi
 def redraw_ui_alt_view_overlays(view, state: Mapping[str, object], *, use_wide_camera: bool, bigmodel_frame: bool) -> None:
     overlay_scale = float(getattr(view, "_ui_alt_hud_scale", 1.0) or 1.0)
     draw_ui_alt_model_input_overlay(view, state, use_wide_camera=use_wide_camera, bigmodel_frame=bigmodel_frame)
-    redraw_hud_overlay(view, scale=overlay_scale)
+    redraw_hud_overlay(view, draw_current_speed=False, scale=overlay_scale)
     redraw_alert_overlay(view, scale=overlay_scale)
     redraw_driver_state_overlay(view, scale=overlay_scale)
 
 
 def redraw_ui_alt_dual_view_overlays(road_view, wide_view, state: Mapping[str, object]) -> None:
     redraw_ui_alt_view_overlays(road_view, state, use_wide_camera=False, bigmodel_frame=False)
+    redraw_ui_alt_current_speed_overlay(road_view)
     if wide_view is not None:
         redraw_ui_alt_view_overlays(wide_view, state, use_wide_camera=True, bigmodel_frame=True)
 
@@ -1422,7 +1426,33 @@ def _draw_with_scaled_overlay_space(content_rect, scale: float, draw_fn) -> None
         rl.rl_pop_matrix()
 
 
-def draw_current_speed_overlay(road_view, *, scale: float = 1.0) -> None:
+def compute_current_speed_text_positions(
+    rect,
+    *,
+    speed_text_size,
+    unit_text_size,
+    anchor_to_content_rect: bool = False,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    speed_center_y = UPSTREAM_CURRENT_SPEED_CENTER_Y
+    unit_center_y = UPSTREAM_SPEED_UNIT_CENTER_Y
+    if anchor_to_content_rect:
+        # Upstream centers these against the full-window content area; ui-alt panels
+        # need the same offsets rebased onto each panel's own content rect.
+        speed_center_y = rect.y + (UPSTREAM_CURRENT_SPEED_CENTER_Y - UPSTREAM_CONTENT_TOP_INSET)
+        unit_center_y = rect.y + (UPSTREAM_SPEED_UNIT_CENTER_Y - UPSTREAM_CONTENT_TOP_INSET)
+
+    speed_pos = (
+        rect.x + rect.width / 2 - speed_text_size.x / 2,
+        speed_center_y - speed_text_size.y / 2,
+    )
+    unit_pos = (
+        rect.x + rect.width / 2 - unit_text_size.x / 2,
+        unit_center_y - unit_text_size.y / 2,
+    )
+    return speed_pos, unit_pos
+
+
+def draw_current_speed_overlay(road_view, *, scale: float = 1.0, anchor_to_content_rect: bool = False) -> None:
     hud_renderer = getattr(road_view, "_hud_renderer", None)
     content_rect = getattr(road_view, "_content_rect", None)
     if hud_renderer is None or content_rect is None:
@@ -1441,21 +1471,26 @@ def draw_current_speed_overlay(road_view, *, scale: float = 1.0) -> None:
     def _draw(rect) -> None:
         speed_text = str(round(float(speed)))
         speed_size = measure_text_cached(font_bold, speed_text, 176)
-        speed_pos = rl.Vector2(
-            rect.x + rect.width / 2 - speed_size.x / 2,
-            rect.y + 180 - speed_size.y / 2,
-        )
-        rl.draw_text_ex(font_bold, speed_text, speed_pos, 176, 0, rl.WHITE)
-
         unit_text = tr("km/h") if ui_state.is_metric else tr("mph")
         unit_size = measure_text_cached(font_medium, unit_text, 66)
-        unit_pos = rl.Vector2(
-            rect.x + rect.width / 2 - unit_size.x / 2,
-            rect.y + 290 - unit_size.y / 2,
+        speed_pos_xy, unit_pos_xy = compute_current_speed_text_positions(
+            rect,
+            speed_text_size=speed_size,
+            unit_text_size=unit_size,
+            anchor_to_content_rect=anchor_to_content_rect,
         )
+        speed_pos = rl.Vector2(*speed_pos_xy)
+        rl.draw_text_ex(font_bold, speed_text, speed_pos, 176, 0, rl.WHITE)
+
+        unit_pos = rl.Vector2(*unit_pos_xy)
         rl.draw_text_ex(font_medium, unit_text, unit_pos, 66, 0, rl.Color(255, 255, 255, 200))
 
     _draw_with_scaled_overlay_space(content_rect, scale, _draw)
+
+
+def redraw_ui_alt_current_speed_overlay(view) -> None:
+    overlay_scale = float(getattr(view, "_ui_alt_hud_scale", 1.0) or 1.0)
+    draw_current_speed_overlay(view, scale=overlay_scale, anchor_to_content_rect=True)
 
 
 def _suppress_hud_current_speed(hud_renderer):
@@ -2690,9 +2725,10 @@ def clip(
                         )
                     ui_state.update()
                     if should_render:
+                        draw_ui_alt_current_speed = layout_mode == "alt"
                         render_view(
                             road_view,
-                            draw_current_speed=wide_view is None,
+                            draw_current_speed=wide_view is None and not draw_ui_alt_current_speed,
                             draw_hud=wide_view is None,
                             draw_alerts=wide_view is None,
                             draw_driver_state=wide_view is None,
@@ -2719,6 +2755,8 @@ def clip(
                                 int(presented_layout_rects.wide_rect[1]),
                                 rl.Color(255, 255, 255, 24),
                             )
+                        elif draw_ui_alt_current_speed:
+                            redraw_ui_alt_current_speed_overlay(road_view)
                         if layout_rects.telemetry_rect is not None and steering_footer is not None:
                             steering_footer.render(
                                 rl.Rectangle(*layout_rects.telemetry_rect),

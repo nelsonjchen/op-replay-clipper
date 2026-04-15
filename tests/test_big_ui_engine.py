@@ -391,6 +391,37 @@ def test_compute_stacked_ui_border_size_scales_with_panel_height() -> None:
     ) == 19
 
 
+def test_compute_current_speed_text_positions_match_upstream_window_space() -> None:
+    rect = SimpleNamespace(x=30.0, y=30.0, width=2100.0, height=1020.0)
+    speed_size = SimpleNamespace(x=240.0, y=176.0)
+    unit_size = SimpleNamespace(x=120.0, y=66.0)
+
+    speed_pos, unit_pos = big_ui_engine.compute_current_speed_text_positions(
+        rect,
+        speed_text_size=speed_size,
+        unit_text_size=unit_size,
+    )
+
+    assert speed_pos == (960.0, 92.0)
+    assert unit_pos == (1020.0, 257.0)
+
+
+def test_compute_current_speed_text_positions_can_anchor_to_panel_top() -> None:
+    rect = SimpleNamespace(x=0.0, y=154.0, width=1520.0, height=956.0)
+    speed_size = SimpleNamespace(x=240.0, y=176.0)
+    unit_size = SimpleNamespace(x=120.0, y=66.0)
+
+    speed_pos, unit_pos = big_ui_engine.compute_current_speed_text_positions(
+        rect,
+        speed_text_size=speed_size,
+        unit_text_size=unit_size,
+        anchor_to_content_rect=True,
+    )
+
+    assert speed_pos == (640.0, 216.0)
+    assert unit_pos == (700.0, 381.0)
+
+
 def test_compute_ui_alt_stacked_canvas_width_matches_ui_aspect_camera_column() -> None:
     width = big_ui_engine.compute_ui_alt_stacked_canvas_width(
         base_width=2160,
@@ -455,12 +486,17 @@ def test_redraw_ui_alt_view_overlays_uses_view_overlay_scale(monkeypatch) -> Non
         "redraw_driver_state_overlay",
         lambda current_view, *, scale=1.0: calls.append(("driver", scale)),
     )
+    monkeypatch.setattr(
+        big_ui_engine,
+        "redraw_ui_alt_current_speed_overlay",
+        lambda current_view: calls.append(("speed", current_view)),
+    )
 
     big_ui_engine.redraw_ui_alt_view_overlays(view, state, use_wide_camera=True, bigmodel_frame=True)
 
     assert calls == [
         ("model", True, True),
-        ("hud", True, 0.63),
+        ("hud", False, 0.63),
         ("alert", 0.63),
         ("driver", 0.63),
     ]
@@ -521,13 +557,36 @@ def test_redraw_ui_alt_dual_view_overlays_redraws_both_huds(monkeypatch) -> None
             ("view", (view, current_state, use_wide_camera, bigmodel_frame))
         ),
     )
+    monkeypatch.setattr(
+        big_ui_engine,
+        "redraw_ui_alt_current_speed_overlay",
+        lambda current_view: calls.append(("speed", current_view)),
+    )
 
     big_ui_engine.redraw_ui_alt_dual_view_overlays(road_view, wide_view, state)
 
     assert calls == [
         ("view", (road_view, state, False, False)),
+        ("speed", road_view),
         ("view", (wide_view, state, True, True)),
     ]
+
+
+def test_redraw_ui_alt_current_speed_overlay_uses_view_overlay_scale(monkeypatch) -> None:
+    calls: list[tuple[object, ...]] = []
+    view = SimpleNamespace(_ui_alt_hud_scale=0.63)
+
+    monkeypatch.setattr(
+        big_ui_engine,
+        "draw_current_speed_overlay",
+        lambda current_view, *, scale=1.0, anchor_to_content_rect=False: calls.append(
+            (current_view, scale, anchor_to_content_rect)
+        ),
+    )
+
+    big_ui_engine.redraw_ui_alt_current_speed_overlay(view)
+
+    assert calls == [(view, 0.63, True)]
 
 
 def test_project_model_input_quad_projects_corners_to_screen() -> None:
@@ -639,10 +698,15 @@ def test_redraw_ui_alt_view_overlays_draws_model_hud_and_driver_state(monkeypatc
         "redraw_driver_state_overlay",
         lambda current_view, *, scale=1.0: calls.append(("driver", current_view, scale)),
     )
+    monkeypatch.setattr(
+        big_ui_engine,
+        "redraw_ui_alt_current_speed_overlay",
+        lambda current_view: calls.append(("speed", current_view)),
+    )
 
     big_ui_engine.redraw_ui_alt_view_overlays(view, state, use_wide_camera=True, bigmodel_frame=True)
 
-    assert calls == [(True, True), ("hud", True, 1.0), ("alert", view, 1.0), ("driver", view, 1.0)]
+    assert calls == [(True, True), ("hud", False, 1.0), ("alert", view, 1.0), ("driver", view, 1.0)]
 
 
 def test_render_view_can_suppress_hud_alerts_and_driver_state(monkeypatch) -> None:
