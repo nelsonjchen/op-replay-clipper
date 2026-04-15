@@ -86,11 +86,14 @@ jobs:
       - name: Set up Cog for build-only runs
         if: inputs.action == 'build-only'
         uses: replicate/setup-cog@v2
+        with:
+          cog-version: "v0.17.2"
 
       - name: Set up Cog for push runs
         if: inputs.action == 'push'
         uses: replicate/setup-cog@v2
         with:
+          cog-version: "v0.17.2"
           token: ${{ secrets.REPLICATE_CLI_AUTH_TOKEN != '' && secrets.REPLICATE_CLI_AUTH_TOKEN || secrets.REPLICATE_API_TOKEN }}
 
       - name: Print tool versions

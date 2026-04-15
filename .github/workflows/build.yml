@@ -153,6 +153,8 @@ jobs:
 
       - name: Set up Cog
         uses: replicate/setup-cog@v2
+        with:
+          cog-version: "v0.17.2"
 
       - name: Print tool versions
         run: |
