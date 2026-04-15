@@ -989,6 +989,7 @@ def redraw_ui_alt_dual_view_overlays(road_view, wide_view, state: Mapping[str, o
     redraw_ui_alt_current_speed_overlay(road_view)
     if wide_view is not None:
         redraw_ui_alt_view_overlays(wide_view, state, use_wide_camera=True, bigmodel_frame=True)
+        redraw_ui_alt_current_speed_overlay(wide_view)
 
 
 def redraw_ui_alt_dual_view_borders(road_view, wide_view, layout_rects: LayoutRects) -> None:

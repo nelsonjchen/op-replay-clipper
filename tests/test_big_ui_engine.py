@@ -569,6 +569,7 @@ def test_redraw_ui_alt_dual_view_overlays_redraws_both_huds(monkeypatch) -> None
         ("view", (road_view, state, False, False)),
         ("speed", road_view),
         ("view", (wide_view, state, True, True)),
+        ("speed", wide_view),
     ]
 
 
