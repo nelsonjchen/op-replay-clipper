@@ -57,6 +57,26 @@ source .env
 set +a
 ```
 
+### Manual GitHub Actions deploy
+
+There is also a manual Actions workflow at
+[`../.github/workflows/replicate-deploy.yml`](../.github/workflows/replicate-deploy.yml).
+
+It is meant for two cases:
+
+- build-only validation of the generated Cog image on a GitHub-hosted runner
+- manually pushing a specific generated Cog config to a Replicate model ref
+
+Workflow notes:
+
+- it always runs `./cog/render_artifacts.sh` first, because this repo does not
+  commit the rendered Cog requirements/config as the source of truth
+- it accepts either `cog.yaml` or `cog-rfdetr-repro.yaml`
+- it expects either `REPLICATE_CLI_AUTH_TOKEN` or `REPLICATE_API_TOKEN` to be
+  present in repository secrets for push runs
+- it frees extra disk space on the hosted runner first, because the main model
+  image is large enough that the default runner layout is tight without cleanup
+
 ## Local testing before a push
 
 The cheapest and fastest validation path is still local-first:

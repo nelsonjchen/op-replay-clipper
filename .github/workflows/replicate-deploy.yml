@@ -1,0 +1,109 @@
+name: Replicate Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: What to do with the generated Cog image
+        required: true
+        type: choice
+        default: build-only
+        options:
+          - build-only
+          - push
+      model_ref:
+        description: Replicate model ref to push to when action=push
+        required: false
+        type: string
+        default: r8.im/nelsonjchen/op-replay-clipper-beta
+      cog_file:
+        description: Cog config file to render and use
+        required: true
+        type: choice
+        default: cog.yaml
+        options:
+          - cog.yaml
+          - cog-rfdetr-repro.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: replicate-deploy-${{ github.ref }}-${{ inputs.cog_file }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Free runner disk space
+        run: |
+          df -h
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache
+          sudo apt-get clean
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.0"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Render Cog build artifacts
+        run: ./cog/render_artifacts.sh
+
+      - name: Upload rendered Cog artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: rendered-cog-artifacts
+          path: |
+            cog.yaml
+            cog-rfdetr-repro.yaml
+            requirements-cog.txt
+            requirements-rfdetr-repro-cog.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Validate workflow inputs
+        run: |
+          if [[ "${{ inputs.action }}" == "push" ]] && [[ -z "${{ inputs.model_ref }}" ]]; then
+            echo "model_ref is required when action=push" >&2
+            exit 1
+          fi
+
+      - name: Set up Cog for build-only runs
+        if: inputs.action == 'build-only'
+        uses: replicate/setup-cog@v2
+
+      - name: Set up Cog for push runs
+        if: inputs.action == 'push'
+        uses: replicate/setup-cog@v2
+        with:
+          token: ${{ secrets.REPLICATE_CLI_AUTH_TOKEN != '' && secrets.REPLICATE_CLI_AUTH_TOKEN || secrets.REPLICATE_API_TOKEN }}
+
+      - name: Print tool versions
+        run: |
+          python3 --version
+          uv --version
+          cog --version
+          docker version
+
+      - name: Build Cog image
+        if: inputs.action == 'build-only'
+        run: cog build --progress plain -f "${{ inputs.cog_file }}"
+
+      - name: Push model to Replicate
+        if: inputs.action == 'push'
+        run: cog push --file "${{ inputs.cog_file }}" "${{ inputs.model_ref }}"
