@@ -225,7 +225,6 @@ jobs:
           builder: ${{ steps.buildx.outputs.name }}
           context: .
           file: ${{ runner.temp }}/cog.generated.Dockerfile
-          load: true
           push: false
           provenance: false
           tags: cog-op-replay-clipper-buildx-cache-probe:latest
@@ -233,6 +232,3 @@ jobs:
             type=gha,scope=cog-generated-cog-yaml
           cache-to: |
             type=gha,mode=max,scope=cog-generated-cog-yaml
-
-      - name: Inspect cached probe image
-        run: docker image inspect cog-op-replay-clipper-buildx-cache-probe:latest --format '{{.Id}} {{.Size}}'
