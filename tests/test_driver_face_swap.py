@@ -35,6 +35,13 @@ def test_driver_face_swap_passenger_hidden_profile_maps_to_expected_seat_modes()
     assert passenger_mode == "hidden"
 
 
+def test_driver_face_swap_passenger_unchanged_profile_maps_to_expected_seat_modes() -> None:
+    driver_mode, passenger_mode = driver_face_swap._seat_modes_for_profile("driver_face_swap_passenger_unchanged")
+
+    assert driver_mode == "facefusion"
+    assert passenger_mode == "none"
+
+
 def test_driver_face_swap_passenger_pixelize_alias_maps_to_hidden_seat_mode() -> None:
     driver_mode, passenger_mode = driver_face_swap._seat_modes_for_profile("driver_face_swap_passenger_pixelize")
 
@@ -250,6 +257,59 @@ def test_facefusion_command_swaps_all_faces_in_crop(tmp_path: Path, monkeypatch)
     assert command[1].endswith("driver_facefusion_headless.py")
     root_index = command.index("--facefusion-root")
     assert command[root_index + 1] == str(tmp_path / "facefusion")
+
+
+def test_reintegrate_command_enables_landmark_bridge_for_driver(tmp_path: Path) -> None:
+    artifact = driver_face_swap.PreparedSeatArtifacts(
+        seat_side="left",
+        seat_role="driver",
+        crop_clip=tmp_path / "driver-crop.mp4",
+        track_metadata=tmp_path / "driver-track.json",
+    )
+
+    command, bridge_report_path = driver_face_swap._reintegrate_command(
+        facefusion_python=tmp_path / "facefusion/.venv/bin/python",
+        sample_dir=tmp_path,
+        source_path=tmp_path / "source.mp4",
+        artifact=artifact,
+        swapped_crop=tmp_path / "swapped.mp4",
+        output_path=tmp_path / "output.mp4",
+        banner_text="DRIVER FACE SWAPPED",
+        options=driver_face_swap.DriverFaceSwapOptions(mode="facefusion", facefusion_root=str(tmp_path / "facefusion")),
+    )
+
+    assert "--bridge-landmark-fallback" in command
+    assert "--target-crop" in command
+    assert "--facefusion-root" in command
+    gap_index = command.index("--bridge-max-gap")
+    assert command[gap_index + 1] == "6"
+    preroll_index = command.index("--bridge-preroll-frames")
+    assert command[preroll_index + 1] == "1"
+    assert bridge_report_path == tmp_path / "left-landmark-bridge.json"
+
+
+def test_reintegrate_command_skips_landmark_bridge_for_passenger(tmp_path: Path) -> None:
+    artifact = driver_face_swap.PreparedSeatArtifacts(
+        seat_side="right",
+        seat_role="passenger",
+        crop_clip=tmp_path / "passenger-crop.mp4",
+        track_metadata=tmp_path / "passenger-track.json",
+    )
+
+    command, bridge_report_path = driver_face_swap._reintegrate_command(
+        facefusion_python=tmp_path / "facefusion/.venv/bin/python",
+        sample_dir=tmp_path,
+        source_path=tmp_path / "source.mp4",
+        artifact=artifact,
+        swapped_crop=tmp_path / "swapped.mp4",
+        output_path=tmp_path / "output.mp4",
+        banner_text="PASSENGER FACE SWAPPED",
+        options=driver_face_swap.DriverFaceSwapOptions(mode="facefusion", facefusion_root=str(tmp_path / "facefusion")),
+    )
+
+    assert "--bridge-landmark-fallback" not in command
+    assert "--target-crop" not in command
+    assert bridge_report_path is None
 
 
 def test_intermediate_encoder_falls_back_to_libx264(monkeypatch) -> None:

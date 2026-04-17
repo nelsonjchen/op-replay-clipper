@@ -19,6 +19,7 @@ HOSTED_ANONYMIZATION_PROFILE_CHOICES = [
     "none",
     "driver unchanged, passenger hidden",
     "driver unchanged, passenger face swap",
+    "driver face swap, passenger unchanged",
     "driver face swap, passenger hidden",
     "driver face swap, passenger face swap",
 ]
@@ -29,6 +30,7 @@ GUI_ANONYMIZATION_PROFILE_MAP = {
     "driver unchanged, passenger hidden": ("facefusion", "driver_unchanged_passenger_hidden"),
     "driver unchanged, passenger face swap": ("facefusion", "driver_unchanged_passenger_face_swap"),
     "driver unchanged, passenger pixelize": ("facefusion", "driver_unchanged_passenger_pixelize"),
+    "driver face swap, passenger unchanged": ("facefusion", "driver_face_swap_passenger_unchanged"),
     "driver face swap, passenger hidden": ("facefusion", "driver_face_swap_passenger_hidden"),
     "driver face swap, passenger pixelize": ("facefusion", "driver_face_swap_passenger_pixelize"),
     "driver face swap, passenger face swap": ("facefusion", "driver_face_swap_passenger_face_swap"),

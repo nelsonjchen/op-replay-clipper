@@ -21,6 +21,7 @@ DriverFaceAnonymizationMode = Literal["none", "facefusion"]
 DriverFaceAnonymizationProfile = Literal[
     "driver_unchanged_passenger_hidden",
     "driver_unchanged_passenger_face_swap",
+    "driver_face_swap_passenger_unchanged",
     "driver_unchanged_passenger_pixelize",
     "driver_face_swap_passenger_hidden",
     "driver_face_swap_passenger_face_swap",
@@ -35,7 +36,7 @@ DEFAULT_FACEFUSION_ROOT = "./.cache/facefusion"
 DEFAULT_DRIVER_FACE_SOURCE_IMAGE = "./assets/driver-face-donors/generic-donor-clean-shaven.jpg"
 DEFAULT_FACEFUSION_MODEL = "hyperswap_1b_256"
 DEFAULT_DRIVER_FACE_DONOR_BANK_DIR = "./assets/driver-face-donors"
-BACKING_CACHE_SCHEMA_VERSION = "driver-face-cache-v6"
+BACKING_CACHE_SCHEMA_VERSION = "driver-face-cache-v18"
 _CUDA_LIBRARY_SUBDIRS = (
     "cublas/lib",
     "cudnn/lib",
@@ -255,6 +256,8 @@ def _seat_modes_for_profile(profile: DriverFaceAnonymizationProfile) -> tuple[Se
         return "none", "facefusion"
     if profile in {"driver_unchanged_passenger_hidden", "driver_unchanged_passenger_pixelize"}:
         return "none", "hidden"
+    if profile == "driver_face_swap_passenger_unchanged":
+        return "facefusion", "none"
     if profile in {"driver_face_swap_passenger_hidden", "driver_face_swap_passenger_pixelize"}:
         return "facefusion", "hidden"
     return "facefusion", "facefusion"
@@ -860,6 +863,60 @@ def _run_hidden_passenger_redaction(
     return output_path, time.perf_counter() - started, report
 
 
+def _reintegrate_command(
+    *,
+    facefusion_python: Path,
+    sample_dir: Path,
+    source_path: Path,
+    artifact: PreparedSeatArtifacts,
+    swapped_crop: Path,
+    output_path: Path,
+    banner_text: str,
+    options: DriverFaceSwapOptions,
+) -> tuple[list[str], Path | None]:
+    command = [
+        str(facefusion_python),
+        str((Path(__file__).resolve().parent / "driver_face_reintegrate.py").resolve()),
+        "--sample-dir",
+        str(sample_dir),
+        "--source-video",
+        str(source_path),
+        "--track-metadata",
+        str(artifact.track_metadata),
+        "--swapped-crop",
+        str(swapped_crop),
+        "--output-path",
+        str(output_path),
+        "--mask-box",
+        "padded_box",
+        "--mask-expand",
+        "1.12",
+        "--feather-ratio",
+        "0.18",
+        "--banner-text",
+        banner_text,
+    ]
+    bridge_report_path: Path | None = None
+    if artifact.seat_role == "driver":
+        bridge_report_path = sample_dir / f"{artifact.seat_side}-landmark-bridge.json"
+        command.extend(
+            [
+                "--target-crop",
+                str(artifact.crop_clip),
+                "--bridge-landmark-fallback",
+                "--bridge-max-gap",
+                "6",
+                "--bridge-preroll-frames",
+                "1",
+                "--facefusion-root",
+                str(Path(options.facefusion_root).expanduser().resolve()),
+                "--bridge-report",
+                str(bridge_report_path),
+            ]
+        )
+    return command, bridge_report_path
+
+
 def render_anonymized_driver_backing_video(
     *,
     route: str,
@@ -1044,31 +1101,21 @@ def render_anonymized_driver_backing_video(
                 }
             else:
                 reintegrate_started = time.perf_counter()
-                reintegrate_cmd = [
-                    str(facefusion_python),
-                    str((Path(__file__).resolve().parent / "driver_face_reintegrate.py").resolve()),
-                    "--sample-dir",
-                    str(sample_dir),
-                    "--source-video",
-                    str(current_source),
-                    "--track-metadata",
-                    str(artifact.track_metadata),
-                    "--swapped-crop",
-                    str(swapped_crop),
-                    "--output-path",
-                    str(intermediate_output),
-                    "--mask-box",
-                    "padded_box",
-                    "--mask-expand",
-                    "1.12",
-                    "--feather-ratio",
-                    "0.18",
-                    "--banner-text",
-                    banner_text if render_banner and seat_index == len(active_seats) - 1 else "",
-                ]
+                reintegrate_cmd, bridge_report_path = _reintegrate_command(
+                    facefusion_python=facefusion_python,
+                    sample_dir=sample_dir,
+                    source_path=current_source,
+                    artifact=artifact,
+                    swapped_crop=swapped_crop,
+                    output_path=intermediate_output,
+                    banner_text=banner_text if render_banner and seat_index == len(active_seats) - 1 else "",
+                    options=options,
+                )
                 subprocess.run(reintegrate_cmd, check=True)
                 seat_reintegrate_seconds = time.perf_counter() - reintegrate_started
                 current_source = intermediate_output
+                if bridge_report_path is not None and bridge_report_path.exists():
+                    seat_report["landmark_bridge"] = json.loads(bridge_report_path.read_text())
             total_reintegrate_seconds += seat_reintegrate_seconds
 
             timings = seat_report.setdefault("timings", {})

@@ -46,6 +46,10 @@ def test_gui_anonymization_profile_map_includes_hidden_profiles() -> None:
         "facefusion",
         "driver_unchanged_passenger_hidden",
     )
+    assert cog_predictor.GUI_ANONYMIZATION_PROFILE_MAP["driver face swap, passenger unchanged"] == (
+        "facefusion",
+        "driver_face_swap_passenger_unchanged",
+    )
     assert cog_predictor.GUI_ANONYMIZATION_PROFILE_MAP["driver face swap, passenger hidden"] == (
         "facefusion",
         "driver_face_swap_passenger_hidden",
@@ -72,6 +76,7 @@ def test_hosted_anonymization_profile_choices_are_canonical() -> None:
         "none",
         "driver unchanged, passenger hidden",
         "driver unchanged, passenger face swap",
+        "driver face swap, passenger unchanged",
         "driver face swap, passenger hidden",
         "driver face swap, passenger face swap",
     ]

@@ -92,6 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=[
             "driver_unchanged_passenger_hidden",
             "driver_unchanged_passenger_face_swap",
+            "driver_face_swap_passenger_unchanged",
             "driver_face_swap_passenger_hidden",
             "driver_face_swap_passenger_face_swap",
         ],
