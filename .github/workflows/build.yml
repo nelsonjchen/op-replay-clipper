@@ -212,7 +212,11 @@ jobs:
 
       - name: Generate Dockerfile from Cog
         run: |
-          cog debug -f cog.yaml > "${RUNNER_TEMP}/cog.generated.Dockerfile"
+          cog --debug debug -f cog.yaml > "${RUNNER_TEMP}/cog.generated.Dockerfile" 2> "${RUNNER_TEMP}/cog.debug.log"
+          python3 scripts/materialize_cog_debug_context.py \
+            --dockerfile "${RUNNER_TEMP}/cog.generated.Dockerfile" \
+            --debug-log "${RUNNER_TEMP}/cog.debug.log"
+          sed -n '/Generated requirements.txt:/,$p' "${RUNNER_TEMP}/cog.debug.log"
           sed -n '1,40p' "${RUNNER_TEMP}/cog.generated.Dockerfile"
 
       - name: Build generated Dockerfile with GHA cache
