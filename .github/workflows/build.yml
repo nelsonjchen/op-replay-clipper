@@ -148,53 +148,87 @@ jobs:
           python-version: "3.12"
           enable-cache: true
 
-      - name: Install Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: "1.26"
-          cache: true
-
-      - name: Restore Cog BuildKit cache
-        id: restore-cog-buildx-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/cog-buildx-cache
-          key: cog-buildx-v1-ubuntu-cog-yaml-${{ github.ref_name }}-${{ github.sha }}
-          restore-keys: |
-            cog-buildx-v1-ubuntu-cog-yaml-${{ github.ref_name }}-
-            cog-buildx-v1-ubuntu-cog-yaml-master-
-
       - name: Render Cog build artifacts
         run: ./cog/render_artifacts.sh
 
-      - name: Install patched Cog with local BuildKit cache support
-        run: |
-          mkdir -p "${RUNNER_TEMP}/bin" "${RUNNER_TEMP}/cog-buildx-cache"
-          INSTALL_DIR="${RUNNER_TEMP}/bin" ./scripts/install_patched_cog_with_buildx_cache.sh
-          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+      - name: Set up Cog
+        uses: replicate/setup-cog@v2
+        with:
+          cog-version: "v0.17.2"
 
       - name: Print tool versions
         run: |
           python3 --version
-          go version
           uv --version
           cog --version
           docker version
-          du -sh "${RUNNER_TEMP}/cog-buildx-cache" || true
 
       - name: Build Cog image
-        env:
-          COG_BUILDX_CACHE_PATH: ${{ runner.temp }}/cog-buildx-cache
         run: cog build --progress plain -f cog.yaml
 
-      - name: Show Cog BuildKit cache size
-        if: always()
-        run: du -sh "${RUNNER_TEMP}/cog-buildx-cache" || true
+  cog-buildx-cache-probe:
+    name: ubuntu-latest / Cog Buildx Cache Probe
+    if: github.ref == 'refs/heads/codex/add-github-actions-cog-build'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
 
-      - name: Save Cog BuildKit cache
-        if: always()
-        continue-on-error: true
-        uses: actions/cache/save@v4
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Free runner disk space
+        run: |
+          echo "Disk before cleanup:"
+          df -h
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache
+          sudo apt-get clean
+          docker system prune -af || true
+          docker builder prune -af || true
+          echo "Disk after cleanup:"
+          df -h
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v7
         with:
-          path: ${{ runner.temp }}/cog-buildx-cache
-          key: ${{ steps.restore-cog-buildx-cache.outputs.cache-primary-key }}
+          version: "0.8.0"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Render Cog build artifacts
+        run: ./cog/render_artifacts.sh
+
+      - name: Set up Cog
+        uses: replicate/setup-cog@v2
+        with:
+          cog-version: "v0.17.2"
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Generate Dockerfile from Cog
+        run: |
+          cog debug -f cog.yaml > "${RUNNER_TEMP}/cog.generated.Dockerfile"
+          sed -n '1,40p' "${RUNNER_TEMP}/cog.generated.Dockerfile"
+
+      - name: Build generated Dockerfile with GHA cache
+        uses: docker/build-push-action@v7
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: ${{ runner.temp }}/cog.generated.Dockerfile
+          load: true
+          push: false
+          provenance: false
+          tags: cog-op-replay-clipper-buildx-cache-probe:latest
+          cache-from: |
+            type=gha,scope=cog-generated-cog-yaml
+          cache-to: |
+            type=gha,mode=max,scope=cog-generated-cog-yaml
+
+      - name: Inspect cached probe image
+        run: docker image inspect cog-op-replay-clipper-buildx-cache-probe:latest --format '{{.Id}} {{.Size}}'
