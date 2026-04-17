@@ -121,6 +121,9 @@ jobs:
     if: github.ref == 'refs/heads/codex/add-github-actions-cog-build'
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    env:
+      COG_BUILDX_CACHE_PATH: ${{ runner.temp }}/cog-buildx-cache
+      COG_BUILDX_CACHE_PREFIX: cog-buildx-v1-ubuntu-cog-yaml
 
     steps:
       - name: Check out repository
@@ -148,20 +151,51 @@ jobs:
           python-version: "3.12"
           enable-cache: true
 
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Restore Cog BuildKit cache
+        id: restore-cog-buildx-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.COG_BUILDX_CACHE_PATH }}
+          key: ${{ env.COG_BUILDX_CACHE_PREFIX }}-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.COG_BUILDX_CACHE_PREFIX }}-${{ github.ref_name }}-
+            ${{ env.COG_BUILDX_CACHE_PREFIX }}-master-
+
       - name: Render Cog build artifacts
         run: ./cog/render_artifacts.sh
 
-      - name: Set up Cog
-        uses: replicate/setup-cog@v2
-        with:
-          cog-version: "v0.17.2"
+      - name: Install patched Cog with local BuildKit cache support
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bin" "${COG_BUILDX_CACHE_PATH}"
+          INSTALL_DIR="${RUNNER_TEMP}/bin" ./scripts/install_patched_cog_with_buildx_cache.sh
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
 
       - name: Print tool versions
         run: |
           python3 --version
+          go version
           uv --version
           cog --version
           docker version
+          du -sh "${COG_BUILDX_CACHE_PATH}" || true
 
       - name: Build Cog image
         run: cog build --progress plain -f cog.yaml
+
+      - name: Show Cog BuildKit cache size
+        if: always()
+        run: du -sh "${COG_BUILDX_CACHE_PATH}" || true
+
+      - name: Save Cog BuildKit cache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.COG_BUILDX_CACHE_PATH }}
+          key: ${{ steps.restore-cog-buildx-cache.outputs.cache-primary-key }}
