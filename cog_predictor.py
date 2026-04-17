@@ -101,7 +101,7 @@ class Predictor(BasePredictor):
             default="",
         ),
         anonymizationProfile: str = Input(
-            description="Seat anonymization strategy for driver-backed renders such as driver, driver-debug, 360, and 360_forward_upon_wide. Recommended values are: none, driver unchanged/passenger hidden, driver unchanged/passenger face swap, driver face swap/passenger hidden, driver face swap/passenger face swap.",
+            description="Seat anonymization strategy for driver-backed renders such as driver, driver-debug, 360, and 360_forward_upon_wide. Available values are: none, driver unchanged/passenger hidden, driver unchanged/passenger face swap, driver face swap/passenger unchanged, driver face swap/passenger hidden, driver face swap/passenger face swap.",
             choices=HOSTED_ANONYMIZATION_PROFILE_CHOICES,
             default="none",
         ),
