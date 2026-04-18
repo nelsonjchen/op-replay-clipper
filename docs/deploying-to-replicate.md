@@ -81,6 +81,15 @@ Workflow notes:
 - it frees extra disk space on the hosted runner first, because the main model
   image is large enough that the default runner layout is tight without cleanup
 
+For the normal beta deploy path, there is also a dedicated Actions button at
+[`../.github/workflows/replicate-deploy-beta.yml`](../.github/workflows/replicate-deploy-beta.yml).
+
+That workflow:
+
+- shows up in the Actions tab as `Replicate Deploy Beta`
+- always pushes `cog.yaml` to `r8.im/nelsonjchen/op-replay-clipper-beta`
+- reuses the same hosted deploy logic as the generic workflow
+
 For the normal production promotion path, there is also a dedicated Actions
 button at
 [`../.github/workflows/replicate-deploy-prod.yml`](../.github/workflows/replicate-deploy-prod.yml).
