@@ -239,7 +239,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
-      REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN || secrets.REPLICATE_CLI_AUTH_TOKEN }}
+      REPLICATE_CLI_AUTH_TOKEN: ${{ secrets.REPLICATE_CLI_AUTH_TOKEN }}
 
     steps:
       - name: Check out repository
@@ -262,8 +262,8 @@ jobs:
 
       - name: Ensure Replicate token is available
         run: |
-          if [[ -z "${REPLICATE_API_TOKEN}" ]]; then
-            echo "REPLICATE_API_TOKEN or REPLICATE_CLI_AUTH_TOKEN repo secret is required" >&2
+          if [[ -z "${REPLICATE_CLI_AUTH_TOKEN}" ]]; then
+            echo "REPLICATE_CLI_AUTH_TOKEN repo secret is required" >&2
             exit 1
           fi
 
@@ -281,6 +281,7 @@ jobs:
         uses: replicate/setup-cog@v2
         with:
           cog-version: "v0.17.2"
+          token: ${{ secrets.REPLICATE_CLI_AUTH_TOKEN }}
 
       - name: Print tool versions
         run: |
