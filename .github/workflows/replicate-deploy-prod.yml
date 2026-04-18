@@ -1,0 +1,33 @@
+name: Replicate Deploy Prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type deploy-prod to confirm a production push
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  confirm:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate confirmation text
+        run: |
+          if [[ "${{ inputs.confirmation }}" != "deploy-prod" ]]; then
+            echo "Refusing production deploy because confirmation text did not match deploy-prod" >&2
+            exit 1
+          fi
+
+  deploy:
+    needs: confirm
+    uses: ./.github/workflows/replicate-deploy.yml
+    secrets: inherit
+    with:
+      action: push
+      model_ref: r8.im/nelsonjchen/op-replay-clipper
+      cog_file: cog.yaml

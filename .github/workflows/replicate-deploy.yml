@@ -24,6 +24,28 @@ on:
         options:
           - cog.yaml
           - cog-rfdetr-repro.yaml
+  workflow_call:
+    inputs:
+      action:
+        description: What to do with the generated Cog image
+        required: false
+        type: string
+        default: build-only
+      model_ref:
+        description: Replicate model ref to push to when action=push
+        required: false
+        type: string
+        default: r8.im/nelsonjchen/op-replay-clipper-beta
+      cog_file:
+        description: Cog config file to render and use
+        required: false
+        type: string
+        default: cog.yaml
+    secrets:
+      REPLICATE_CLI_AUTH_TOKEN:
+        required: false
+      REPLICATE_API_TOKEN:
+        required: false
 
 permissions:
   contents: read

@@ -77,6 +77,17 @@ Workflow notes:
 - it frees extra disk space on the hosted runner first, because the main model
   image is large enough that the default runner layout is tight without cleanup
 
+For the normal production promotion path, there is also a dedicated Actions
+button at
+[`../.github/workflows/replicate-deploy-prod.yml`](../.github/workflows/replicate-deploy-prod.yml).
+
+That workflow:
+
+- shows up in the Actions tab as `Replicate Deploy Prod`
+- always pushes `cog.yaml` to `r8.im/nelsonjchen/op-replay-clipper`
+- reuses the same hosted deploy logic as the generic workflow
+- requires typing `deploy-prod` before it will run, to reduce accidental prod pushes
+
 ## Local testing before a push
 
 The cheapest and fastest validation path is still local-first:
