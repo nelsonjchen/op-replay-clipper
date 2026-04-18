@@ -1,0 +1,16 @@
+name: Replicate Deploy Beta
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/replicate-deploy.yml
+    secrets: inherit
+    with:
+      action: push
+      model_ref: r8.im/nelsonjchen/op-replay-clipper-beta
+      cog_file: cog.yaml
