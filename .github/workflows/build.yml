@@ -232,3 +232,62 @@ jobs:
             type=gha,scope=cog-generated-cog-yaml
           cache-to: |
             type=gha,mode=max,scope=cog-generated-cog-yaml
+
+  cog-push-beta:
+    name: ubuntu-latest / Cog Push Beta
+    if: github.ref == 'refs/heads/codex/add-github-actions-cog-build' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN || secrets.REPLICATE_CLI_AUTH_TOKEN }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Free runner disk space
+        run: |
+          echo "Disk before cleanup:"
+          df -h
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache
+          sudo apt-get clean
+          docker system prune -af || true
+          docker builder prune -af || true
+          echo "Disk after cleanup:"
+          df -h
+
+      - name: Ensure Replicate token is available
+        run: |
+          if [[ -z "${REPLICATE_API_TOKEN}" ]]; then
+            echo "REPLICATE_API_TOKEN or REPLICATE_CLI_AUTH_TOKEN repo secret is required" >&2
+            exit 1
+          fi
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.0"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Render Cog build artifacts
+        run: ./cog/render_artifacts.sh
+
+      - name: Set up Cog
+        uses: replicate/setup-cog@v2
+        with:
+          cog-version: "v0.17.2"
+
+      - name: Print tool versions
+        run: |
+          python3 --version
+          uv --version
+          cog --version
+          docker version
+
+      - name: Push beta model to Replicate
+        run: cog push --progress plain -f cog.yaml r8.im/nelsonjchen/op-replay-clipper-beta
