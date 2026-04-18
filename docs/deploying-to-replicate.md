@@ -62,6 +62,10 @@ set +a
 There is also a manual Actions workflow at
 [`../.github/workflows/replicate-deploy.yml`](../.github/workflows/replicate-deploy.yml).
 
+The main [`Build`](../.github/workflows/build.yml) workflow is intentionally
+build-only. It validates that the hosted Cog image can be built, but it does
+not auto-push beta or production deployments.
+
 It is meant for two cases:
 
 - build-only validation of the generated Cog image on a GitHub-hosted runner
