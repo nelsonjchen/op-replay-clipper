@@ -15,6 +15,7 @@ FACEFUSION_REPO_URL="${FACEFUSION_REPO_URL:-https://github.com/facefusion/facefu
 FACEFUSION_COMMIT="${FACEFUSION_COMMIT:-519360bcd650679275024aa3ed10e8d673718bb3}"
 FACEFUSION_PYTHON_VERSION="${FACEFUSION_PYTHON_VERSION:-3.12}"
 FACEFUSION_PREWARM_MODELS="${FACEFUSION_PREWARM_MODELS:-1}"
+FACEFUSION_PREWARM_RETRIES="${FACEFUSION_PREWARM_RETRIES:-3}"
 FACEFUSION_PRUNE_VENV="${FACEFUSION_PRUNE_VENV:-1}"
 FACEFUSION_HARDLINK_DEDUPE="${FACEFUSION_HARDLINK_DEDUPE:-1}"
 FACEFUSION_PRUNE_UNUSED_PACKAGES="${FACEFUSION_PRUNE_UNUSED_PACKAGES:-1}"
@@ -285,9 +286,11 @@ prewarm_facefusion_models() {
   log_step "Prewarming FaceFusion model assets"
   cd "${FACEFUSION_ROOT}"
   . .venv/bin/activate
-  python - <<'PY'
+  FACEFUSION_PREWARM_RETRIES="${FACEFUSION_PREWARM_RETRIES}" python - <<'PY'
 from __future__ import annotations
 
+import os
+import time
 import sys
 from pathlib import Path
 
@@ -314,6 +317,7 @@ state_manager.init_item("face_swapper_model", "hyperswap_1b_256")
 state_manager.init_item("face_swapper_pixel_boost", "256x256")
 state_manager.init_item("face_swapper_weight", 1.0)
 
+max_attempts = max(1, int(os.environ.get("FACEFUSION_PREWARM_RETRIES", "3")))
 checks = [
     ("face_detector", face_detector.pre_check),
     ("face_landmarker", face_landmarker.pre_check),
@@ -323,10 +327,14 @@ checks = [
     ("face_swapper", face_swapper.pre_check),
 ]
 for label, fn in checks:
-    ok = fn()
-    print(f"{label} pre_check={ok}", flush=True)
-    if not ok:
-        raise SystemExit(f"Failed to prewarm {label}")
+    for attempt in range(1, max_attempts + 1):
+        ok = fn()
+        print(f"{label} pre_check={ok} attempt={attempt}/{max_attempts}", flush=True)
+        if ok:
+            break
+        if attempt == max_attempts:
+            raise SystemExit(f"Failed to prewarm {label} after {max_attempts} attempts")
+        time.sleep(min(attempt, 5))
 PY
 }
 
