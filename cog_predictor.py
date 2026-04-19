@@ -127,6 +127,12 @@ class Predictor(BasePredictor):
         resolved_ui_alt_variant = uiAltVariant if renderType == "ui-alt" else None
         if uiAltVariant is not None and renderType != "ui-alt":
             print(f"Ignoring uiAltVariant={uiAltVariant!r} because renderType={renderType!r}.")
+        if driver_face_anonymization != "none" and not supports_driver_face_anonymization(renderType):
+            print(
+                f"Ignoring anonymizationProfile={anonymizationProfile!r} because renderType={renderType!r} "
+                "does not support driver face anonymization."
+            )
+            driver_face_anonymization = "none"
         result = run_clip(
             ClipRequest(
                 render_type=renderType,  # type: ignore[arg-type]
