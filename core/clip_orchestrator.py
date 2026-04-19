@@ -148,6 +148,15 @@ def supports_driver_face_anonymization(render_type: RenderType | str) -> bool:
     return render_type in DRIVER_FACE_ANONYMIZATION_RENDER_TYPES
 
 
+def resolve_driver_face_anonymization_mode(
+    render_type: RenderType | str,
+    driver_face_anonymization: DriverFaceAnonymizationMode,
+) -> DriverFaceAnonymizationMode:
+    if supports_driver_face_anonymization(render_type):
+        return driver_face_anonymization
+    return "none"
+
+
 def _append_unique_file_types(file_types: tuple[str, ...], *extras: str) -> tuple[str, ...]:
     result = list(file_types)
     for extra in extras:
@@ -211,8 +220,12 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
             f"Length must be at most {request.maximum_length_seconds} seconds. Got {parsed.length_seconds} seconds."
         )
 
+    resolved_driver_face_anonymization = resolve_driver_face_anonymization_mode(
+        request.render_type,
+        request.driver_face_anonymization,
+    )
     driver_face_swap = DriverFaceSwapOptions(
-        mode=request.driver_face_anonymization,
+        mode=resolved_driver_face_anonymization,
         profile=canonical_driver_face_profile(request.driver_face_profile),
         passenger_redaction_style=request.passenger_redaction_style,
         source_image=request.driver_face_source_image,
@@ -222,10 +235,6 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
         selection_mode=request.driver_face_selection,
         donor_bank_dir=request.driver_face_donor_bank_dir,
     )
-    if has_driver_face_anonymization(driver_face_swap) and not supports_driver_face_anonymization(request.render_type):
-        raise ValueError(
-            "Driver face anonymization is only supported for `driver`, `driver-debug`, `360`, and `360_forward_upon_wide` renders."
-        )
     return ClipPlan(
         render_type=request.render_type,
         ui_alt_variant=resolve_ui_alt_variant(request.ui_alt_variant) if request.render_type == "ui-alt" else None,
@@ -240,7 +249,7 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
             request.render_type,
             qcam=request.qcam,
             forward_upon_wide_h=request.forward_upon_wide_h,
-            driver_face_anonymization=request.driver_face_anonymization,
+            driver_face_anonymization=resolved_driver_face_anonymization,
         ),
         decompress_logs=not is_openpilot_render_type(request.render_type),
         smear_seconds=max(0, request.smear_seconds),

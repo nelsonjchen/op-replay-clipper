@@ -11,6 +11,7 @@ from typing import Any
 from dotenv import load_dotenv
 import requests
 from core import route_inputs
+from core.clip_orchestrator import resolve_driver_face_anonymization_mode
 from core.ui_layouts import UI_ALT_VARIANTS
 
 try:
@@ -120,6 +121,9 @@ def validate_connect_url(url: str) -> str:
 def build_input(args: argparse.Namespace) -> dict[str, Any]:
     if args.ui_alt_variant is not None and args.render_type != "ui-alt":
         raise SystemExit("--ui-alt-variant is only supported with the `ui-alt` render type")
+    resolved_anonymization_profile = args.anonymization_profile
+    if resolve_driver_face_anonymization_mode(args.render_type, "facefusion") == "none":
+        resolved_anonymization_profile = "none"
     payload = {
         "notes": args.notes,
         "route": encode_replicate_route_input(args.url),
@@ -128,7 +132,7 @@ def build_input(args: argparse.Namespace) -> dict[str, Any]:
         "fileFormat": args.file_format,
         "renderType": args.render_type,
         "smearAmount": args.smear_amount,
-        "anonymizationProfile": args.anonymization_profile,
+        "anonymizationProfile": resolved_anonymization_profile,
         "passengerRedactionStyle": args.passenger_redaction_style,
     }
     if args.ui_alt_variant is not None:

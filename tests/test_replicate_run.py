@@ -117,6 +117,26 @@ def test_build_input_allows_driver_debug_render_type() -> None:
     assert payload["passengerRedactionStyle"] == "silhouette"
 
 
+def test_build_input_ignores_anonymization_profile_for_unsupported_render_type() -> None:
+    args = SimpleNamespace(
+        notes="",
+        url="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496",
+        file_size=9,
+        jwt_token="",
+        file_format="auto",
+        render_type="ui",
+        ui_alt_variant=None,
+        smear_amount=3,
+        anonymization_profile="driver unchanged, passenger hidden",
+        passenger_redaction_style="silhouette",
+    )
+
+    payload = replicate_run.build_input(args)
+    assert payload["renderType"] == "ui"
+    assert payload["anonymizationProfile"] == "none"
+    assert payload["passengerRedactionStyle"] == "silhouette"
+
+
 def test_build_input_allows_ir_tint_redaction_style() -> None:
     args = SimpleNamespace(
         notes="",

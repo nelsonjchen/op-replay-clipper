@@ -9,7 +9,13 @@ from core.rf_detr_runtime import ensure_python_nvidia_libs_preferred, sync_pytho
 ensure_python_nvidia_libs_preferred()
 
 from core import route_inputs
-from core.clip_orchestrator import ClipRequest, is_smear_render_type, run_clip, supports_driver_face_anonymization
+from core.clip_orchestrator import (
+    ClipRequest,
+    is_smear_render_type,
+    resolve_driver_face_anonymization_mode,
+    run_clip,
+    supports_driver_face_anonymization,
+)
 from core.openpilot_config import default_image_openpilot_root
 from core.ui_layouts import UI_ALT_VARIANTS
 
@@ -127,12 +133,15 @@ class Predictor(BasePredictor):
         resolved_ui_alt_variant = uiAltVariant if renderType == "ui-alt" else None
         if uiAltVariant is not None and renderType != "ui-alt":
             print(f"Ignoring uiAltVariant={uiAltVariant!r} because renderType={renderType!r}.")
-        if driver_face_anonymization != "none" and not supports_driver_face_anonymization(renderType):
+        resolved_driver_face_anonymization = resolve_driver_face_anonymization_mode(
+            renderType,  # type: ignore[arg-type]
+            driver_face_anonymization,  # type: ignore[arg-type]
+        )
+        if driver_face_anonymization != resolved_driver_face_anonymization:
             print(
                 f"Ignoring anonymizationProfile={anonymizationProfile!r} because renderType={renderType!r} "
                 "does not support driver face anonymization."
             )
-            driver_face_anonymization = "none"
         result = run_clip(
             ClipRequest(
                 render_type=renderType,  # type: ignore[arg-type]
@@ -153,7 +162,7 @@ class Predictor(BasePredictor):
                 openpilot_dir=default_image_openpilot_root(),
                 qcam=False,
                 headless=True,
-                driver_face_anonymization=driver_face_anonymization,  # type: ignore[arg-type]
+                driver_face_anonymization=resolved_driver_face_anonymization,  # type: ignore[arg-type]
                 driver_face_profile=driver_face_profile,  # type: ignore[arg-type]
                 passenger_redaction_style=passengerRedactionStyle,  # type: ignore[arg-type]
                 driver_face_selection="auto_best_match",

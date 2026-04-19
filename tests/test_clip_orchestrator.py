@@ -123,18 +123,20 @@ def test_build_plan_treats_driver_debug_as_openpilot_render() -> None:
     assert plan.decompress_logs is False
 
 
-def test_build_plan_rejects_driver_face_anonymization_for_non_driver_renders() -> None:
-    with pytest.raises(ValueError, match="only supported"):
-        clip_orchestrator.build_clip_plan(
-            clip_orchestrator.ClipRequest(
-                render_type="forward",
-                route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
-                start_seconds=90,
-                length_seconds=5,
-                target_mb=9,
-                driver_face_anonymization="facefusion",
-            )
+def test_build_plan_ignores_driver_face_anonymization_for_non_driver_renders() -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type="forward",
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
+            driver_face_anonymization="facefusion",
         )
+    )
+
+    assert plan.driver_face_swap.mode == "none"
+    assert "logs" not in plan.download_file_types
 
 
 @pytest.mark.parametrize("render_type", ["360", "360_forward_upon_wide"])
