@@ -92,18 +92,19 @@ def test_build_plan_keeps_explicit_ui_alt_variant() -> None:
     assert plan.ui_alt_variant == "device"
 
 
-def test_build_plan_rejects_ui_alt_variant_for_ui() -> None:
-    with pytest.raises(ValueError, match="ui_alt_variant"):
-        clip_orchestrator.build_clip_plan(
-            clip_orchestrator.ClipRequest(
-                render_type="ui",
-                ui_alt_variant="device",
-                route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
-                start_seconds=90,
-                length_seconds=5,
-                target_mb=9,
-            )
+def test_build_plan_ignores_ui_alt_variant_for_non_ui_alt_render() -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type="ui",
+            ui_alt_variant="device",
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
         )
+    )
+
+    assert plan.ui_alt_variant is None
 
 
 def test_build_plan_treats_driver_debug_as_openpilot_render() -> None:

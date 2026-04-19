@@ -124,8 +124,9 @@ class Predictor(BasePredictor):
             driver_face_anonymization, driver_face_profile = GUI_ANONYMIZATION_PROFILE_MAP[anonymizationProfile]
         except KeyError as exc:
             raise ValueError(f"Unsupported anonymization profile: {anonymizationProfile}") from exc
+        resolved_ui_alt_variant = uiAltVariant if renderType == "ui-alt" else None
         if uiAltVariant is not None and renderType != "ui-alt":
-            raise ValueError("`uiAltVariant` is only supported when `renderType` is `ui-alt`.")
+            print(f"Ignoring uiAltVariant={uiAltVariant!r} because renderType={renderType!r}.")
         result = run_clip(
             ClipRequest(
                 render_type=renderType,  # type: ignore[arg-type]
@@ -133,7 +134,7 @@ class Predictor(BasePredictor):
                 start_seconds=0,
                 length_seconds=0,
                 target_mb=fileSize,
-                ui_alt_variant=uiAltVariant,  # type: ignore[arg-type]
+                ui_alt_variant=resolved_ui_alt_variant,  # type: ignore[arg-type]
                 file_format=fileFormat,  # type: ignore[arg-type]
                 output_path="./shared/cog-clip.mp4",
                 smear_seconds=smearAmount if is_smear_render_type(renderType) else 0,  # type: ignore[arg-type]

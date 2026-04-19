@@ -226,9 +226,6 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
         raise ValueError(
             "Driver face anonymization is only supported for `driver`, `driver-debug`, `360`, and `360_forward_upon_wide` renders."
         )
-    if request.ui_alt_variant is not None and request.render_type != "ui-alt":
-        raise ValueError("`ui_alt_variant` is only supported for `ui-alt` renders.")
-
     return ClipPlan(
         render_type=request.render_type,
         ui_alt_variant=resolve_ui_alt_variant(request.ui_alt_variant) if request.render_type == "ui-alt" else None,

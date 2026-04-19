@@ -138,24 +138,31 @@ def test_predictor_logs_hidden_redaction_summary_for_360_render(tmp_path, monkey
     assert '"effect": "blur"' in captured.out
 
 
-def test_predictor_rejects_ui_alt_variant_for_ui_render() -> None:
+def test_predictor_ignores_ui_alt_variant_for_non_ui_alt_render(monkeypatch, capsys) -> None:
     cog_predictor = _load_cog_predictor()
     predictor = cog_predictor.Predictor()
+    captured_request: dict[str, object] = {}
 
-    try:
-        predictor.predict(
-            renderType="ui",
-            route="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496",
-            smearAmount=3,
-            uiAltVariant="device",
-            fileSize=9,
-            fileFormat="auto",
-            jwtToken="",
-            anonymizationProfile="none",
-            passengerRedactionStyle="blur",
-            notes="",
-        )
-    except ValueError as exc:
-        assert "uiAltVariant" in str(exc)
-    else:
-        raise AssertionError("expected ValueError")
+    def fake_run_clip(request):
+        captured_request["request"] = request
+        return types.SimpleNamespace(output_path=Path("/tmp/out.mp4"))
+
+    monkeypatch.setattr(cog_predictor, "run_clip", fake_run_clip)
+
+    result = predictor.predict(
+        renderType="ui",
+        route="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496",
+        smearAmount=3,
+        uiAltVariant="device",
+        fileSize=9,
+        fileFormat="auto",
+        jwtToken="",
+        anonymizationProfile="none",
+        passengerRedactionStyle="blur",
+        notes="",
+    )
+
+    captured = capsys.readouterr()
+    assert result == Path("/tmp/out.mp4")
+    assert "Ignoring uiAltVariant='device' because renderType='ui'." in captured.out
+    assert captured_request["request"].ui_alt_variant is None
