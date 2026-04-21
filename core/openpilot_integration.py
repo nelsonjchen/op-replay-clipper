@@ -25,6 +25,7 @@ class OpenpilotPatchReport:
     ui_null_egl: bool = False
     augmented_road_fill: bool = False
     model_renderer_lead_position: bool = False
+    mici_alert_text_layout: bool = False
 
     @property
     def changed(self) -> bool:
@@ -35,6 +36,7 @@ class OpenpilotPatchReport:
                 self.ui_null_egl,
                 self.augmented_road_fill,
                 self.model_renderer_lead_position,
+                self.mici_alert_text_layout,
             )
         )
 
@@ -442,6 +444,21 @@ def _patch_model_renderer_lead_position(path: Path) -> bool:
     return False
 
 
+def _patch_mici_alert_text_layout(path: Path) -> bool:
+    source = path.read_text()
+    updated = source
+
+    old_subtitle_block = """    if can_draw_second_line and alert_text2:\n      last_line_h = self._alert_text1_label.rect.y + self._alert_text1_label.get_content_height(int(alert_layout.text_rect.width))\n      last_line_h -= 4\n      if len(alert_text2) > 18:\n        small_font_size = 36\n      elif len(alert_text2) > 24:\n        small_font_size = 32\n      else:\n        small_font_size = 40\n      text_rect2 = rl.Rectangle(\n        alert_layout.text_rect.x,\n        last_line_h,\n        alert_layout.text_rect.width,\n        alert_layout.text_rect.height - last_line_h\n      )\n      color = rl.Color(255, 255, 255, int(255 * 0.65 * self._alpha_filter.x))\n\n      self._alert_text2_label.set_text(alert_text2)\n      self._alert_text2_label.set_text_color(color)\n      self._alert_text2_label.set_font_size(small_font_size)\n      self._alert_text2_label.set_alignment(rl.GuiTextAlignment.TEXT_ALIGN_LEFT if icon_side != 'left' else rl.GuiTextAlignment.TEXT_ALIGN_RIGHT)\n      self._alert_text2_label.render(text_rect2)\n"""
+    new_subtitle_block = """    if can_draw_second_line and alert_text2:\n      last_line_h = self._alert_text1_label.rect.y + self._alert_text1_label.get_content_height(int(alert_layout.text_rect.width))\n      second_line_top = last_line_h + max(8, int(font_size * 0.14))\n      available_height = max(0, (alert_layout.text_rect.y + alert_layout.text_rect.height) - second_line_top)\n      if len(alert_text2) > 24:\n        small_font_size = 32\n      elif len(alert_text2) > 18:\n        small_font_size = 36\n      else:\n        small_font_size = 40\n      if available_height > 0:\n        text_rect2 = rl.Rectangle(\n          alert_layout.text_rect.x,\n          second_line_top,\n          alert_layout.text_rect.width,\n          available_height,\n        )\n        color = rl.Color(255, 255, 255, int(255 * 0.65 * self._alpha_filter.x))\n\n        self._alert_text2_label.set_text(alert_text2)\n        self._alert_text2_label.set_text_color(color)\n        self._alert_text2_label.set_font_size(small_font_size)\n        self._alert_text2_label.set_alignment(rl.GuiTextAlignment.TEXT_ALIGN_LEFT if icon_side != 'left' else rl.GuiTextAlignment.TEXT_ALIGN_RIGHT)\n        self._alert_text2_label.render(text_rect2)\n"""
+    if old_subtitle_block in updated:
+        updated = updated.replace(old_subtitle_block, new_subtitle_block, 1)
+
+    if updated != source:
+        path.write_text(updated)
+        return True
+    return False
+
+
 def _first_existing(*paths: Path) -> Path | None:
     for path in paths:
         if path.exists():
@@ -500,15 +517,28 @@ def patch_openpilot_model_renderer_lead_position(openpilot_dir: Path) -> bool:
     return patched
 
 
+def patch_openpilot_mici_alert_text_layout(openpilot_dir: Path) -> bool:
+    candidates = (
+        openpilot_dir / "selfdrive/ui/mici/onroad/alert_renderer.py",
+        openpilot_dir / "openpilot/selfdrive/ui/mici/onroad/alert_renderer.py",
+    )
+    for path in candidates:
+        if path.exists():
+            return _patch_mici_alert_text_layout(path)
+    return False
+
+
 def apply_openpilot_runtime_patches(openpilot_dir: Path) -> OpenpilotPatchReport:
     framereader_compat = patch_openpilot_framereader_compat(openpilot_dir)
     ui_recording, ui_null_egl = patch_openpilot_ui_record_skip(openpilot_dir)
     augmented_road_fill = patch_openpilot_augmented_road_view_fill(openpilot_dir)
     model_renderer_lead_position = patch_openpilot_model_renderer_lead_position(openpilot_dir)
+    mici_alert_text_layout = patch_openpilot_mici_alert_text_layout(openpilot_dir)
     return OpenpilotPatchReport(
         framereader_compat=framereader_compat,
         ui_recording=ui_recording,
         ui_null_egl=ui_null_egl,
         augmented_road_fill=augmented_road_fill,
         model_renderer_lead_position=model_renderer_lead_position,
+        mici_alert_text_layout=mici_alert_text_layout,
     )

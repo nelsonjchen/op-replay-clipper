@@ -1337,11 +1337,49 @@ def test_patch_model_renderer_lead_position_uses_absolute_rect_bounds(tmp_path) 
     assert "y = np.clip(point[1], rect.y, rect.y + rect.height - sz * 0.6)" in updated
 
 
+def test_patch_mici_alert_text_layout_preserves_gap_and_remaining_height(tmp_path) -> None:
+    alert_renderer = tmp_path / "alert_renderer.py"
+    alert_renderer.write_text(
+        "    if can_draw_second_line and alert_text2:\n"
+        "      last_line_h = self._alert_text1_label.rect.y + self._alert_text1_label.get_content_height(int(alert_layout.text_rect.width))\n"
+        "      last_line_h -= 4\n"
+        "      if len(alert_text2) > 18:\n"
+        "        small_font_size = 36\n"
+        "      elif len(alert_text2) > 24:\n"
+        "        small_font_size = 32\n"
+        "      else:\n"
+        "        small_font_size = 40\n"
+        "      text_rect2 = rl.Rectangle(\n"
+        "        alert_layout.text_rect.x,\n"
+        "        last_line_h,\n"
+        "        alert_layout.text_rect.width,\n"
+        "        alert_layout.text_rect.height - last_line_h\n"
+        "      )\n"
+        "      color = rl.Color(255, 255, 255, int(255 * 0.65 * self._alpha_filter.x))\n\n"
+        "      self._alert_text2_label.set_text(alert_text2)\n"
+        "      self._alert_text2_label.set_text_color(color)\n"
+        "      self._alert_text2_label.set_font_size(small_font_size)\n"
+        "      self._alert_text2_label.set_alignment(rl.GuiTextAlignment.TEXT_ALIGN_LEFT if icon_side != 'left' else rl.GuiTextAlignment.TEXT_ALIGN_RIGHT)\n"
+        "      self._alert_text2_label.render(text_rect2)\n"
+    )
+
+    changed = openpilot_integration._patch_mici_alert_text_layout(alert_renderer)
+    updated = alert_renderer.read_text()
+
+    assert changed is True
+    assert "second_line_top = last_line_h + max(8, int(font_size * 0.14))" in updated
+    assert "available_height = max(0, (alert_layout.text_rect.y + alert_layout.text_rect.height) - second_line_top)" in updated
+    assert "if len(alert_text2) > 24:" in updated
+    assert "elif len(alert_text2) > 18:" in updated
+    assert "if available_height > 0:" in updated
+
+
 def test_apply_openpilot_runtime_patches_reports_changed_files(tmp_path) -> None:
     openpilot_dir = tmp_path / "openpilot"
     (openpilot_dir / "tools/lib").mkdir(parents=True)
     (openpilot_dir / "system/ui/lib").mkdir(parents=True)
     (openpilot_dir / "selfdrive/ui/onroad").mkdir(parents=True)
+    (openpilot_dir / "selfdrive/ui/mici/onroad").mkdir(parents=True)
 
     (openpilot_dir / "tools/lib/framereader.py").write_text(
         "def decompress_video_data(fn, fmt, threads=0, hwaccel=None):\n"
@@ -1401,6 +1439,29 @@ def test_apply_openpilot_runtime_patches_reports_changed_files(tmp_path) -> None
         "    x = np.clip(point[0], 0.0, rect.width - sz / 2)\n"
         "    y = min(point[1], rect.height - sz * 0.6)\n"
     )
+    (openpilot_dir / "selfdrive/ui/mici/onroad/alert_renderer.py").write_text(
+        "    if can_draw_second_line and alert_text2:\n"
+        "      last_line_h = self._alert_text1_label.rect.y + self._alert_text1_label.get_content_height(int(alert_layout.text_rect.width))\n"
+        "      last_line_h -= 4\n"
+        "      if len(alert_text2) > 18:\n"
+        "        small_font_size = 36\n"
+        "      elif len(alert_text2) > 24:\n"
+        "        small_font_size = 32\n"
+        "      else:\n"
+        "        small_font_size = 40\n"
+        "      text_rect2 = rl.Rectangle(\n"
+        "        alert_layout.text_rect.x,\n"
+        "        last_line_h,\n"
+        "        alert_layout.text_rect.width,\n"
+        "        alert_layout.text_rect.height - last_line_h\n"
+        "      )\n"
+        "      color = rl.Color(255, 255, 255, int(255 * 0.65 * self._alpha_filter.x))\n\n"
+        "      self._alert_text2_label.set_text(alert_text2)\n"
+        "      self._alert_text2_label.set_text_color(color)\n"
+        "      self._alert_text2_label.set_font_size(small_font_size)\n"
+        "      self._alert_text2_label.set_alignment(rl.GuiTextAlignment.TEXT_ALIGN_LEFT if icon_side != 'left' else rl.GuiTextAlignment.TEXT_ALIGN_RIGHT)\n"
+        "      self._alert_text2_label.render(text_rect2)\n"
+    )
 
     report = openpilot_integration.apply_openpilot_runtime_patches(openpilot_dir)
     updated_application = (openpilot_dir / "system/ui/lib/application.py").read_text()
@@ -1411,6 +1472,7 @@ def test_apply_openpilot_runtime_patches_reports_changed_files(tmp_path) -> None
     assert report.ui_null_egl is True
     assert report.augmented_road_fill is True
     assert report.model_renderer_lead_position is True
+    assert report.mici_alert_text_layout is True
     assert 'RECORD_GOP_FRAMES = os.getenv("RECORD_GOP_FRAMES", "")' in updated_application
     assert "'-g', RECORD_GOP_FRAMES" in updated_application
     assert "'-colorspace', 'bt709'" in updated_application
