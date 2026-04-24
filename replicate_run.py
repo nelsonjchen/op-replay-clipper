@@ -83,6 +83,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--smear-amount", type=int, default=3, help="UI smear amount.")
     parser.add_argument("--file-size", type=int, default=9, help="Target output size in MB.")
     parser.add_argument("--file-format", choices=["auto", "h264", "hevc"], default="auto")
+    parser.add_argument(
+        "--include-audio",
+        action="store_true",
+        help="Opt in to copying qcamera AAC audio into the final MP4. Hosted prediction fails early if qcamera audio is unavailable.",
+    )
     parser.add_argument("--jwt-token", default="", help="Optional comma JWT token for private routes.")
     parser.add_argument("--poll-interval", type=float, default=5.0, help="Seconds between hosted prediction status polls.")
     parser.add_argument("--timeout-seconds", type=float, default=1800.0, help="Maximum time to wait for the hosted prediction before failing.")
@@ -132,6 +137,7 @@ def build_input(args: argparse.Namespace) -> dict[str, Any]:
         "fileFormat": args.file_format,
         "renderType": args.render_type,
         "smearAmount": args.smear_amount,
+        "includeAudio": bool(getattr(args, "include_audio", False)),
         "anonymizationProfile": resolved_anonymization_profile,
         "passengerRedactionStyle": args.passenger_redaction_style,
     }

@@ -21,6 +21,7 @@ from renderers.big_ui_engine import (
     UI_ALT_FOOTER_CTA_URL_DISPLAY,
     _configure_gui_app_canvas,
     _add_openpilot_to_sys_path,
+    _patch_openpilot_ui_recording_globals,
     _reapply_hidden_window_flag,
     build_camera_frame_refs,
     draw_model_input_overlay,
@@ -1190,6 +1191,7 @@ def clip(
 
         patch_submaster(render_steps, ui_state)
         _configure_gui_app_canvas(gui_app, width=DRIVER_DEBUG_WIDTH, height=DRIVER_DEBUG_HEIGHT)
+        _patch_openpilot_ui_recording_globals()
         gui_app.init_window("driver debug clip", fps=FRAMERATE)
         _reapply_hidden_window_flag(headless=headless)
 

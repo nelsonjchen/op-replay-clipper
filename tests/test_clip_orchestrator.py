@@ -59,6 +59,22 @@ def test_build_plan_parses_route_for_ui_requests() -> None:
     assert plan.target_mb == 8
 
 
+def test_build_plan_preserves_include_audio_flag() -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type="forward",
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
+            include_audio=True,
+        )
+    )
+
+    assert plan.include_audio is True
+    assert plan.download_file_types == ("cameras",)
+
+
 def test_build_plan_treats_ui_alt_as_ui_render() -> None:
     plan = clip_orchestrator.build_clip_plan(
         clip_orchestrator.ClipRequest(
@@ -259,6 +275,19 @@ def test_non_ui_command_uses_requested_accel(ensure_checkout: mock.Mock, bootstr
     bootstrap.assert_not_called()
     request = run_clip.call_args.args[0]
     assert request.local_acceleration == "videotoolbox"
+
+
+@mock.patch("clip.run_clip")
+@mock.patch("clip.bootstrap_openpilot")
+@mock.patch("clip.ensure_openpilot_checkout")
+def test_command_accepts_include_audio_flag(ensure_checkout: mock.Mock, bootstrap: mock.Mock, run_clip: mock.Mock) -> None:
+    run_clip.return_value = mock.Mock(output_path="shared/out.mp4", acceleration=None)
+    exit_code = clip.main(["forward", "--demo", "--include-audio"])
+    assert exit_code == 0
+    ensure_checkout.assert_not_called()
+    bootstrap.assert_not_called()
+    request = run_clip.call_args.args[0]
+    assert request.include_audio is True
 
 
 @mock.patch("clip.run_clip")
@@ -510,6 +539,113 @@ def test_run_clip_uses_anonymized_backing_pipeline_for_360(
         selection_report_path.read_text()
         == '{"selected":"donor","banner_text":"DRIVER FACE SWAPPED","seats":{"left":{"seat_role":"driver","overlay_track":{"frames":[{"crop_rect":{"x":10,"y":20,"width":30,"height":40}}]}}}}\n'
     )
+
+
+@pytest.mark.parametrize("render_type", clip.RENDER_TYPES)
+def test_run_clip_muxes_audio_after_render_for_each_render_type(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    render_type: str,
+) -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type=render_type,  # type: ignore[arg-type]
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
+            output_path=str(tmp_path / f"{render_type}.mp4"),
+            explicit_data_dir=str(tmp_path / "data"),
+            include_audio=True,
+        )
+    )
+    audio_path = tmp_path / "audio.m4a"
+    order: list[str] = []
+
+    monkeypatch.setattr(clip_orchestrator, "build_clip_plan", lambda request: plan)
+    monkeypatch.setattr(
+        clip_orchestrator.qcamera_audio,
+        "extract_visible_qcamera_audio",
+        lambda **kwargs: (order.append("extract"), mock.Mock(path=audio_path))[1],
+    )
+
+    def _fake_render(request, plan):
+        order.append("render")
+        return clip_orchestrator.ClipResult(
+            output_path=plan.output_path,
+            route=plan.route,
+            render_type=plan.render_type,
+            data_dir=plan.data_dir,
+            file_format=plan.file_format,
+        )
+
+    def _fake_mux(video_path, mux_audio_path):
+        order.append("mux")
+        assert video_path == plan.output_path
+        assert mux_audio_path == audio_path
+        return plan.output_path
+
+    monkeypatch.setattr(clip_orchestrator, "_render_video_only", _fake_render)
+    monkeypatch.setattr(clip_orchestrator.qcamera_audio, "mux_audio_into_video", _fake_mux)
+    monkeypatch.setattr(clip_orchestrator.video_renderer, "_inject_360_metadata", lambda path: order.append("inject"))
+
+    result = clip_orchestrator.run_clip(
+        clip_orchestrator.ClipRequest(
+            render_type="forward",
+            route_or_url="ignored",
+            start_seconds=0,
+            length_seconds=1,
+            target_mb=1,
+            skip_download=True,
+        )
+    )
+
+    assert result.output_path == plan.output_path
+    if render_type in ("360", "360_forward_upon_wide"):
+        assert order == ["extract", "render", "mux", "inject"]
+    else:
+        assert order == ["extract", "render", "mux"]
+
+
+def test_run_clip_fails_audio_preflight_before_render_work(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type="ui",
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
+            output_path=str(tmp_path / "ui.mp4"),
+            explicit_data_dir=str(tmp_path / "data"),
+            include_audio=True,
+        )
+    )
+    render = mock.Mock()
+
+    monkeypatch.setattr(clip_orchestrator, "build_clip_plan", lambda request: plan)
+    monkeypatch.setattr(
+        clip_orchestrator.qcamera_audio,
+        "extract_visible_qcamera_audio",
+        mock.Mock(side_effect=clip_orchestrator.qcamera_audio.QCameraAudioError("no audio")),
+    )
+    monkeypatch.setattr(clip_orchestrator, "_render_video_only", render)
+
+    with pytest.raises(clip_orchestrator.qcamera_audio.QCameraAudioError, match="no audio"):
+        clip_orchestrator.run_clip(
+            clip_orchestrator.ClipRequest(
+                render_type="ui",
+                route_or_url="ignored",
+                start_seconds=0,
+                length_seconds=1,
+                target_mb=1,
+                skip_download=True,
+            )
+        )
+
+    render.assert_not_called()
 
 
 def test_probe_video_dimensions_reads_ffprobe_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -116,6 +116,10 @@ class Predictor(BasePredictor):
             choices=PASSENGER_REDACTION_STYLE_CHOICES,
             default="blur",
         ),
+        includeAudio: bool = Input(
+            description="Opt in to copying AAC audio from qcamera into the final MP4. The prediction fails early if qcamera audio is unavailable.",
+            default=False,
+        ),
         notes: str = Input(description="Optional notes for your own reference. Does not affect output.", default=""),
     ) -> CogPath:
         print("NOTES:")
@@ -161,6 +165,7 @@ class Predictor(BasePredictor):
                 local_acceleration="auto",
                 openpilot_dir=default_image_openpilot_root(),
                 qcam=False,
+                include_audio=bool(includeAudio),
                 headless=True,
                 driver_face_anonymization=resolved_driver_face_anonymization,  # type: ignore[arg-type]
                 driver_face_profile=driver_face_profile,  # type: ignore[arg-type]

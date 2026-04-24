@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from core import route_downloader, route_inputs
+from core import qcamera_audio, route_downloader, route_inputs
 from core.driver_face_swap import (
     DriverFaceAnonymizationMode,
     DriverFaceAnonymizationProfile,
@@ -86,6 +86,7 @@ class ClipRequest:
     local_acceleration: LocalAccel = "auto"
     openpilot_dir: str = field(default_factory=default_image_openpilot_root)
     qcam: bool = False
+    include_audio: bool = False
     headless: bool = True
     skip_download: bool = False
     driver_face_anonymization: DriverFaceAnonymizationMode = "none"
@@ -119,6 +120,7 @@ class ClipPlan:
     openpilot_dir: str
     headless: bool
     qcam: bool
+    include_audio: bool
     driver_face_swap: DriverFaceSwapOptions
 
 
@@ -259,28 +261,12 @@ def build_clip_plan(request: ClipRequest) -> ClipPlan:
         openpilot_dir=request.openpilot_dir,
         headless=request.headless,
         qcam=request.qcam,
+        include_audio=request.include_audio,
         driver_face_swap=driver_face_swap,
     )
 
 
-def run_clip(request: ClipRequest) -> ClipResult:
-    plan = build_clip_plan(request)
-    plan.output_path.parent.mkdir(parents=True, exist_ok=True)
-    if plan.output_path.exists():
-        plan.output_path.unlink()
-
-    if not request.skip_download:
-        route_downloader.downloadSegments(
-            route_or_segment=plan.route,
-            start_seconds=plan.start_seconds,
-            length=plan.length_seconds,
-            smear_seconds=plan.smear_seconds,
-            data_dir=plan.data_dir,
-            file_types=list(plan.download_file_types),
-            jwt_token=plan.jwt_token,
-            decompress_logs=plan.decompress_logs,
-        )
-
+def _render_video_only(request: ClipRequest, plan: ClipPlan) -> ClipResult:
     if is_ui_render_type(plan.render_type):
         ui_result = ui_renderer.render_ui_clip(
             ui_renderer.UIRenderOptions(
@@ -451,3 +437,70 @@ def run_clip(request: ClipRequest) -> ClipResult:
         file_format=plan.file_format,
         acceleration=video_result.acceleration,
     )
+
+
+def _download_video_inputs(plan: ClipPlan) -> None:
+    route_downloader.downloadSegments(
+        route_or_segment=plan.route,
+        start_seconds=plan.start_seconds,
+        length=plan.length_seconds,
+        smear_seconds=plan.smear_seconds,
+        data_dir=plan.data_dir,
+        file_types=list(plan.download_file_types),
+        jwt_token=plan.jwt_token,
+        decompress_logs=plan.decompress_logs,
+    )
+
+
+def _download_visible_qcamera_audio_inputs(plan: ClipPlan) -> None:
+    route_downloader.downloadSegments(
+        route_or_segment=plan.route,
+        start_seconds=plan.start_seconds,
+        length=plan.length_seconds,
+        smear_seconds=0,
+        data_dir=plan.data_dir,
+        file_types=["qcameras"],
+        jwt_token=plan.jwt_token,
+        decompress_logs=False,
+    )
+
+
+def _finalize_with_audio(result: ClipResult, audio_path: Path) -> ClipResult:
+    qcamera_audio.mux_audio_into_video(result.output_path, audio_path)
+    if result.render_type in ("360", "360_forward_upon_wide"):
+        video_renderer._inject_360_metadata(result.output_path)
+    return result
+
+
+def run_clip(request: ClipRequest) -> ClipResult:
+    plan = build_clip_plan(request)
+    plan.output_path.parent.mkdir(parents=True, exist_ok=True)
+    if plan.output_path.exists():
+        plan.output_path.unlink()
+
+    audio_temp: tempfile.TemporaryDirectory[str] | None = None
+    audio_path: Path | None = None
+    try:
+        if plan.include_audio:
+            if not request.skip_download:
+                _download_visible_qcamera_audio_inputs(plan)
+            audio_temp = tempfile.TemporaryDirectory(prefix="qcamera-audio-")
+            audio_clip = qcamera_audio.extract_visible_qcamera_audio(
+                data_dir=plan.data_dir,
+                route_or_segment=plan.route,
+                start_seconds=plan.start_seconds,
+                length_seconds=plan.length_seconds,
+                output_path=Path(audio_temp.name) / "visible-audio.m4a",
+            )
+            audio_path = audio_clip.path
+
+        if not request.skip_download:
+            _download_video_inputs(plan)
+
+        result = _render_video_only(request, plan)
+        if audio_path is not None:
+            result = _finalize_with_audio(result, audio_path)
+        return result
+    finally:
+        if audio_temp is not None:
+            audio_temp.cleanup()

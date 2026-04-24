@@ -69,6 +69,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--forward-upon-wide-h", type=parse_forward_upon_wide_h, default="auto", help=argparse.SUPPRESS)
     parser.add_argument("--qcam", action="store_true")
     parser.add_argument(
+        "--include-audio",
+        action="store_true",
+        help="Opt in to copying AAC audio from qcamera into the final MP4. Fails early if qcamera audio is unavailable.",
+    )
+    parser.add_argument(
         "--ui-alt-variant",
         choices=UI_ALT_VARIANTS,
         default=None,
@@ -211,6 +216,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 local_acceleration=args.accel,
                 openpilot_dir=openpilot_dir,
                 qcam=args.qcam,
+                include_audio=args.include_audio,
                 headless=not args.windowed,
                 skip_download=args.skip_download,
                 driver_face_anonymization=args.driver_face_anonymization,

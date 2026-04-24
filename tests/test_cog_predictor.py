@@ -199,3 +199,32 @@ def test_predictor_ignores_driver_face_anonymization_for_unsupported_render(monk
         "does not support driver face anonymization."
     ) in captured.out
     assert captured_request["request"].driver_face_anonymization == "none"
+
+
+def test_predictor_wires_include_audio(monkeypatch) -> None:
+    cog_predictor = _load_cog_predictor()
+    predictor = cog_predictor.Predictor()
+    captured_request: dict[str, object] = {}
+
+    def fake_run_clip(request):
+        captured_request["request"] = request
+        return types.SimpleNamespace(output_path=Path("/tmp/out.mp4"))
+
+    monkeypatch.setattr(cog_predictor, "run_clip", fake_run_clip)
+
+    result = predictor.predict(
+        renderType="forward",
+        route="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496",
+        smearAmount=3,
+        uiAltVariant=None,
+        fileSize=9,
+        fileFormat="auto",
+        jwtToken="",
+        anonymizationProfile="none",
+        passengerRedactionStyle="blur",
+        includeAudio=True,
+        notes="",
+    )
+
+    assert result == Path("/tmp/out.mp4")
+    assert captured_request["request"].include_audio is True

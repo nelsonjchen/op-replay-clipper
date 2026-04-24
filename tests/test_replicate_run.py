@@ -53,6 +53,7 @@ def test_build_input_uses_cog_field_names() -> None:
     payload = replicate_run.build_input(args)
     assert payload["renderType"] == "ui"
     assert payload["fileSize"] == 9
+    assert payload["includeAudio"] is False
     assert payload["anonymizationProfile"] == "none"
     assert payload["passengerRedactionStyle"] == "blur"
     assert payload["route"].startswith("https://connect.comma.ai/")
@@ -75,6 +76,25 @@ def test_build_input_allows_ui_alt_render_type() -> None:
 
     payload = replicate_run.build_input(args)
     assert payload["renderType"] == "ui-alt"
+
+
+def test_build_input_wires_include_audio() -> None:
+    args = SimpleNamespace(
+        notes="",
+        url="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496",
+        file_size=9,
+        jwt_token="",
+        file_format="auto",
+        render_type="forward",
+        ui_alt_variant=None,
+        smear_amount=3,
+        include_audio=True,
+        anonymization_profile="none",
+        passenger_redaction_style="blur",
+    )
+
+    payload = replicate_run.build_input(args)
+    assert payload["includeAudio"] is True
 
 
 def test_build_input_includes_ui_alt_variant() -> None:
