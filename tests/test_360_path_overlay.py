@@ -195,6 +195,23 @@ def test_unpremultiply_rgba_restores_straight_color() -> None:
     assert result[0, 1].tolist() == [0, 0, 0, 0]
 
 
+def test_strengthen_ui_path_pixels_boosts_only_path_like_pixels() -> None:
+    bgra = np.array(
+        [
+            [[120, 220, 20, 80], [20, 240, 20, 255], [255, 255, 255, 120], [20, 20, 220, 120]],
+        ],
+        dtype=np.uint8,
+    )
+
+    result = path_overlay_360.strengthen_ui_path_pixels(bgra)
+
+    assert result[0, 0, 1] > bgra[0, 0, 1]
+    assert result[0, 0, 3] > bgra[0, 0, 3]
+    assert result[0, 1].tolist() == bgra[0, 1].tolist()
+    assert result[0, 2].tolist() == bgra[0, 2].tolist()
+    assert result[0, 3].tolist() == bgra[0, 3].tolist()
+
+
 def test_render_path_overlay_frame_writes_alpha() -> None:
     polygon = np.array(
         [

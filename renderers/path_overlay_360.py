@@ -36,6 +36,9 @@ MIN_DRAW_DISTANCE = 10.0
 MAX_DRAW_DISTANCE = 100.0
 DEFAULT_REUSE_FRAMES = 5
 DEFAULT_HEIGHT_METERS = 1.22
+UI_PATH_ALPHA_MULTIPLIER = 1.65
+UI_PATH_GREEN_TINT = np.array([32, 240, 92], dtype=np.float32)
+UI_PATH_GREEN_TINT_BLEND = 0.55
 
 
 @dataclass(frozen=True)
@@ -631,6 +634,38 @@ def _place_panel_on_wide_frame(panel_bgra: np.ndarray, *, frame_width: int, fram
     return frame
 
 
+def strengthen_ui_path_pixels(bgra: np.ndarray) -> np.ndarray:
+    result = bgra.copy()
+    blue = result[:, :, 0].astype(np.float32)
+    green = result[:, :, 1].astype(np.float32)
+    red = result[:, :, 2].astype(np.float32)
+    alpha = result[:, :, 3].astype(np.float32)
+
+    # The openpilot throttle path is a translucent cyan/green gradient. When
+    # captured to PNG and then composited onto road video, those pixels can read
+    # as faint blue. Target only path-like filled pixels, leaving white lane
+    # lines, red road edges, HUD text, and the green border alone.
+    path_mask = (
+        (alpha > 12)
+        & (green > 70)
+        & (green >= red + 15)
+        & (blue >= red + 10)
+        & (red < 180)
+        & (alpha < 245)
+    )
+    if not np.any(path_mask):
+        return result
+
+    rgb = result[:, :, [2, 1, 0]].astype(np.float32)
+    rgb[path_mask] = (
+        rgb[path_mask] * (1.0 - UI_PATH_GREEN_TINT_BLEND)
+        + UI_PATH_GREEN_TINT * UI_PATH_GREEN_TINT_BLEND
+    )
+    result[:, :, [2, 1, 0]] = np.clip(rgb, 0.0, 255.0).astype(np.uint8)
+    result[:, :, 3][path_mask] = np.clip(alpha[path_mask] * UI_PATH_ALPHA_MULTIPLIER, 0.0, 255.0).astype(np.uint8)
+    return result
+
+
 def render_model_with_standard_path_style(view, content_rect, ui_state) -> None:
     selfdrive_state = getattr(getattr(ui_state, "sm", None), "data", {}).get("selfdriveState")
     original_experimental_mode = getattr(selfdrive_state, "experimentalMode", None)
@@ -719,6 +754,7 @@ def _render_openpilot_ui_overlay_png(
         try:
             rl.image_flip_vertical(image)
             panel_bgra = _raylib_image_to_bgra(rl, image)
+            panel_bgra = strengthen_ui_path_pixels(panel_bgra)
             _write_overlay_png(
                 path,
                 _place_panel_on_wide_frame(
