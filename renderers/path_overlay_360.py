@@ -36,6 +36,7 @@ MIN_DRAW_DISTANCE = 10.0
 MAX_DRAW_DISTANCE = 100.0
 DEFAULT_REUSE_FRAMES = 5
 DEFAULT_HEIGHT_METERS = 1.22
+UI_PATH_SPILL_PIXELS = 320
 UI_PATH_ALPHA_MULTIPLIER = 1.65
 UI_PATH_GREEN_TINT = np.array([32, 240, 92], dtype=np.float32)
 UI_PATH_GREEN_TINT_BLEND = 0.55
@@ -634,6 +635,26 @@ def _place_panel_on_wide_frame(panel_bgra: np.ndarray, *, frame_width: int, fram
     return frame
 
 
+def _alpha_over_bgra(base: np.ndarray, overlay: np.ndarray) -> np.ndarray:
+    base_f = base.astype(np.float32)
+    overlay_f = overlay.astype(np.float32)
+    overlay_a = overlay_f[:, :, 3:4] / 255.0
+    base_a = base_f[:, :, 3:4] / 255.0
+    out_a = overlay_a + (base_a * (1.0 - overlay_a))
+
+    out_rgb_premul = (
+        overlay_f[:, :, :3] * overlay_a
+        + base_f[:, :, :3] * base_a * (1.0 - overlay_a)
+    )
+    out_rgb = np.zeros_like(base_f[:, :, :3])
+    np.divide(out_rgb_premul, out_a, out=out_rgb, where=out_a > 1e-6)
+
+    result = np.zeros_like(base)
+    result[:, :, :3] = np.clip(out_rgb, 0.0, 255.0).astype(np.uint8)
+    result[:, :, 3] = np.clip(out_a[:, :, 0] * 255.0, 0.0, 255.0).astype(np.uint8)
+    return result
+
+
 def strengthen_ui_path_pixels(bgra: np.ndarray) -> np.ndarray:
     result = bgra.copy()
     blue = result[:, :, 0].astype(np.float32)
@@ -678,6 +699,115 @@ def render_model_with_standard_path_style(view, content_rect, ui_state) -> None:
             selfdrive_state.experimentalMode = original_experimental_mode
 
 
+def _invalidate_view_frame_matrix(view) -> None:
+    view._matrix_cache_key = None
+    view._cached_matrix = None
+
+
+def _render_texture_to_bgra(rl, render_texture) -> np.ndarray:
+    image = rl.load_image_from_texture(render_texture.texture)
+    try:
+        rl.image_flip_vertical(image)
+        return _raylib_image_to_bgra(rl, image)
+    finally:
+        rl.unload_image(image)
+
+
+def _render_path_spill_overlay_frame(
+    *,
+    frame_width: int,
+    frame_height: int,
+    source_crop: FloatRect,
+    ui_state,
+    view,
+    rl,
+) -> np.ndarray:
+    from openpilot.selfdrive.ui import UI_BORDER_SIZE
+    from openpilot.system.ui.lib.application import gui_app
+
+    path_canvas_width = frame_width + (2 * UI_PATH_SPILL_PIXELS)
+    path_canvas_height = frame_height + (2 * UI_PATH_SPILL_PIXELS)
+    path_content_rect = rl.Rectangle(
+        UI_PATH_SPILL_PIXELS + UI_BORDER_SIZE,
+        UI_PATH_SPILL_PIXELS + UI_BORDER_SIZE,
+        frame_width - (2 * UI_BORDER_SIZE),
+        frame_height - (2 * UI_BORDER_SIZE),
+    )
+    path_content_float = FloatRect(
+        path_content_rect.x,
+        path_content_rect.y,
+        path_content_rect.width,
+        path_content_rect.height,
+    )
+    path_footprint = compute_ui_panel_footprint(
+        panel_width=path_canvas_width,
+        panel_height=path_canvas_height,
+        content_rect=path_content_float,
+        source_crop=source_crop,
+    )
+
+    render_texture = rl.load_render_texture(path_canvas_width, path_canvas_height)
+    normal_canvas = (gui_app.width, gui_app.height)
+    try:
+        _configure_gui_app_canvas(gui_app, width=path_canvas_width, height=path_canvas_height)
+        view._content_rect = path_content_rect
+        _invalidate_view_frame_matrix(view)
+        view._calc_frame_matrix(path_content_rect)
+
+        rl.begin_texture_mode(render_texture)
+        rl.clear_background(rl.BLANK)
+        render_model_with_standard_path_style(view, path_content_rect, ui_state)
+        rl.end_texture_mode()
+
+        path_bgra = strengthen_ui_path_pixels(_render_texture_to_bgra(rl, render_texture))
+        return _place_panel_on_wide_frame(
+            path_bgra,
+            frame_width=frame_width,
+            frame_height=frame_height,
+            footprint=path_footprint,
+        )
+    finally:
+        _configure_gui_app_canvas(gui_app, width=normal_canvas[0], height=normal_canvas[1])
+        rl.unload_render_texture(render_texture)
+
+
+def _render_ui_chrome_overlay_frame(
+    *,
+    frame_width: int,
+    frame_height: int,
+    content_rect,
+    panel_footprint: FloatRect,
+    view,
+    rl,
+) -> np.ndarray:
+    panel_rect = rl.Rectangle(0, 0, frame_width, frame_height)
+    render_texture = rl.load_render_texture(frame_width, frame_height)
+    try:
+        rl.begin_texture_mode(render_texture)
+        rl.clear_background(rl.BLANK)
+        rl.begin_scissor_mode(
+            int(content_rect.x),
+            int(content_rect.y),
+            int(content_rect.width),
+            int(content_rect.height),
+        )
+        view._hud_renderer.render(content_rect)
+        view.alert_renderer.render(content_rect)
+        rl.end_scissor_mode()
+        draw_transparent_ui_border(view, panel_rect, rl)
+        rl.end_texture_mode()
+
+        chrome_bgra = _render_texture_to_bgra(rl, render_texture)
+        return _place_panel_on_wide_frame(
+            chrome_bgra,
+            frame_width=frame_width,
+            frame_height=frame_height,
+            footprint=panel_footprint,
+        )
+    finally:
+        rl.unload_render_texture(render_texture)
+
+
 def draw_transparent_ui_border(view, rect, rl) -> None:
     from openpilot.selfdrive.ui import UI_BORDER_SIZE
     from openpilot.selfdrive.ui.onroad.augmented_road_view import BORDER_COLORS
@@ -709,7 +839,6 @@ def _render_openpilot_ui_overlay_png(
 
     _apply_ui_overlay_state(ui_state, step.state, frame_index=frame_index)
 
-    panel_rect = rl.Rectangle(0, 0, frame_width, frame_height)
     content_rect = rl.Rectangle(
         UI_BORDER_SIZE,
         UI_BORDER_SIZE,
@@ -733,41 +862,26 @@ def _render_openpilot_ui_overlay_png(
         source_crop=source_crop,
     )
 
-    render_texture = rl.load_render_texture(frame_width, frame_height)
-    try:
-        rl.begin_texture_mode(render_texture)
-        rl.clear_background(rl.BLANK)
-        render_model_with_standard_path_style(view, content_rect, ui_state)
-        rl.begin_scissor_mode(
-            int(content_rect.x),
-            int(content_rect.y),
-            int(content_rect.width),
-            int(content_rect.height),
-        )
-        view._hud_renderer.render(content_rect)
-        view.alert_renderer.render(content_rect)
-        rl.end_scissor_mode()
-        draw_transparent_ui_border(view, panel_rect, rl)
-        rl.end_texture_mode()
-
-        image = rl.load_image_from_texture(render_texture.texture)
-        try:
-            rl.image_flip_vertical(image)
-            panel_bgra = _raylib_image_to_bgra(rl, image)
-            panel_bgra = strengthen_ui_path_pixels(panel_bgra)
-            _write_overlay_png(
-                path,
-                _place_panel_on_wide_frame(
-                    panel_bgra,
-                    frame_width=frame_width,
-                    frame_height=frame_height,
-                    footprint=panel_footprint,
-                ),
-            )
-        finally:
-            rl.unload_image(image)
-    finally:
-        rl.unload_render_texture(render_texture)
+    path_frame = _render_path_spill_overlay_frame(
+        frame_width=frame_width,
+        frame_height=frame_height,
+        source_crop=source_crop,
+        ui_state=ui_state,
+        view=view,
+        rl=rl,
+    )
+    view._content_rect = content_rect
+    _invalidate_view_frame_matrix(view)
+    view._calc_frame_matrix(content_rect)
+    chrome_frame = _render_ui_chrome_overlay_frame(
+        frame_width=frame_width,
+        frame_height=frame_height,
+        content_rect=content_rect,
+        panel_footprint=panel_footprint,
+        view=view,
+        rl=rl,
+    )
+    _write_overlay_png(path, _alpha_over_bgra(path_frame, chrome_frame))
 
 
 def generate_openpilot_ui_overlay_png_sequence(

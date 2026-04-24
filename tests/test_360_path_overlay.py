@@ -169,6 +169,49 @@ def test_compute_ui_panel_footprint_maps_content_to_source_crop() -> None:
     assert mapped_content.height == pytest.approx(source_crop.height)
 
 
+def test_spill_panel_footprint_keeps_ui_content_aligned_and_expands_outside_frame() -> None:
+    content_rect = path_overlay_360.FloatRect(100.0, 50.0, 800.0, 400.0)
+    source_crop = path_overlay_360.FloatRect(312.5, 112.5, 500.0, 250.0)
+    spill_px = 160.0
+
+    normal_footprint = path_overlay_360.compute_ui_panel_footprint(
+        panel_width=1000,
+        panel_height=500,
+        content_rect=content_rect,
+        source_crop=source_crop,
+    )
+    spill_content_rect = path_overlay_360.FloatRect(
+        content_rect.x + spill_px,
+        content_rect.y + spill_px,
+        content_rect.width,
+        content_rect.height,
+    )
+    spill_footprint = path_overlay_360.compute_ui_panel_footprint(
+        panel_width=int(1000 + (2 * spill_px)),
+        panel_height=int(500 + (2 * spill_px)),
+        content_rect=spill_content_rect,
+        source_crop=source_crop,
+    )
+
+    scale_x = spill_footprint.width / (1000 + (2 * spill_px))
+    scale_y = spill_footprint.height / (500 + (2 * spill_px))
+    mapped_spill_content = path_overlay_360.FloatRect(
+        spill_footprint.x + (spill_content_rect.x * scale_x),
+        spill_footprint.y + (spill_content_rect.y * scale_y),
+        spill_content_rect.width * scale_x,
+        spill_content_rect.height * scale_y,
+    )
+
+    assert mapped_spill_content.x == pytest.approx(source_crop.x)
+    assert mapped_spill_content.y == pytest.approx(source_crop.y)
+    assert mapped_spill_content.width == pytest.approx(source_crop.width)
+    assert mapped_spill_content.height == pytest.approx(source_crop.height)
+    assert spill_footprint.x < normal_footprint.x
+    assert spill_footprint.y < normal_footprint.y
+    assert spill_footprint.width > normal_footprint.width
+    assert spill_footprint.height > normal_footprint.height
+
+
 def test_render_model_with_standard_path_style_restores_experimental_mode() -> None:
     calls = []
     selfdrive_state = SimpleNamespace(experimentalMode=True)
@@ -210,6 +253,19 @@ def test_strengthen_ui_path_pixels_boosts_only_path_like_pixels() -> None:
     assert result[0, 1].tolist() == bgra[0, 1].tolist()
     assert result[0, 2].tolist() == bgra[0, 2].tolist()
     assert result[0, 3].tolist() == bgra[0, 3].tolist()
+
+
+def test_alpha_over_bgra_composites_overlay_without_overwriting_transparent_pixels() -> None:
+    base = np.array([[[10, 20, 30, 255], [80, 90, 100, 128]]], dtype=np.uint8)
+    overlay = np.array([[[200, 100, 50, 128], [1, 2, 3, 0]]], dtype=np.uint8)
+
+    result = path_overlay_360._alpha_over_bgra(base, overlay)
+
+    assert result[0, 0, 3] == 255
+    assert result[0, 0, 0] > base[0, 0, 0]
+    assert result[0, 0, 1] > base[0, 0, 1]
+    assert result[0, 0, 2] > base[0, 0, 2]
+    assert result[0, 1].tolist() == base[0, 1].tolist()
 
 
 def test_render_path_overlay_frame_writes_alpha() -> None:
