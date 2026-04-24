@@ -621,6 +621,18 @@ def _place_panel_on_wide_frame(panel_bgra: np.ndarray, *, frame_width: int, fram
     return frame
 
 
+def render_model_with_standard_path_style(view, content_rect, ui_state) -> None:
+    selfdrive_state = getattr(getattr(ui_state, "sm", None), "data", {}).get("selfdriveState")
+    original_experimental_mode = getattr(selfdrive_state, "experimentalMode", None)
+    if original_experimental_mode is not None:
+        selfdrive_state.experimentalMode = False
+    try:
+        view.model_renderer.render(content_rect)
+    finally:
+        if original_experimental_mode is not None:
+            selfdrive_state.experimentalMode = original_experimental_mode
+
+
 def _render_openpilot_ui_overlay_png(
     path: Path,
     step: RenderStep,
@@ -670,7 +682,7 @@ def _render_openpilot_ui_overlay_png(
             int(content_rect.width),
             int(content_rect.height),
         )
-        view.model_renderer.render(content_rect)
+        render_model_with_standard_path_style(view, content_rect, ui_state)
         view._hud_renderer.render(content_rect)
         view.alert_renderer.render(content_rect)
         rl.end_scissor_mode()

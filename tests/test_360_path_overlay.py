@@ -169,6 +169,18 @@ def test_compute_ui_panel_footprint_maps_content_to_source_crop() -> None:
     assert mapped_content.height == pytest.approx(source_crop.height)
 
 
+def test_render_model_with_standard_path_style_restores_experimental_mode() -> None:
+    calls = []
+    selfdrive_state = SimpleNamespace(experimentalMode=True)
+    ui_state = SimpleNamespace(sm=SimpleNamespace(data={"selfdriveState": selfdrive_state}))
+    view = SimpleNamespace(model_renderer=SimpleNamespace(render=lambda rect: calls.append((rect, selfdrive_state.experimentalMode))))
+
+    path_overlay_360.render_model_with_standard_path_style(view, "content-rect", ui_state)
+
+    assert calls == [("content-rect", False)]
+    assert selfdrive_state.experimentalMode is True
+
+
 def test_render_path_overlay_frame_writes_alpha() -> None:
     polygon = np.array(
         [
