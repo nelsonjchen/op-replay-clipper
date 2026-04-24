@@ -181,6 +181,20 @@ def test_render_model_with_standard_path_style_restores_experimental_mode() -> N
     assert selfdrive_state.experimentalMode is True
 
 
+def test_unpremultiply_rgba_restores_straight_color() -> None:
+    rgba = np.array(
+        [
+            [[10, 50, 20, 128], [9, 9, 9, 0]],
+        ],
+        dtype=np.uint8,
+    )
+
+    result = path_overlay_360._unpremultiply_rgba(rgba)
+
+    assert result[0, 0].tolist() == [19, 99, 39, 128]
+    assert result[0, 1].tolist() == [0, 0, 0, 0]
+
+
 def test_render_path_overlay_frame_writes_alpha() -> None:
     polygon = np.array(
         [

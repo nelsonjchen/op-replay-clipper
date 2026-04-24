@@ -587,10 +587,20 @@ def compute_ui_panel_footprint(
     )
 
 
+def _unpremultiply_rgba(rgba: np.ndarray) -> np.ndarray:
+    result = rgba.astype(np.float32, copy=True)
+    alpha = result[:, :, 3]
+    mask = alpha > 0
+    result[:, :, :3][mask] = np.clip(result[:, :, :3][mask] * (255.0 / alpha[mask][:, None]), 0.0, 255.0)
+    result[:, :, :3][~mask] = 0.0
+    return result.astype(np.uint8)
+
+
 def _raylib_image_to_bgra(rl, image) -> np.ndarray:
     data_size = image.width * image.height * 4
     rgba = np.frombuffer(bytes(rl.ffi.buffer(image.data, data_size)), dtype=np.uint8)
     rgba = rgba.reshape((image.height, image.width, 4))
+    rgba = _unpremultiply_rgba(rgba)
     return rgba[:, :, [2, 1, 0, 3]].copy()
 
 
@@ -631,6 +641,22 @@ def render_model_with_standard_path_style(view, content_rect, ui_state) -> None:
     finally:
         if original_experimental_mode is not None:
             selfdrive_state.experimentalMode = original_experimental_mode
+
+
+def draw_transparent_ui_border(view, rect, rl) -> None:
+    from openpilot.selfdrive.ui import UI_BORDER_SIZE
+    from openpilot.selfdrive.ui.onroad.augmented_road_view import BORDER_COLORS
+    from openpilot.selfdrive.ui.ui_state import UIStatus, ui_state
+
+    border_roundness = 0.12
+    border_color = BORDER_COLORS.get(ui_state.status, BORDER_COLORS[UIStatus.DISENGAGED])
+    border_rect = rl.Rectangle(
+        rect.x + UI_BORDER_SIZE,
+        rect.y + UI_BORDER_SIZE,
+        rect.width - (2 * UI_BORDER_SIZE),
+        rect.height - (2 * UI_BORDER_SIZE),
+    )
+    rl.draw_rectangle_rounded_lines_ex(border_rect, border_roundness, 10, UI_BORDER_SIZE, border_color)
 
 
 def _render_openpilot_ui_overlay_png(
@@ -676,17 +702,17 @@ def _render_openpilot_ui_overlay_png(
     try:
         rl.begin_texture_mode(render_texture)
         rl.clear_background(rl.BLANK)
+        render_model_with_standard_path_style(view, content_rect, ui_state)
         rl.begin_scissor_mode(
             int(content_rect.x),
             int(content_rect.y),
             int(content_rect.width),
             int(content_rect.height),
         )
-        render_model_with_standard_path_style(view, content_rect, ui_state)
         view._hud_renderer.render(content_rect)
         view.alert_renderer.render(content_rect)
         rl.end_scissor_mode()
-        view._draw_border(panel_rect)
+        draw_transparent_ui_border(view, panel_rect, rl)
         rl.end_texture_mode()
 
         image = rl.load_image_from_texture(render_texture.texture)
