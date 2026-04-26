@@ -43,6 +43,7 @@ RENDER_TYPES: tuple[RenderType, ...] = (
     "wide",
     "driver",
     "360",
+    "360-ui",
     "forward_upon_wide",
     "360_forward_upon_wide",
 )

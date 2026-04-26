@@ -67,7 +67,7 @@ class Predictor(BasePredictor):
     def predict(
         self,
         renderType: str = Input(
-            description="UI renders with the comma openpilot UI. Forward, Wide, and Driver process the raw, segmented, and low-compatibility HEVC video files into a portable HEVC or H264 MP4 file, are fast transcodes, and are great for quick previews. 360 requires viewing/uploading the video file in VLC or YouTube to pan around in a sphere or post-processing with software such as Insta360 Studio or similar software for reframing. Forward Upon Wide roughly overlays Forward video on Wide video for increased detail in Forward video. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video and scales up to render at 8K for reframing with Insta360 Studio or similar software.",
+            description="UI renders with the comma openpilot UI. Forward, Wide, and Driver process the raw, segmented, and low-compatibility HEVC video files into a portable HEVC or H264 MP4 file, are fast transcodes, and are great for quick previews. 360 requires viewing/uploading the video file in VLC or YouTube to pan around in a sphere or post-processing with software such as Insta360 Studio or similar software for reframing. 360-ui is an expensive 360 render with an openpilot HUD/path overlay on the wide view. Forward Upon Wide roughly overlays Forward video on Wide video for increased detail in Forward video. 360 Forward Upon Wide is 360 with Forward Upon Wide as the forward video and scales up to render at 8K for reframing with Insta360 Studio or similar software.",
             choices=[
                 "ui",
                 "ui-alt",
@@ -76,6 +76,7 @@ class Predictor(BasePredictor):
                 "wide",
                 "driver",
                 "360",
+                "360-ui",
                 "forward_upon_wide",
                 "360_forward_upon_wide",
             ],
@@ -107,7 +108,7 @@ class Predictor(BasePredictor):
             default="",
         ),
         anonymizationProfile: str = Input(
-            description="Seat anonymization strategy for driver-backed renders such as driver, driver-debug, 360, and 360_forward_upon_wide. Available values are: none, driver unchanged/passenger hidden, driver unchanged/passenger face swap, driver face swap/passenger unchanged, driver face swap/passenger hidden, driver face swap/passenger face swap.",
+            description="Seat anonymization strategy for driver-backed renders such as driver, driver-debug, 360, 360-ui, and 360_forward_upon_wide. Available values are: none, driver unchanged/passenger hidden, driver unchanged/passenger face swap, driver face swap/passenger unchanged, driver face swap/passenger hidden, driver face swap/passenger face swap.",
             choices=HOSTED_ANONYMIZATION_PROFILE_CHOICES,
             default="none",
         ),

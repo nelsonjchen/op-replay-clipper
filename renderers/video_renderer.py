@@ -32,6 +32,7 @@ RenderType = Literal[
     "wide",
     "driver",
     "360",
+    "360-ui",
     "forward_upon_wide",
     "360_forward_upon_wide",
 ]
@@ -430,6 +431,11 @@ def render_video_clip(opts: VideoRenderOptions) -> VideoRenderResult:
     if not os.path.exists(opts.data_dir):
         raise ValueError(f"Invalid data_dir: {opts.data_dir}")
 
+    if opts.render_type == "360-ui":
+        from renderers import ui_360_renderer
+
+        return ui_360_renderer.render_360_ui_clip(opts)
+
     route = _normalize_route(opts.route_or_segment)
     segments = _segment_numbers(opts.start_seconds, opts.length_seconds)
     accel = select_video_acceleration(opts.acceleration, opts.file_format)
@@ -657,6 +663,7 @@ if __name__ == "__main__":
         "wide",
         "driver",
         "360",
+        "360-ui",
         "forward_upon_wide",
         "360_forward_upon_wide",
     ], default="forward")

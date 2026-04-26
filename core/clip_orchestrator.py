@@ -37,6 +37,7 @@ RenderType = Literal[
     "wide",
     "driver",
     "360",
+    "360-ui",
     "forward_upon_wide",
     "360_forward_upon_wide",
 ]
@@ -53,6 +54,7 @@ RENDER_TYPE_FILE_TYPES: dict[RenderType, tuple[str, ...]] = {
     "wide": ("ecameras",),
     "driver": ("dcameras",),
     "360": ("ecameras", "dcameras"),
+    "360-ui": ("ecameras", "dcameras", "logs", "qcameras"),
     "forward_upon_wide": ("ecameras", "cameras"),
     "360_forward_upon_wide": ("ecameras", "dcameras", "cameras"),
 }
@@ -61,6 +63,7 @@ DRIVER_FACE_ANONYMIZATION_RENDER_TYPES: tuple[RenderType, ...] = (
     "driver",
     "driver-debug",
     "360",
+    "360-ui",
     "360_forward_upon_wide",
 )
 
@@ -137,7 +140,7 @@ def is_ui_render_type(render_type: RenderType) -> bool:
 
 
 def is_openpilot_render_type(render_type: RenderType) -> bool:
-    return render_type in ("ui", "ui-alt", "driver-debug")
+    return render_type in ("ui", "ui-alt", "driver-debug", "360-ui")
 
 
 def is_smear_render_type(render_type: RenderType) -> bool:
@@ -168,7 +171,7 @@ def _append_unique_file_types(file_types: tuple[str, ...], *extras: str) -> tupl
 def normalize_output_format(render_type: RenderType, requested_format: OutputFormatInput) -> OutputFormat:
     if requested_format in ("h264", "hevc"):
         return requested_format
-    if render_type in ("360", "360_forward_upon_wide"):
+    if render_type in ("360", "360-ui", "360_forward_upon_wide"):
         return "hevc"
     return "h264"
 
@@ -205,6 +208,9 @@ def resolve_data_dir(route: str, data_root: str, explicit_data_dir: str | None) 
 
 
 def build_clip_plan(request: ClipRequest) -> ClipPlan:
+    if request.render_type == "360-ui" and request.qcam:
+        raise ValueError("360-ui does not support qcam inputs; use normal ecamera/dcamera/log data.")
+
     parsed = route_inputs.parseRouteOrUrl(
         route_or_url=request.route_or_url,
         start_seconds=request.start_seconds,
@@ -358,7 +364,7 @@ def run_clip(request: ClipRequest) -> ClipResult:
             acceleration="facefusion",
         )
 
-    if plan.render_type in ("360", "360_forward_upon_wide") and has_driver_face_anonymization(plan.driver_face_swap):
+    if plan.render_type in ("360", "360-ui", "360_forward_upon_wide") and has_driver_face_anonymization(plan.driver_face_swap):
         with tempfile.TemporaryDirectory(prefix="driver-face-360-backing-") as backing_root:
             backing_output_path = Path(backing_root) / "driver-backing.mp4"
             backing_video_path = render_anonymized_driver_backing_video(

@@ -12,6 +12,7 @@ from renderers import video_renderer
 
 def test_auto_file_format_prefers_hevc_for_360() -> None:
     assert clip_orchestrator.normalize_output_format("360", "auto") == "hevc"
+    assert clip_orchestrator.normalize_output_format("360-ui", "auto") == "hevc"
     assert clip_orchestrator.normalize_output_format("forward", "auto") == "h264"
 
 
@@ -33,6 +34,18 @@ def test_download_file_type_mapping() -> None:
         "ecameras",
         "dcameras",
         "logs",
+    )
+    assert clip_orchestrator.select_download_file_types("360-ui", qcam=False) == (
+        "ecameras",
+        "dcameras",
+        "logs",
+        "qcameras",
+    )
+    assert clip_orchestrator.select_download_file_types("360-ui", qcam=False, driver_face_anonymization="facefusion") == (
+        "ecameras",
+        "dcameras",
+        "logs",
+        "qcameras",
     )
     assert clip_orchestrator.select_download_file_types(
         "360_forward_upon_wide",
@@ -123,6 +136,38 @@ def test_build_plan_treats_driver_debug_as_openpilot_render() -> None:
     assert plan.decompress_logs is False
 
 
+def test_build_plan_treats_360_ui_as_openpilot_360_render() -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type="360-ui",
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
+            file_format="auto",
+            execution_context="local",
+        )
+    )
+
+    assert plan.download_file_types == ("ecameras", "dcameras", "logs", "qcameras")
+    assert plan.decompress_logs is False
+    assert plan.file_format == "hevc"
+
+
+def test_build_plan_rejects_360_ui_qcam() -> None:
+    with pytest.raises(ValueError, match="360-ui does not support qcam"):
+        clip_orchestrator.build_clip_plan(
+            clip_orchestrator.ClipRequest(
+                render_type="360-ui",
+                route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+                start_seconds=90,
+                length_seconds=5,
+                target_mb=9,
+                qcam=True,
+            )
+        )
+
+
 def test_build_plan_ignores_driver_face_anonymization_for_non_driver_renders() -> None:
     plan = clip_orchestrator.build_clip_plan(
         clip_orchestrator.ClipRequest(
@@ -139,7 +184,7 @@ def test_build_plan_ignores_driver_face_anonymization_for_non_driver_renders() -
     assert "logs" not in plan.download_file_types
 
 
-@pytest.mark.parametrize("render_type", ["360", "360_forward_upon_wide"])
+@pytest.mark.parametrize("render_type", ["360", "360-ui", "360_forward_upon_wide"])
 def test_build_plan_accepts_driver_face_anonymization_for_360_renders(render_type: str) -> None:
     plan = clip_orchestrator.build_clip_plan(
         clip_orchestrator.ClipRequest(
@@ -310,17 +355,20 @@ def test_driver_face_anonymization_flags_flow_into_clip_request(
     assert request.facefusion_model == "hyperswap_1b_256"
 
 
+@pytest.mark.parametrize("render_type", ["360", "360-ui"])
 @mock.patch("clip.run_clip")
 @mock.patch("clip.bootstrap_openpilot")
 @mock.patch("clip.ensure_openpilot_checkout")
-def test_360_anonymization_prepares_openpilot(ensure_checkout: mock.Mock, bootstrap: mock.Mock, run_clip: mock.Mock) -> None:
+def test_360_anonymization_prepares_openpilot(
+    ensure_checkout: mock.Mock, bootstrap: mock.Mock, run_clip: mock.Mock, render_type: str
+) -> None:
     run_clip.return_value = mock.Mock(output_path="shared/out.mp4", acceleration=None)
-    exit_code = clip.main(["360", "--demo", "--driver-face-anonymization", "facefusion"])
+    exit_code = clip.main([render_type, "--demo", "--driver-face-anonymization", "facefusion"])
     assert exit_code == 0
     ensure_checkout.assert_called_once()
     bootstrap.assert_called_once()
     request = run_clip.call_args.args[0]
-    assert request.render_type == "360"
+    assert request.render_type == render_type
     assert request.driver_face_anonymization == "facefusion"
 
 
@@ -441,7 +489,7 @@ def test_run_clip_uses_anonymized_backing_pipeline_for_driver(monkeypatch: pytes
     assert called["options"].mode == "facefusion"
 
 
-@pytest.mark.parametrize("render_type", ["360", "360_forward_upon_wide"])
+@pytest.mark.parametrize("render_type", ["360", "360-ui", "360_forward_upon_wide"])
 def test_run_clip_uses_anonymized_backing_pipeline_for_360(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, render_type: str
 ) -> None:
@@ -510,6 +558,49 @@ def test_run_clip_uses_anonymized_backing_pipeline_for_360(
         selection_report_path.read_text()
         == '{"selected":"donor","banner_text":"DRIVER FACE SWAPPED","seats":{"left":{"seat_role":"driver","overlay_track":{"frames":[{"crop_rect":{"x":10,"y":20,"width":30,"height":40}}]}}}}\n'
     )
+
+
+def test_run_clip_calls_renderer_for_plain_360_ui(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    plan = clip_orchestrator.build_clip_plan(
+        clip_orchestrator.ClipRequest(
+            render_type="360-ui",
+            route_or_url="a2a0ccea32023010|2023-07-27--13-01-19",
+            start_seconds=90,
+            length_seconds=5,
+            target_mb=9,
+            output_path=str(tmp_path / "360-ui.mp4"),
+            explicit_data_dir=str(tmp_path / "data"),
+        )
+    )
+
+    monkeypatch.setattr(clip_orchestrator, "build_clip_plan", lambda request: plan)
+    monkeypatch.setattr(clip_orchestrator.route_downloader, "downloadSegments", lambda **kwargs: None)
+    video_call: dict[str, object] = {}
+
+    def _fake_render_video(opts: video_renderer.VideoRenderOptions):
+        video_call["opts"] = opts
+        output = Path(opts.output_path).resolve()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"fake video")
+        return video_renderer.VideoRenderResult(output_path=output, acceleration="cpu")
+
+    monkeypatch.setattr(clip_orchestrator.video_renderer, "render_video_clip", _fake_render_video)
+
+    result = clip_orchestrator.run_clip(
+        clip_orchestrator.ClipRequest(
+            render_type="forward",
+            route_or_url="ignored",
+            start_seconds=0,
+            length_seconds=1,
+            target_mb=1,
+        )
+    )
+
+    assert result.output_path == Path(plan.output_path).resolve()
+    opts = video_call["opts"]
+    assert opts.render_type == "360-ui"
+    assert opts.driver_input_path is None
+    assert opts.openpilot_dir == plan.openpilot_dir
 
 
 def test_probe_video_dimensions_reads_ffprobe_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -722,3 +813,39 @@ def test_360_render_without_driver_override_keeps_output_seek(monkeypatch: pytes
     assert len(seek_indices) == 1
     assert commands[0][seek_indices[0] + 1] == "30"
     assert seek_indices[0] > commands[0].index("-t")
+
+
+def test_video_renderer_dispatches_360_ui_without_generic_segment_probes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from renderers import ui_360_renderer
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    output_path = tmp_path / "out.mp4"
+    calls: list[video_renderer.VideoRenderOptions] = []
+
+    def _fake_render_360_ui(opts: video_renderer.VideoRenderOptions):
+        calls.append(opts)
+        output_path.write_bytes(b"fake")
+        return video_renderer.VideoRenderResult(output_path=output_path, acceleration="cpu")
+
+    monkeypatch.setattr(ui_360_renderer, "render_360_ui_clip", _fake_render_360_ui)
+    monkeypatch.setattr(video_renderer, "_probe_video_dimensions", lambda path: pytest.fail("unexpected probe"))
+
+    result = video_renderer.render_video_clip(
+        video_renderer.VideoRenderOptions(
+            render_type="360-ui",
+            data_dir=str(data_dir),
+            route_or_segment="dongle|2025-02-25--route",
+            start_seconds=90,
+            length_seconds=15,
+            target_mb=9,
+            file_format="hevc",
+            acceleration="cpu",
+            output_path=str(output_path),
+        )
+    )
+
+    assert result.output_path == output_path
+    assert calls[0].render_type == "360-ui"

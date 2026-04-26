@@ -143,6 +143,25 @@ Pass criteria:
   older fixed crop
 - the output is encoded correctly and plays back cleanly
 
+### 4b. 360 UI HUD
+
+```bash
+uv run python replicate_run.py \
+  --model "$STAGING_MODEL" \
+  --url "$ROUTE_URL" \
+  --render-type 360-ui \
+  --file-format auto \
+  --output ./shared/prod-check-360-ui.mp4
+```
+
+Pass criteria:
+
+- the prediction succeeds
+- the file is an HEVC 360 MP4 with spherical metadata
+- the output includes the qcamera audio track when the route provides one
+- the wide-camera hemisphere shows the crop-aligned openpilot HUD/path overlay
+- raw wide fisheye remains visible outside the HUD footprint
+
 ### 5. 360 Forward Upon Wide
 
 ```bash
@@ -297,6 +316,26 @@ Pass criteria:
 - the driver-camera portion shows the anonymized passenger treatment for the full delivered clip
 - the resulting file still carries injected 360 metadata
 
+### 12b. 360 UI Hidden Passenger Blur
+
+```bash
+uv run python replicate_run.py \
+  --model "$STAGING_MODEL" \
+  --url "$ROUTE_URL" \
+  --render-type 360-ui \
+  --anonymization-profile 'driver unchanged, passenger hidden' \
+  --passenger-redaction-style blur \
+  --jwt-token "$JWT_TOKEN" \
+  --output ./shared/prod-check-360-ui-hidden-blur.mp4
+```
+
+Pass criteria:
+
+- the prediction succeeds
+- the driver-camera portion shows the anonymized passenger treatment
+- the wide-camera hemisphere still shows the HUD/path overlay
+- the resulting file still carries injected 360 metadata
+
 ## Runtime Assumptions To Verify
 
 These are not separate smokes, but they should be true when the matrix passes.
@@ -306,7 +345,7 @@ These are not separate smokes, but they should be true when the matrix passes.
   the hosted surface.
 - The hosted `anonymizationProfile` surface accepts the new hidden-passenger
   labels and still accepts old pixelize labels as compatibility aliases across
-  `driver`, `driver-debug`, `360`, and `360_forward_upon_wide`.
+  `driver`, `driver-debug`, `360`, `360-ui`, and `360_forward_upon_wide`.
 - The hosted `passengerRedactionStyle` surface accepts `blur`,
   `silhouette`, `black_silhouette`, and `ir_tint`, defaulting to `blur`.
 - BIG UI unit detection should come from the logged route `IsMetric` param

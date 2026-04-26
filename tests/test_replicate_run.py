@@ -117,6 +117,27 @@ def test_build_input_allows_driver_debug_render_type() -> None:
     assert payload["passengerRedactionStyle"] == "silhouette"
 
 
+def test_build_input_allows_360_ui_with_anonymization_profile() -> None:
+    args = SimpleNamespace(
+        notes="",
+        url="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488136496",
+        file_size=200,
+        jwt_token="",
+        file_format="auto",
+        render_type="360-ui",
+        ui_alt_variant=None,
+        smear_amount=3,
+        forward_upon_wide_h=2.2,
+        anonymization_profile="driver unchanged, passenger hidden",
+        passenger_redaction_style="blur",
+    )
+
+    payload = replicate_run.build_input(args)
+    assert payload["renderType"] == "360-ui"
+    assert payload["fileFormat"] == "auto"
+    assert payload["anonymizationProfile"] == "driver unchanged, passenger hidden"
+
+
 def test_build_input_ignores_anonymization_profile_for_unsupported_render_type() -> None:
     args = SimpleNamespace(
         notes="",

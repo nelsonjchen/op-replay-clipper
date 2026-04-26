@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from renderers import path_overlay_360
+from renderers import path_overlay_360, ui_360_renderer
 from renderers.video_renderer import VideoAcceleration
 
 
@@ -299,6 +299,34 @@ def test_360_path_filter_overlays_path_before_hstack_and_v360() -> None:
     assert "crop=iw:1208[driver]" in filter_complex
 
 
+def test_360_ui_filter_overlays_ui_before_hstack_and_v360() -> None:
+    filter_complex = ui_360_renderer.build_360_ui_filter_complex(
+        start_seconds=995,
+        length_seconds=12,
+        wide_height=760,
+    )
+
+    assert "[wide][ui]overlay=0:0:format=auto[wide_ui]" in filter_complex
+    assert filter_complex.index("[wide][ui]overlay") < filter_complex.index("[driver][wide_ui]hstack")
+    assert filter_complex.index("[driver][wide_ui]hstack") < filter_complex.index("v360=dfisheye:equirect")
+    assert "trim=start=35:duration=12" in filter_complex
+    assert "crop=iw:760[driver_raw]" in filter_complex
+
+
+def test_360_ui_filter_uses_pretrimmed_driver_and_watermark_input() -> None:
+    filter_complex = ui_360_renderer.build_360_ui_filter_complex(
+        start_seconds=995,
+        length_seconds=12,
+        wide_height=760,
+        driver_input_is_pretrimmed=True,
+        has_driver_watermark=True,
+    )
+
+    assert "trim=start=0:duration=12" in filter_complex
+    assert "trim=start=35:duration=12" in filter_complex
+    assert "[driver_raw][3:v]overlay=0:0[driver]" in filter_complex
+
+
 def test_360_path_ffmpeg_command_uses_overlay_png_sequence() -> None:
     accel = VideoAcceleration(name="cpu", decoder_args=(), encoder_args=("-c:v", "libx265", "-vtag", "hvc1"))
 
@@ -318,3 +346,138 @@ def test_360_path_ffmpeg_command_uses_overlay_png_sequence() -> None:
     assert "/tmp/overlay-%05d.png" in command
     assert command[command.index("-map") + 1] == "[vout]"
     assert command[-1] == "/tmp/out.mp4"
+
+
+def test_360_ui_ffmpeg_command_uses_ui_overlay_and_watermark_sequences() -> None:
+    accel = VideoAcceleration(name="cpu", decoder_args=(), encoder_args=("-c:v", "libx265", "-vtag", "hvc1"))
+
+    command = ui_360_renderer.build_360_ui_ffmpeg_command(
+        driver_input="/tmp/driver.mp4",
+        wide_input="concat:/tmp/e/0.hevc",
+        overlay_pattern="/tmp/ui-%05d.png",
+        watermark_pattern="/tmp/watermark-%05d.png",
+        audio_input=None,
+        start_seconds=995,
+        filter_complex="[vout]",
+        accel=accel,
+        target_mb=200,
+        length_seconds=30,
+        output_path="/tmp/out.mp4",
+    )
+
+    input_indices = [index for index, token in enumerate(command) if token == "-i"]
+    assert command[0] == "ffmpeg"
+    assert command[input_indices[0] + 1] == "/tmp/driver.mp4"
+    assert command[input_indices[1] + 1] == "concat:/tmp/e/0.hevc"
+    assert command[input_indices[2] + 1] == "/tmp/ui-%05d.png"
+    assert command[input_indices[3] + 1] == "/tmp/watermark-%05d.png"
+    assert command.index("/tmp/ui-%05d.png") < command.index("-filter_complex")
+    assert command[command.index("-map") + 1] == "[vout]"
+    assert command[-1] == "/tmp/out.mp4"
+
+
+def test_360_ui_ffmpeg_command_can_mux_qcamera_audio() -> None:
+    accel = VideoAcceleration(name="cpu", decoder_args=(), encoder_args=("-c:v", "libx265", "-vtag", "hvc1"))
+
+    command = ui_360_renderer.build_360_ui_ffmpeg_command(
+        driver_input="/tmp/driver.mp4",
+        wide_input="concat:/tmp/e/0.hevc",
+        overlay_pattern="/tmp/ui-%05d.png",
+        watermark_pattern=None,
+        audio_input="concat:/tmp/q/0.ts",
+        start_seconds=995,
+        filter_complex="[vout]",
+        accel=accel,
+        target_mb=200,
+        length_seconds=30,
+        output_path="/tmp/out.mp4",
+    )
+
+    input_indices = [index for index, token in enumerate(command) if token == "-i"]
+    assert command[input_indices[2] + 1] == "/tmp/ui-%05d.png"
+    assert command[input_indices[3] + 1] == "concat:/tmp/q/0.ts"
+    assert command[command.index("-ss") + 1] == "35"
+    assert "-map" in command
+    assert "3:a:0?" in command
+    assert "-c:a" in command
+    assert "aac" in command
+    assert "-shortest" in command
+
+
+def test_render_360_ui_clip_runs_overlay_encode_and_metadata_steps(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    (data_dir / "2025-02-25--route--16").mkdir(parents=True)
+    (data_dir / "2025-02-25--route--16" / "qcamera.ts").write_bytes(b"fake")
+    output_path = tmp_path / "out.mp4"
+    driver_input = tmp_path / "driver-backing.mp4"
+    openpilot_dir = tmp_path / "openpilot"
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        ui_360_renderer,
+        "apply_openpilot_runtime_patches",
+        lambda openpilot_dir: SimpleNamespace(changed=False),
+    )
+    monkeypatch.setattr(ui_360_renderer.ui_renderer, "_ensure_fonts", lambda openpilot_dir: None)
+    monkeypatch.setattr(
+        ui_360_renderer,
+        "_video_dimensions_or_fail",
+        lambda path, label: (1344, 760) if "wide" in label else (1344, 480),
+    )
+    def _fake_generate_ui_overlay_sequence(**kwargs):
+        calls["overlay_kwargs"] = kwargs
+        return "/tmp/ui-%05d.png"
+
+    monkeypatch.setattr(ui_360_renderer, "_generate_ui_overlay_sequence", _fake_generate_ui_overlay_sequence)
+    accel = VideoAcceleration(name="cpu", decoder_args=(), encoder_args=("-c:v", "libx265", "-vtag", "hvc1"))
+    monkeypatch.setattr(ui_360_renderer.video_renderer, "select_video_acceleration", lambda *_args: accel)
+    def _fake_write_driver_watermark_frames(output_dir, text, *, frame_width, frame_height, frame_count, track):
+        calls["watermark"] = (output_dir, text, frame_width, frame_height, frame_count, track)
+        return "/tmp/watermark-%05d.png"
+
+    monkeypatch.setattr(
+        ui_360_renderer.video_renderer,
+        "_write_driver_watermark_frames",
+        _fake_write_driver_watermark_frames,
+    )
+    monkeypatch.setattr(ui_360_renderer.video_renderer, "_run_logged", lambda command: calls.setdefault("command", command))
+    monkeypatch.setattr(
+        ui_360_renderer.video_renderer,
+        "_inject_360_metadata",
+        lambda output: calls.setdefault("metadata_output", output),
+    )
+    monkeypatch.setattr(ui_360_renderer.video_renderer, "_probe_video_dimensions", lambda output: (2688, 760))
+
+    result = ui_360_renderer.render_360_ui_clip(
+        ui_360_renderer.video_renderer.VideoRenderOptions(
+            render_type="360-ui",
+            data_dir=str(data_dir),
+            route_or_segment="dongle|2025-02-25--route",
+            start_seconds=995,
+            length_seconds=12,
+            target_mb=200,
+            file_format="hevc",
+            acceleration="cpu",
+            output_path=str(output_path),
+            openpilot_dir=str(openpilot_dir),
+            driver_input_path=str(driver_input),
+            driver_watermark_text="DRIVER FACE SWAPPED",
+            driver_watermark_track={"frames": []},
+        )
+    )
+
+    overlay_kwargs = calls["overlay_kwargs"]
+    assert overlay_kwargs["frame_width"] == 1344
+    assert overlay_kwargs["frame_height"] == 760
+    assert calls["watermark"][1:] == ("DRIVER FACE SWAPPED", 1344, 760, 240, {"frames": []})
+    command = calls["command"]
+    input_indices = [index for index, token in enumerate(command) if token == "-i"]
+    assert command[input_indices[0] + 1] == str(driver_input.resolve())
+    assert command[input_indices[-1] + 1].endswith("qcamera.ts")
+    filter_complex = command[command.index("-filter_complex") + 1]
+    assert filter_complex.index("[wide][ui]overlay") < filter_complex.index("[driver][wide_ui]hstack")
+    assert filter_complex.index("[driver][wide_ui]hstack") < filter_complex.index("v360=dfisheye:equirect")
+    assert "3:a:0?" not in command
+    assert "4:a:0?" in command
+    assert calls["metadata_output"] == output_path.resolve()
+    assert result.output_path == output_path.resolve()

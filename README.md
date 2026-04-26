@@ -20,6 +20,8 @@ The clipper can produce clips of:
   * Concatenate, cut, and convert the raw, low-compatibility, and separated HEVC files to one fairly compatible HEVC MP4 or super-compatible H.264 MP4 for easy sharing.
 * 360 Video
   * Rendered from Wide and Driver Camera. Uploadable to YouTube, viewable in VLC, loadable in 360 video editing software such as Insta360 Studio or even the Insta360 mobile app, and accepted by any video players or web services that take 360 videos.
+* `360-ui`
+  * A 360 video with the openpilot HUD and driving path composited into the wide-camera half before spherical conversion. It muxes the qcamera audio track when available. It is much slower than plain `360` because it has to replay the UI overlay frame-by-frame.
 * Forward Upon Wide and 360 Forward Upon Wide
   * Forward video is automatically projected onto the wide video using logged camera calibration. Not perfect, but much better aligned than the old manual overlay.
   * 360 Forward Upon Wide scales and renders the final result at a higher resolution to assist in reframing the 360 video to a normal video if that's what you want.
@@ -206,6 +208,7 @@ uv run python clip.py ui-alt "https://connect.comma.ai/<dongle>/<route>/<start>/
 uv run python clip.py ui-alt "https://connect.comma.ai/<dongle>/<route>/<start>/<end>" --ui-alt-variant device
 uv run python clip.py ui-alt "https://connect.comma.ai/<dongle>/<route>/<start>/<end>" --ui-alt-variant stacked_wide_over_forward
 uv run python clip.py driver-debug "https://connect.comma.ai/<dongle>/<route>/<start>/<end>"
+uv run python clip.py 360-ui "https://connect.comma.ai/<dongle>/<route>/<start>/<end>" --file-format auto
 uv run python clip.py forward "a2a0ccea32023010|2023-07-27--13-01-19" --demo
 ```
 
@@ -263,6 +266,15 @@ uv run python clip.py 360 --demo --length-seconds 20 \
   --driver-face-donor-bank-dir ./assets/driver-face-donors \
   --driver-face-preset fast \
   --output ./shared/driver-360-facefusion.mp4
+
+uv run python clip.py 360-ui --demo --length-seconds 20 \
+  --driver-face-anonymization facefusion \
+  --driver-face-profile driver_face_swap_passenger_hidden \
+  --passenger-redaction-style blur \
+  --driver-face-selection auto_best_match \
+  --driver-face-donor-bank-dir ./assets/driver-face-donors \
+  --driver-face-preset fast \
+  --output ./shared/driver-360-ui-facefusion.mp4
 ```
 
 Tiny RF-DETR-only repro:
@@ -317,7 +329,7 @@ Notes:
 
 * `clip.py` is the primary local CLI for UI and non-UI renders
 * `driver-debug` is an openpilot-backed render type like `ui` and `ui-alt`, but it only needs `dcameras` and `logs`
-* `driver`, `driver-debug`, `360`, and `360_forward_upon_wide` can optionally anonymize the backing driver video with `--driver-face-anonymization facefusion`
+* `driver`, `driver-debug`, `360`, `360-ui`, and `360_forward_upon_wide` can optionally anonymize the backing driver video with `--driver-face-anonymization facefusion`
 * `--driver-face-profile` controls who is swapped versus hidden: `driver_unchanged_passenger_hidden`, `driver_unchanged_passenger_face_swap`, `driver_face_swap_passenger_hidden`, and `driver_face_swap_passenger_face_swap`
 * `--passenger-redaction-style` controls how hidden passengers are rendered and supports `blur`, `silhouette` (white), `black_silhouette`, and `ir_tint`
 * Old `...passenger_pixelize` profile slugs are still accepted as compatibility aliases, but they now map to hidden-passenger + `blur`
@@ -334,7 +346,7 @@ Notes:
 * `pyproject.toml` declares compatible dependency ranges and `uv.lock` pins the exact resolved environment
 * `uv sync` bootstraps the local Python environment used by the local CLI
 * On macOS it prefers a local acceleration policy for ffmpeg-based renders where available
-* It clones/updates `openpilot` into `./.cache/openpilot-local` for openpilot-backed renders such as `ui`, `ui-alt`, and `driver-debug`
+* It clones/updates `openpilot` into `./.cache/openpilot-local` for openpilot-backed renders such as `ui`, `ui-alt`, `driver-debug`, and `360-ui`
 * `--openpilot-repo-url` lets you point local bootstrap at an SSH remote if you want to reuse Git agent forwarding or a closer mirror
 * It runs `uv sync --frozen --all-extras` and builds the native modules needed by the repo-owned BIG UI exact-frame runner
 * On macOS it applies the same `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` workaround used by upstream `tools/install_python_dependencies.sh`
@@ -468,7 +480,7 @@ https://github.com/user-attachments/assets/deea7b78-61ee-43be-8a29-38319114c083
 
 There may be alternative software that'll do it and I will take pull requests to add them to this README, but this is the best way I know how to do it and it is free.
 
-The 360 Forward Upon Wide rendering option scales input videos and renders the final result in a much higher 8K resolution to assist reframing with a high resolution forward video. The normal 360 option just glues the videos together. 
+The 360 Forward Upon Wide rendering option scales input videos and renders the final result in a much higher 8K resolution to assist reframing with a high resolution forward video. The normal 360 option just glues the videos together. `360-ui` keeps the normal 360 output shape but overlays the openpilot HUD/path onto the wide side first, so expect it to cost more time than plain 360.
 
 If wanting to use 360 Forward Upon Wide, test with the non-360 Forward Upon Wide option first so you can quickly sanity-check the route's automatic camera alignment before paying for the larger 360 output.
 

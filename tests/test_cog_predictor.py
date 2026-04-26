@@ -6,6 +6,8 @@ from pathlib import Path
 import sys
 import types
 
+import pytest
+
 
 def _load_cog_predictor():
     fake_cog = types.ModuleType("cog")
@@ -105,7 +107,10 @@ def test_predictor_setup_defaults_rf_detr_device_to_auto(monkeypatch) -> None:
     assert os.environ["DRIVER_FACE_BENCHMARK_RF_DETR_DEVICE"] == "auto"
 
 
-def test_predictor_logs_hidden_redaction_summary_for_360_render(tmp_path, monkeypatch, capsys) -> None:
+@pytest.mark.parametrize("render_type", ["360", "360-ui"])
+def test_predictor_logs_hidden_redaction_summary_for_360_render(
+    tmp_path, monkeypatch, capsys, render_type: str
+) -> None:
     cog_predictor = _load_cog_predictor()
     output_path = tmp_path / "out.mp4"
     output_path.write_bytes(b"video")
@@ -120,7 +125,7 @@ def test_predictor_logs_hidden_redaction_summary_for_360_render(tmp_path, monkey
 
     predictor = cog_predictor.Predictor()
     result = predictor.predict(
-        renderType="360",
+        renderType=render_type,
         route="https://connect.comma.ai/a2a0ccea32023010/1690488131496/1690488151496",
         smearAmount=3,
         uiAltVariant=None,
