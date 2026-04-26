@@ -150,7 +150,9 @@ Notes:
 
 ### GCE testing
 
-GCE is the best middle ground when you want:
+GCE is no longer required for routine beta deploys. Prefer the normal
+Cog/GitHub Actions/Replicate path for one-off beta pushes and hosted smoke
+tests. Use GCE when you expect multiple fix-and-retest iterations that need:
 
 - Linux behavior
 - NVIDIA rendering/encoding behavior
