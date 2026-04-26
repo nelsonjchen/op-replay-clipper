@@ -2,7 +2,13 @@ name: Build
 
 on:
   pull_request:
+    paths-ignore:
+      - README.md
+      - CHANGELOG.md
   push:
+    paths-ignore:
+      - README.md
+      - CHANGELOG.md
   workflow_dispatch:
 
 env:

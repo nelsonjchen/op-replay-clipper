@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 This repository does not currently publish versioned release tags, so the older history below is backfilled from shipped git history and grouped into date-based milestones instead. There is no `Unreleased` section at the moment because the current project state is considered released.
 
+## 2026-04-26
+
+- Added: Introduced `360-ui`, a production 360 render type that composites the openpilot HUD/path overlay into the wide-camera view before spherical conversion.
+- Added: Muxed qcamera audio into `360-ui` outputs when available and expanded local, hosted, and smoke-test coverage for the new render path.
+- Fixed: Hardened the 360 UI path overlay so it remains visible, respects alpha/corners, and can spill beyond the source frame before equirectangular conversion.
+- Fixed: Corrected mici alert text layout handling in the BIG UI engine.
+- Changed: Documented GCE beta deploy guidance and refreshed the production-readiness checklist for 360 UI and hidden-passenger smokes.
+- Changed: Upgraded the CI Docker Buildx setup action to v4.
+
 ## 2026-04-06
 
 - Changed: Replaced the older coarse passenger pixelize path with RF-DETR full-body hidden-passenger redaction for driver-camera anonymization.
