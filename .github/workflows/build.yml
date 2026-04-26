@@ -121,7 +121,7 @@ jobs:
 
   cog-build-smoke:
     name: ubuntu-latest / Cog Build Smoke
-    if: github.ref == 'refs/heads/codex/add-github-actions-cog-build'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/codex/add-github-actions-cog-build'
     runs-on: ubuntu-latest
     timeout-minutes: 180
 

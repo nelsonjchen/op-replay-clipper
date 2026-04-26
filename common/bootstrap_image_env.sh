@@ -16,6 +16,7 @@ FACEFUSION_COMMIT="${FACEFUSION_COMMIT:-519360bcd650679275024aa3ed10e8d673718bb3
 FACEFUSION_PYTHON_VERSION="${FACEFUSION_PYTHON_VERSION:-3.12}"
 FACEFUSION_PREWARM_MODELS="${FACEFUSION_PREWARM_MODELS:-1}"
 FACEFUSION_PREWARM_RETRIES="${FACEFUSION_PREWARM_RETRIES:-3}"
+FACEFUSION_PREFETCH_FAN_68_5="${FACEFUSION_PREFETCH_FAN_68_5:-1}"
 FACEFUSION_PRUNE_VENV="${FACEFUSION_PRUNE_VENV:-1}"
 FACEFUSION_HARDLINK_DEDUPE="${FACEFUSION_HARDLINK_DEDUPE:-1}"
 FACEFUSION_PRUNE_UNUSED_PACKAGES="${FACEFUSION_PRUNE_UNUSED_PACKAGES:-1}"
@@ -278,11 +279,105 @@ install_facefusion_runtime() {
   python install.py --onnxruntime cuda --skip-conda
 }
 
+download_facefusion_asset() {
+  local output_path="$1"
+  shift
+  local output_tmp="${output_path}.tmp"
+
+  rm -f "${output_tmp}"
+  for asset_url in "$@"; do
+    if curl \
+      --fail \
+      --location \
+      --silent \
+      --show-error \
+      --retry 5 \
+      --retry-delay 2 \
+      --retry-all-errors \
+      --connect-timeout 10 \
+      --max-time 180 \
+      --output "${output_tmp}" \
+      "${asset_url}"; then
+      mv "${output_tmp}" "${output_path}"
+      return 0
+    fi
+    rm -f "${output_tmp}"
+  done
+  return 1
+}
+
+validate_facefusion_source() {
+  local source_path="$1"
+
+  FACEFUSION_SOURCE_PATH="${source_path}" python - <<'PY'
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+root = Path.cwd()
+if str(root) not in sys.path:
+    sys.path.insert(0, str(root))
+
+from facefusion.hash_helper import validate_hash
+
+
+source_path = os.environ["FACEFUSION_SOURCE_PATH"]
+if not validate_hash(source_path):
+    raise SystemExit(f"invalid FaceFusion source: {source_path}")
+print(f"validated {source_path}", flush=True)
+PY
+}
+
+prefetch_facefusion_fan_68_5() {
+  if [[ "${FACEFUSION_PREFETCH_FAN_68_5}" != "1" ]]; then
+    log_step "Skipping FaceFusion fan_68_5 prefetch"
+    return
+  fi
+
+  log_step "Prefetching FaceFusion fan_68_5 asset"
+  cd "${FACEFUSION_ROOT}"
+  . .venv/bin/activate
+
+  local model_dir="${FACEFUSION_ROOT}/.assets/models"
+  local hash_path="${model_dir}/fan_68_5.hash"
+  local source_path="${model_dir}/fan_68_5.onnx"
+  local github_base="https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0"
+  local huggingface_base="https://huggingface.co/facefusion/models-3.0.0/resolve/main"
+  local max_attempts
+  max_attempts="$((${FACEFUSION_PREWARM_RETRIES} > 0 ? ${FACEFUSION_PREWARM_RETRIES} : 1))"
+
+  mkdir -p "${model_dir}"
+
+  for attempt in $(seq 1 "${max_attempts}"); do
+    if download_facefusion_asset \
+      "${hash_path}" \
+      "${github_base}/fan_68_5.hash" \
+      "${huggingface_base}/fan_68_5.hash" && \
+      download_facefusion_asset \
+        "${source_path}" \
+        "${github_base}/fan_68_5.onnx" \
+        "${huggingface_base}/fan_68_5.onnx" && \
+      validate_facefusion_source "${source_path}"; then
+      return
+    fi
+
+    if [[ "${attempt}" == "${max_attempts}" ]]; then
+      echo "Failed to prefetch FaceFusion fan_68_5 after ${max_attempts} attempts" >&2
+      exit 1
+    fi
+    rm -f "${hash_path}" "${source_path}"
+    sleep "${attempt}"
+  done
+}
+
 prewarm_facefusion_models() {
   if [[ "${FACEFUSION_PREWARM_MODELS}" != "1" ]]; then
     log_step "Skipping FaceFusion model prewarm"
     return
   fi
+  prefetch_facefusion_fan_68_5
   log_step "Prewarming FaceFusion model assets"
   cd "${FACEFUSION_ROOT}"
   . .venv/bin/activate
