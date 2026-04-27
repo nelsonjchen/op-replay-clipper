@@ -4,6 +4,7 @@ import argparse
 from collections.abc import Mapping
 import datetime
 import importlib
+import json
 import logging
 import math
 import os
@@ -12,6 +13,8 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,7 +68,7 @@ UI_ALT_TELEMETRY_WIDTH_RATIO = 0.30
 UI_ALT_TELEMETRY_MIN_WIDTH = 420
 UI_ALT_TELEMETRY_MAX_WIDTH = 640
 UI_ALT_CAMERA_MIN_WIDTH = 480
-UI_ALT_HEADER_RESERVED_HEIGHT = 124
+UI_ALT_HEADER_RESERVED_HEIGHT = 150
 UI_ALT_STACKED_EXTRA_HEIGHT_RATIO = 0.30
 UI_ALT_STACKED_MIN_EXTRA_HEIGHT = 240
 UI_ALT_STACKED_MAX_EXTRA_HEIGHT = 420
@@ -82,6 +85,10 @@ MODEL_INPUT_OVERLAY_COLOR = (0, 255, 204, 255)
 MODEL_INPUT_OVERLAY_SHADOW = (0, 0, 0, 180)
 MODEL_INPUT_OVERLAY_LINE_WIDTH = 2.0
 MODEL_INPUT_OVERLAY_SHADOW_WIDTH = 6.0
+MODEL_COMMIT_PATHS = (
+    "selfdrive/modeld/models/driving_vision.onnx",
+    "selfdrive/modeld/models/driving_policy.onnx",
+)
 INF_POINT = (1000.0, 0.0, 0.0)
 FUTURE_BACKFILL_SERVICES = ("carParams",)
 logger = logging.getLogger("big_ui_engine")
@@ -477,12 +484,13 @@ def format_route_timer_text(route_seconds: float, *, prefix: str = "") -> str:
     return f"{prefix}{timer_text}" if prefix else timer_text
 
 
-def _ui_alt_git_metadata_text(metadata: dict[str, str] | None) -> str:
+def _ui_alt_git_metadata_text(metadata: dict[str, str] | None, *, include_model_commit: bool = True) -> str:
     if not metadata:
         return ""
     remote = str(metadata.get("remote", "") or "unknown").strip()
     branch = str(metadata.get("branch", "") or "unknown")
     commit = str(metadata.get("commit", "") or "unknown")
+    model_commit = _format_model_commit_text(metadata, include_title=True) if include_model_commit else ""
     dirty = str(metadata.get("dirty", "") or "unknown")
     if dirty == "false":
         dirty_text = "clean"
@@ -490,7 +498,20 @@ def _ui_alt_git_metadata_text(metadata: dict[str, str] | None) -> str:
         dirty_text = "dirty"
     else:
         dirty_text = f"dirty {dirty}"
-    return f"{remote}  •  {branch}  •  {commit}  •  {dirty_text}"
+    return "  •  ".join(part for part in [remote, branch, commit, model_commit, dirty_text] if part)
+
+
+def _format_model_commit_text(metadata: Mapping[str, object] | None, *, include_title: bool = False) -> str:
+    if not metadata:
+        return ""
+    model_commit = str(metadata.get("model_commit", "") or "").strip()
+    if not model_commit or model_commit == "unknown":
+        return ""
+    if include_title:
+        title = str(metadata.get("model_commit_title", "") or "").strip()
+        if title and title != "unknown":
+            return f"Model Commit: {model_commit} - {title}"
+    return f"Model Commit: {model_commit}"
 
 
 def _device_type_display_label(device_type: object) -> str:
@@ -579,6 +600,142 @@ def _route_start_utc_millis_from_route_info(route_info: Mapping[str, object] | N
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=datetime.timezone.utc)
     return str(int(round(parsed.astimezone(datetime.timezone.utc).timestamp() * 1000.0)))
+
+
+def _openpilot_root_candidates() -> list[Path]:
+    candidates: list[Path] = []
+    for raw_path in [os.environ.get("OPENPILOT_ROOT"), os.getcwd(), *sys.path]:
+        if not raw_path:
+            continue
+        try:
+            path = Path(raw_path).expanduser().resolve()
+        except (OSError, RuntimeError):
+            continue
+        if path not in candidates:
+            candidates.append(path)
+    return candidates
+
+
+def _find_openpilot_checkout_root() -> Path | None:
+    for candidate in _openpilot_root_candidates():
+        if all((candidate / model_path).exists() for model_path in MODEL_COMMIT_PATHS):
+            return candidate
+    return None
+
+
+def _git_output(args: list[str], *, cwd: Path) -> str:
+    env = os.environ.copy()
+    env.setdefault("GIT_OPTIONAL_LOCKS", "0")
+    result = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=True,
+        timeout=8,
+    )
+    return result.stdout.decode("utf-8", errors="replace").strip()
+
+
+def _normalize_git_remote(remote: object) -> str:
+    normalized = str(remote or "").strip()
+    if not normalized:
+        return "https://github.com/commaai/openpilot.git"
+    if normalized.startswith("git@github.com:"):
+        return "https://github.com/" + normalized.removeprefix("git@github.com:").removesuffix(".git")
+    if normalized.startswith("github.com/"):
+        return "https://" + normalized
+    return normalized
+
+
+def _github_repo_from_remote(remote: object) -> tuple[str, str] | None:
+    normalized = _normalize_git_remote(remote)
+    parsed = urllib.parse.urlparse(normalized)
+    if parsed.netloc not in {"github.com", "www.github.com"}:
+        return None
+    path_parts = [part for part in parsed.path.strip("/").split("/") if part]
+    if len(path_parts) < 2:
+        return None
+    repo = path_parts[1].removesuffix(".git")
+    return path_parts[0], repo
+
+
+def _github_repo_candidates(remote: object) -> list[tuple[str, str]]:
+    candidates: list[tuple[str, str]] = []
+    remote_repo = _github_repo_from_remote(remote)
+    if remote_repo:
+        candidates.append(remote_repo)
+    canonical_repo = ("commaai", "openpilot")
+    if canonical_repo not in candidates:
+        candidates.append(canonical_repo)
+    return candidates
+
+
+def _model_commit_from_local_git(source_commit: object) -> tuple[str, str] | None:
+    source = str(source_commit or "").strip()
+    if not source or source == "unknown":
+        return None
+    openpilot_root = _find_openpilot_checkout_root()
+    if not openpilot_root:
+        return None
+
+    try:
+        output = _git_output(
+            ["log", "-1", "--format=%H%x00%s", source, "--", *MODEL_COMMIT_PATHS],
+            cwd=openpilot_root,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return None
+    if not output:
+        return None
+    commit, _, subject = output.partition("\x00")
+    if not commit:
+        return None
+    return commit[:8], subject.strip()
+
+
+def _model_commit_from_github_api(source_commit: object, remote: object) -> tuple[str, str] | None:
+    source = str(source_commit or "").strip()
+    if not source or source == "unknown":
+        return None
+
+    best_commit: tuple[str, str, str] | None = None
+    for owner, name in _github_repo_candidates(remote):
+        for model_path in MODEL_COMMIT_PATHS:
+            query = urllib.parse.urlencode({"sha": source, "path": model_path, "per_page": "1"})
+            url = f"https://api.github.com/repos/{owner}/{name}/commits?{query}"
+            request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "op-replay-clipper"})
+            try:
+                with urllib.request.urlopen(request, timeout=8) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+            except (OSError, TimeoutError, ValueError):
+                continue
+            if not isinstance(payload, list) or not payload:
+                continue
+            item = payload[0]
+            sha = str(item.get("sha") or "")
+            subject = str(((item.get("commit") or {}).get("message") or "").splitlines()[0])
+            date = str(((item.get("commit") or {}).get("committer") or {}).get("date") or "")
+            if sha and (best_commit is None or date > best_commit[0]):
+                best_commit = (date, sha, subject)
+        if best_commit:
+            _, sha, subject = best_commit
+            return sha[:8], subject.strip()
+    return None
+
+
+def resolve_model_commit_metadata(source_commit: object, remote: object) -> dict[str, str]:
+    resolved = _model_commit_from_local_git(source_commit)
+    if resolved is None:
+        resolved = _model_commit_from_github_api(source_commit, remote)
+    if resolved is None:
+        return {}
+    model_commit, model_commit_title = resolved
+    return {
+        "model_commit": model_commit,
+        "model_commit_title": model_commit_title,
+    }
 
 
 def _ui_alt_dates_text(metadata: Mapping[str, object] | None) -> str:
@@ -1243,34 +1400,42 @@ def load_route_metadata(route) -> dict[str, str]:
     path = next((item for item in route.log_paths() if item), None)
     if not path:
         platform = route_info.get("platform") or "unknown"
-        return {
+        commit = str(route_info.get("git_commit") or "unknown")
+        metadata = {
             "route": route.name.canonical_name,
             "device_type": str(route_info.get("device_type") or platform),
             "platform": str(platform),
             "remote": route_info.get("git_remote") or "unknown",
             "branch": route_info.get("git_branch") or "unknown",
-            "commit": str(route_info.get("git_commit") or "unknown")[:8],
+            "commit": commit[:8],
             "commit_date": str(route_info.get("git_commit_date") or ""),
             "route_start_utc_millis": _route_start_utc_millis_from_route_info(route_info),
-            "dirty": str(route_info.get("dirty", "unknown")).lower(),
+            "dirty": str(route_info.get("dirty", route_info.get("git_dirty", "unknown"))).lower(),
         }
+        metadata.update(resolve_model_commit_metadata(commit, metadata["remote"]))
+        return metadata
     lr = LogReader(path)
     init_data = lr.first("initData")
     car_params = lr.first("carParams")
 
     platform = route_info.get("platform") or getattr(car_params, "carFingerprint", None) or "unknown"
+    build_commit = init_data.gitCommit or "unknown"
+    source_commit = getattr(init_data, "gitSrcCommit", "") or route_info.get("git_commit") or build_commit
+    source_commit_date = getattr(init_data, "gitSrcCommitDate", "") or route_info.get("git_commit_date") or init_data.gitCommitDate or ""
 
-    return {
+    metadata = {
         "route": route.name.canonical_name,
         "device_type": str(getattr(init_data, "deviceType", None) or "unknown"),
         "platform": str(platform),
         "remote": init_data.gitRemote or route_info.get("git_remote") or "unknown",
         "branch": init_data.gitBranch or route_info.get("git_branch") or "unknown",
-        "commit": (init_data.gitCommit or route_info.get("git_commit") or "unknown")[:8],
-        "commit_date": init_data.gitCommitDate or route_info.get("git_commit_date") or "",
+        "commit": source_commit[:8],
+        "commit_date": source_commit_date,
         "route_start_utc_millis": _route_start_utc_millis_from_route_info(route_info),
         "dirty": str(init_data.dirty).lower(),
     }
+    metadata.update(resolve_model_commit_metadata(source_commit, metadata["remote"]))
+    return metadata
 
 
 def _reapply_hidden_window_flag(*, headless: bool) -> None:
@@ -1673,6 +1838,7 @@ def render_ui_alt_header(gui_app, font, big, metadata, title, route_seconds, sho
     header_route_y = top_y + (32 if big else 28)
     header_dates_y = top_y + (58 if big else 50)
     header_git_y = top_y + (80 if big else 68)
+    header_model_commit_y = top_y + (104 if big else 88)
     medium_font = font
     bold_font = font
     if hasattr(gui_app, "font"):
@@ -1711,7 +1877,8 @@ def render_ui_alt_header(gui_app, font, big, metadata, title, route_seconds, sho
         )
         route_label = str(metadata.get("route", "") or "")
         dates_text = _ui_alt_dates_text(metadata)
-        git_text = _ui_alt_git_metadata_text(metadata)
+        git_text = _ui_alt_git_metadata_text(metadata, include_model_commit=False)
+        model_commit_text = _format_model_commit_text(metadata, include_title=True)
         if meta_text:
             meta_text, meta_size = _fit_overlay_text_to_width(
                 text=meta_text,
@@ -1764,7 +1931,7 @@ def render_ui_alt_header(gui_app, font, big, metadata, title, route_seconds, sho
             git_text, git_size = _fit_overlay_text_to_width(
                 text=git_text,
                 font=medium_font,
-                font_size=20 if big else 17,
+                font_size=18 if big else 16,
                 max_width=right_col_width,
                 min_font_size=14,
             )
@@ -1775,6 +1942,22 @@ def render_ui_alt_header(gui_app, font, big, metadata, title, route_seconds, sho
                 font=medium_font,
                 font_size=git_size,
                 color=white,
+            )
+        if model_commit_text:
+            model_commit_text, model_commit_size = _fit_overlay_text_to_width(
+                text=model_commit_text,
+                font=medium_font,
+                font_size=18 if big else 15,
+                max_width=right_col_width,
+                min_font_size=12,
+            )
+            _draw_right_aligned_overlay_text(
+                right_x=right_x,
+                y=header_model_commit_y,
+                text=model_commit_text,
+                font=medium_font,
+                font_size=model_commit_size,
+                color=dim,
             )
     elif title and show_time:
         _draw_right_aligned_overlay_text(
@@ -1816,15 +1999,18 @@ def render_overlays(gui_app, font, big, metadata, title, route_seconds, show_met
 
     if show_metadata and metadata:
         text = ", ".join(
-            [
+            item
+            for item in [
                 f"route: {metadata['route']}",
                 _device_type_display_label(metadata["device_type"]),
                 metadata["platform"],
                 metadata["remote"],
                 metadata["branch"],
                 metadata["commit"],
+                _format_model_commit_text(metadata),
                 f"Dirty: {metadata['dirty']}",
             ]
+            if item
         )
         margin = 2 * (time_width + (2 * TEXT_BOX_PADDING_X) + time_edge_margin if show_time else 20)
         max_width = gui_app.width - margin

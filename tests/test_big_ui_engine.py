@@ -186,6 +186,7 @@ def test_load_route_metadata_falls_back_to_car_fingerprint_when_platform_missing
     monkeypatch.setitem(sys.modules, "openpilot.tools.lib", types.ModuleType("openpilot.tools.lib"))
     monkeypatch.setitem(sys.modules, "openpilot.tools.lib.logreader", SimpleNamespace(LogReader=FakeLogReader))
     monkeypatch.setitem(sys.modules, "openpilot.tools.lib.route", SimpleNamespace(Segment=FakeSegment))
+    monkeypatch.setattr(big_ui_engine, "resolve_model_commit_metadata", lambda *_args: {})
 
     route = SimpleNamespace(
         log_paths=lambda: ["/tmp/fake-rlog.zst"],
@@ -200,6 +201,57 @@ def test_load_route_metadata_falls_back_to_car_fingerprint_when_platform_missing
     assert metadata["branch"] == "nightly"
     assert metadata["commit"] == "deadbeef"
     assert metadata["commit_date"] == "'1732924800 2024-11-30 00:00:00 +0000'"
+
+
+def test_load_route_metadata_resolves_model_commit_from_source_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    resolver_calls: list[tuple[str, str]] = []
+
+    class FakeLogReader:
+        def __init__(self, _path: str) -> None:
+            pass
+
+        def first(self, which: str):
+            if which == "initData":
+                return SimpleNamespace(
+                    deviceType="tizi",
+                    gitRemote="github.com/commaai/openpilot",
+                    gitBranch="nightly",
+                    gitCommit="buildcommitcafebabe",
+                    gitSrcCommit="sourcecommitcafebabe",
+                    gitCommitDate="2026-04-23T02:57:59",
+                    dirty=False,
+                )
+            if which == "carParams":
+                return SimpleNamespace(carFingerprint="TOYOTA_COROLLA_TSS2")
+            return None
+
+    class FakeSegment:
+        @staticmethod
+        def _get_route_metadata(_canonical_name: str) -> dict[str, str]:
+            return {}
+
+    def fake_resolve(source_commit: str, remote: str) -> dict[str, str]:
+        resolver_calls.append((source_commit, remote))
+        return {"model_commit": "4988a62b", "model_commit_title": 'Revert "POP model (#37727)" (#37871)'}
+
+    monkeypatch.setitem(sys.modules, "openpilot", types.ModuleType("openpilot"))
+    monkeypatch.setitem(sys.modules, "openpilot.tools", types.ModuleType("openpilot.tools"))
+    monkeypatch.setitem(sys.modules, "openpilot.tools.lib", types.ModuleType("openpilot.tools.lib"))
+    monkeypatch.setitem(sys.modules, "openpilot.tools.lib.logreader", SimpleNamespace(LogReader=FakeLogReader))
+    monkeypatch.setitem(sys.modules, "openpilot.tools.lib.route", SimpleNamespace(Segment=FakeSegment))
+    monkeypatch.setattr(big_ui_engine, "resolve_model_commit_metadata", fake_resolve)
+
+    route = SimpleNamespace(
+        log_paths=lambda: ["/tmp/fake-rlog.zst"],
+        name=SimpleNamespace(canonical_name="dongle|route"),
+    )
+
+    metadata = big_ui_engine.load_route_metadata(route)
+
+    assert resolver_calls == [("sourcecommitcafebabe", "github.com/commaai/openpilot")]
+    assert metadata["commit"] == "sourceco"
+    assert metadata["model_commit"] == "4988a62b"
+    assert metadata["model_commit_title"] == 'Revert "POP model (#37727)" (#37871)'
 
 
 def test_reapply_hidden_window_flag_sets_hidden_state(monkeypatch) -> None:
@@ -268,6 +320,33 @@ def test_ui_alt_dates_text_uses_no_gps_fallback_when_clip_start_missing() -> Non
     )
 
 
+def test_resolve_model_commit_metadata_uses_local_git(monkeypatch) -> None:
+    monkeypatch.setattr(big_ui_engine, "_find_openpilot_checkout_root", lambda: big_ui_engine.REPO_ROOT)
+    monkeypatch.setattr(
+        big_ui_engine,
+        "_git_output",
+        lambda *args, **kwargs: '4988a62b310b536fb5336c35151eb2df56e37d97\x00Revert "POP model (#37727)" (#37871)',
+    )
+
+    assert big_ui_engine.resolve_model_commit_metadata("7d71354", "github.com/commaai/openpilot") == {
+        "model_commit": "4988a62b",
+        "model_commit_title": 'Revert "POP model (#37727)" (#37871)',
+    }
+
+
+def test_github_repo_from_remote_accepts_comma_route_remote() -> None:
+    assert big_ui_engine._github_repo_from_remote("github.com/commaai/openpilot") == ("commaai", "openpilot")
+    assert big_ui_engine._github_repo_from_remote("git@github.com:commaai/openpilot.git") == ("commaai", "openpilot")
+
+
+def test_github_repo_candidates_try_fork_before_comma_canonical() -> None:
+    assert big_ui_engine._github_repo_candidates("https://github.com/someone/openpilot.git") == [
+        ("someone", "openpilot"),
+        ("commaai", "openpilot"),
+    ]
+    assert big_ui_engine._github_repo_candidates("github.com/commaai/openpilot") == [("commaai", "openpilot")]
+
+
 def test_load_route_metadata_falls_back_without_uploaded_logs(monkeypatch) -> None:
     class FakeSegment:
         @staticmethod
@@ -285,6 +364,7 @@ def test_load_route_metadata_falls_back_without_uploaded_logs(monkeypatch) -> No
     monkeypatch.setitem(sys.modules, "openpilot.tools.lib", types.ModuleType("openpilot.tools.lib"))
     monkeypatch.setitem(sys.modules, "openpilot.tools.lib.logreader", SimpleNamespace(LogReader=None))
     monkeypatch.setitem(sys.modules, "openpilot.tools.lib.route", SimpleNamespace(Segment=FakeSegment))
+    monkeypatch.setattr(big_ui_engine, "resolve_model_commit_metadata", lambda *_args: {})
 
     route = SimpleNamespace(
         log_paths=lambda: [],
@@ -303,9 +383,9 @@ def test_load_route_metadata_falls_back_without_uploaded_logs(monkeypatch) -> No
 def test_build_layout_rects_alt_device_uses_sidebar_telemetry() -> None:
     rects = big_ui_engine.build_layout_rects(width=1920, height=1080, layout_mode="alt", ui_alt_variant="device")
 
-    assert rects.road_rect == (0, 124, 1344, 956)
+    assert rects.road_rect == (0, 150, 1344, 930)
     assert rects.wide_rect is None
-    assert rects.telemetry_rect == (1344, 124, 576, 956)
+    assert rects.telemetry_rect == (1344, 150, 576, 930)
 
 
 def test_build_layout_rects_alt_stacked_forward_over_wide_splits_camera_area() -> None:
@@ -316,9 +396,9 @@ def test_build_layout_rects_alt_stacked_forward_over_wide_splits_camera_area() -
         ui_alt_variant="stacked_forward_over_wide",
     )
 
-    assert rects.road_rect == (0, 124, 1344, 478)
-    assert rects.wide_rect == (0, 602, 1344, 478)
-    assert rects.telemetry_rect == (1344, 124, 576, 956)
+    assert rects.road_rect == (0, 150, 1344, 465)
+    assert rects.wide_rect == (0, 615, 1344, 465)
+    assert rects.telemetry_rect == (1344, 150, 576, 930)
 
 
 def test_build_layout_rects_alt_stacked_wide_over_forward_swaps_camera_order() -> None:
@@ -329,9 +409,9 @@ def test_build_layout_rects_alt_stacked_wide_over_forward_swaps_camera_order() -
         ui_alt_variant="stacked_wide_over_forward",
     )
 
-    assert rects.road_rect == (0, 602, 1344, 478)
-    assert rects.wide_rect == (0, 124, 1344, 478)
-    assert rects.telemetry_rect == (1344, 124, 576, 956)
+    assert rects.road_rect == (0, 615, 1344, 465)
+    assert rects.wide_rect == (0, 150, 1344, 465)
+    assert rects.telemetry_rect == (1344, 150, 576, 930)
 
 
 def test_compute_ui_alt_dual_canvas_height_preserves_full_height_views() -> None:
@@ -1503,6 +1583,8 @@ def test_render_overlays_includes_device_type_in_metadata(monkeypatch) -> None:
         "remote": "commaai",
         "branch": "master",
         "commit": "deadbeef",
+        "model_commit": "4988a62b",
+        "model_commit_title": 'Revert "POP model (#37727)" (#37871)',
         "dirty": "false",
     }
 
@@ -1518,6 +1600,8 @@ def test_render_overlays_includes_device_type_in_metadata(monkeypatch) -> None:
     )
 
     assert any("mici (comma 4)" in text for text in calls)
+    assert any('Model Commit: 4988a62b' in text for text in calls)
+    assert not any('Revert "POP model (#37727)" (#37871)' in text for text in calls)
 
 
 def test_ui_alt_git_metadata_text_preserves_full_remote_url() -> None:
@@ -1531,6 +1615,22 @@ def test_ui_alt_git_metadata_text_preserves_full_remote_url() -> None:
             }
         )
         == "https://github.com/commaai/openpilot.git  •  release3-staging  •  deadbeef  •  clean"
+    )
+
+
+def test_ui_alt_git_metadata_text_includes_model_commit() -> None:
+    assert (
+        big_ui_engine._ui_alt_git_metadata_text(
+            {
+                "remote": "github.com/commaai/openpilot",
+                "branch": "nightly",
+                "commit": "7d71354",
+                "model_commit": "4988a62b",
+                "model_commit_title": 'Revert "POP model (#37727)" (#37871)',
+                "dirty": "false",
+            }
+        )
+        == 'github.com/commaai/openpilot  •  nightly  •  7d71354  •  Model Commit: 4988a62b - Revert "POP model (#37727)" (#37871)  •  clean'
     )
 
 
