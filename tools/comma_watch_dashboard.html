@@ -271,6 +271,18 @@
         margin-bottom: 8px;
       }
 
+      .incident-meta {
+        display: grid;
+        gap: 8px;
+        justify-items: end;
+      }
+
+      .chip-block {
+        display: grid;
+        gap: 4px;
+        justify-items: end;
+      }
+
       .incident-route {
         font-weight: 730;
       }
@@ -925,7 +937,8 @@
         .queue-primary,
         .queue-group-head,
         .route-head,
-        .section-head {
+        .section-head,
+        .incident-top {
           flex-direction: column;
           align-items: flex-start;
         }
@@ -933,6 +946,11 @@
         .device-status {
           justify-items: start;
           text-align: left;
+        }
+
+        .incident-meta,
+        .chip-block {
+          justify-items: start;
         }
       }
 
@@ -1088,11 +1106,9 @@
         const card = document.createElement("section");
         card.className = `incident-card ${window.is_active_phase_window ? "active-window" : ""}`;
 
-        const chips = [
-          `<span class="chip ${categoryClass(window.category)}">${categoryLabel(window.category)}</span>`,
-          `<span class="chip phase">${titleCase(window.phase_membership || "none")}</span>`,
-          `<span class="chip neutral">${titleCase(window.ready_state)}</span>`,
-        ];
+        const reasonChip = `<span class="chip phase">${titleCase(window.phase_membership || "none")}</span>`;
+        const typeChip = `<span class="chip ${categoryClass(window.category)}">${categoryLabel(window.category)}</span>`;
+        const stateChip = `<span class="chip neutral">${titleCase(window.ready_state)}</span>`;
 
         const segmentPills = (window.segment_statuses || [])
           .map((status, index) => `<span class="${segmentPillClass(status)}">#${status.segment}</span>`)
@@ -1136,7 +1152,20 @@
               <div class="incident-route">${window.route_id}</div>
               <div class="incident-time">${fmtTime(window.route_start_time)}</div>
             </div>
-            <div class="chip-row">${chips.join("")}</div>
+            <div class="incident-meta">
+              <div class="chip-block">
+                <div class="inline-label">Reason</div>
+                <div class="chip-row">${reasonChip}</div>
+              </div>
+              <div class="chip-block">
+                <div class="inline-label">Incident</div>
+                <div class="chip-row">${typeChip}</div>
+              </div>
+              <div class="chip-block">
+                <div class="inline-label">State</div>
+                <div class="chip-row">${stateChip}</div>
+              </div>
+            </div>
           </div>
           <div class="incident-status">${incidentStatusLine(window)}</div>
           <div class="segment-pill-row">${segmentPills}</div>
@@ -1157,8 +1186,9 @@
         wrapper.className = "incident-explainer";
         wrapper.innerHTML = `
           <div class="incident-explainer-copy">
-            Each segment card shows the exact files needed to make that minute clip-usable. Every row is one file:
-            forward camera, route log, wide camera, and driver camera.
+            Each card is one incident window. The Reason chip tells you why the watcher picked this window, the
+            Incident chip tells you what kind of event it is, and the State chip tells you whether that window is
+            complete or still being assembled. Inside each segment card, every row is one required file.
           </div>
           <div class="file-key">
             <span class="key-chip"><strong>Fwd</strong> forward camera</span>
