@@ -23,12 +23,15 @@ DEFAULT_FILE_TYPES = ("cameras", "logs", "ecameras", "dcameras")
 ONLINE_DEVICE_WINDOW_SECONDS = 120
 RECENT_BOOKMARK_COUNT = 5
 ALERT_LOOKBACK_SEGMENTS = 2
+DEFAULT_STATE_PATH = "/tmp/comma-watch-state.json"
 FILE_TYPE_NAMES = {
     "cameras": ("fcamera.hevc",),
     "dcameras": ("dcamera.hevc",),
     "ecameras": ("ecamera.hevc",),
     "logs": ("rlog.bz2", "rlog.zst"),
 }
+DISPLAY_FILE_ORDER = ("fcamera", "rlog", "ecamera", "dcamera")
+DM_DISPLAY_FILE_ORDER = ("fcamera", "rlog", "dcamera", "ecamera")
 BOOKMARK_EVENT_TYPES = {"user_flag", "user_bookmark", "bookmark"}
 USER_PROMPT_ALERT_STATUSES = {1, "1", "userPrompt", "user_prompt"}
 DM_ALERT_HINTS = (
@@ -40,6 +43,20 @@ DM_ALERT_HINTS = (
     "predriverunresponsive",
     "promptdriver",
 )
+PHASE_REASON_LABELS = {
+    "recent_bookmarks": "recent bookmark",
+    "older_bookmarks": "older bookmark",
+    "dm_alerts": "DM alert",
+    "alerts": "alert",
+    "bookmark_fill_recent": "bookmark fill",
+    "bookmark_fill_older": "bookmark fill",
+}
+FILE_KIND_BY_TYPE = {
+    "cameras": ("fcamera",),
+    "logs": ("rlog",),
+    "ecameras": ("ecamera",),
+    "dcameras": ("dcamera",),
+}
 
 
 @dataclass(frozen=True)
@@ -100,6 +117,20 @@ class PriorityEvents:
 class RouteBookmarkFill:
     recent_fill_targets: list[SegmentTarget]
     older_fill_targets: list[SegmentTarget]
+
+
+@dataclass(frozen=True)
+class QueueEntry:
+    path: str
+    route_id: str
+    segment: int
+    filename: str
+    file_kind: str | None
+    current: bool
+    progress: float
+    retry_count: int
+    priority: int | None
+    upload_id: str | None
 
 
 class CommaApi:
@@ -231,6 +262,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Keep the upload queue clear until bookmarks/alerts exist, then keep only those uploads queued.",
     )
+    parser.add_argument(
+        "--state-path",
+        default=os.environ.get("COMMA_WATCH_STATE_PATH", DEFAULT_STATE_PATH),
+        help="Where to write the live watcher JSON state snapshot.",
+    )
     return parser.parse_args()
 
 
@@ -254,6 +290,42 @@ def parse_route_start_utc(start_time: str | None) -> datetime | None:
 
 def route_id_from_fullname(fullname: str) -> str:
     return fullname.split("|", 1)[1]
+
+
+def parse_segment_path(raw_path: str) -> tuple[str, int, str] | None:
+    path = Path(raw_path)
+    segment_dir = path.parent.name
+    if not segment_dir or "--" not in segment_dir:
+        return None
+    route_id, segment_text = segment_dir.rsplit("--", 1)
+    try:
+        segment = int(segment_text)
+    except ValueError:
+        return None
+    return route_id, segment, path.name
+
+
+def file_kind_for_filename(filename: str) -> str | None:
+    if filename == "fcamera.hevc":
+        return "fcamera"
+    if filename == "dcamera.hevc":
+        return "dcamera"
+    if filename == "ecamera.hevc":
+        return "ecamera"
+    if filename in {"rlog.zst", "rlog.bz2"}:
+        return "rlog"
+    if filename.startswith("qlog"):
+        return "qlog"
+    if filename.startswith("qcamera"):
+        return "qcamera"
+    return None
+
+
+def write_state_snapshot(state_path: Path, payload: dict[str, Any]) -> None:
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = state_path.with_suffix(f"{state_path.suffix}.tmp")
+    temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temp_path.replace(state_path)
 
 
 def find_device(devices: Iterable[dict[str, Any]], alias: str) -> Device:
@@ -631,6 +703,28 @@ def normalize_uploaded_paths(filelist: dict[str, list[str]]) -> set[str]:
     return uploaded
 
 
+def build_route_file_inventory(filelist: dict[str, list[str]]) -> dict[tuple[str, int], dict[str, bool]]:
+    inventory: dict[tuple[str, int], dict[str, bool]] = {}
+    for urls in filelist.values():
+        for url in urls:
+            parts = url.split("?")[0].split("/")
+            if len(parts) < 3:
+                continue
+            route_id = parts[-3]
+            segment_text = parts[-2]
+            filename = parts[-1]
+            try:
+                segment = int(segment_text)
+            except ValueError:
+                continue
+            kind = file_kind_for_filename(filename)
+            if kind is None:
+                continue
+            key = (route_id, segment)
+            inventory.setdefault(key, empty_segment_files())[kind] = True
+    return inventory
+
+
 def normalize_queue_paths(online_queue: list[dict[str, Any]], offline_queue: list[dict[str, Any]]) -> set[str]:
     queued: set[str] = set()
 
@@ -674,6 +768,33 @@ def ordered_online_queue_paths(online_queue: list[dict[str, Any]]) -> list[str]:
         if normalized is not None:
             ordered_paths.append(normalized)
     return ordered_paths
+
+
+def summarize_online_queue(online_queue: list[dict[str, Any]]) -> list[QueueEntry]:
+    entries: list[QueueEntry] = []
+    for item in online_queue:
+        normalized = normalize_online_queue_item_path(item)
+        if normalized is None:
+            continue
+        parsed = parse_segment_path(normalized)
+        if parsed is None:
+            continue
+        route_id, segment, filename = parsed
+        entries.append(
+            QueueEntry(
+                path=normalized,
+                route_id=route_id,
+                segment=segment,
+                filename=filename,
+                file_kind=file_kind_for_filename(filename),
+                current=bool(item.get("current")),
+                progress=float(item.get("progress") or 0.0),
+                retry_count=int(item.get("retry_count") or 0),
+                priority=item.get("priority"),
+                upload_id=item.get("id"),
+            )
+        )
+    return entries
 
 
 def desired_pending_paths(desired_paths: Iterable[str], uploaded_paths: set[str]) -> list[str]:
@@ -753,6 +874,350 @@ def athena_enqueue_order(paths: Iterable[str]) -> list[str]:
     return list(reversed(list(paths)))
 
 
+def file_kinds_for_file_types(file_types: Iterable[str], *, dm_boost: bool = False) -> list[str]:
+    order = DM_DISPLAY_FILE_ORDER if dm_boost else DISPLAY_FILE_ORDER
+    selected = {
+        kind
+        for file_type in file_types
+        for kind in FILE_KIND_BY_TYPE.get(file_type, ())
+    }
+    return [kind for kind in order if kind in selected]
+
+
+def phase_reason_label(phase_name: str | None) -> str | None:
+    if phase_name is None:
+        return None
+    return PHASE_REASON_LABELS.get(phase_name, phase_name.replace("_", " "))
+
+
+def empty_segment_files() -> dict[str, bool]:
+    return {name: False for name in (*DISPLAY_FILE_ORDER, "qcamera", "qlog")}
+
+
+def phase_segment_lookup(phase_specs: Iterable[tuple[str, list[SegmentTarget]]]) -> dict[tuple[str, int], dict[str, Any]]:
+    lookup: dict[tuple[str, int], dict[str, Any]] = {}
+    for phase_name, targets in phase_specs:
+        for index, target in enumerate(targets, start=1):
+            key = (target.route_id, target.segment)
+            lookup.setdefault(
+                key,
+                {
+                    "phase": phase_name,
+                    "rank": index,
+                },
+            )
+    return lookup
+
+
+def route_segment_rows(
+    *,
+    route: Route,
+    route_inventory: dict[tuple[str, int], dict[str, bool]],
+    queue_items_by_segment: dict[tuple[str, int], list[QueueEntry]],
+    segment_phase_lookup: dict[tuple[str, int], dict[str, Any]],
+    active_phase_targets: list[SegmentTarget],
+    bookmark_segments: set[int],
+    dm_alert_segments: set[int],
+    alert_segments: set[int],
+) -> list[dict[str, Any]]:
+    active_phase_keys = {(target.route_id, target.segment): index for index, target in enumerate(active_phase_targets, start=1)}
+    rows: list[dict[str, Any]] = []
+    for segment in range(route.maxqlog + 1):
+        key = (route.route_id, segment)
+        files = dict(route_inventory.get(key, empty_segment_files()))
+        queue_items = queue_items_by_segment.get(key, [])
+        queued_file_kinds = [item.file_kind for item in queue_items if item.file_kind]
+        active_file_kinds = [item.file_kind for item in queue_items if item.current and item.file_kind]
+        phase_info = segment_phase_lookup.get(key)
+        rows.append(
+            {
+                "segment": segment,
+                "files": files,
+                "bookmark": segment in bookmark_segments,
+                "dm_alert": segment in dm_alert_segments,
+                "alert": segment in alert_segments,
+                "phase": phase_info["phase"] if phase_info else None,
+                "phase_rank": phase_info["rank"] if phase_info else None,
+                "active_phase_rank": active_phase_keys.get(key),
+                "queued_file_kinds": queued_file_kinds,
+                "active_file_kinds": active_file_kinds,
+                "queued_count": len(queue_items),
+                "active_count": sum(1 for item in queue_items if item.current),
+            }
+        )
+    return rows
+
+
+def build_watch_state(
+    *,
+    now_local: datetime,
+    window_start: datetime,
+    devices_state: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "generated_at": now_local.isoformat(),
+        "window_start": window_start.isoformat(),
+        "devices": devices_state,
+    }
+
+
+def segment_status_for_window(
+    *,
+    route_id: str,
+    segment: int,
+    required_file_order: list[str],
+    route_inventory: dict[tuple[str, int], dict[str, bool]],
+    queue_items_by_segment: dict[tuple[str, int], list[QueueEntry]],
+) -> dict[str, Any]:
+    files = route_inventory.get((route_id, segment), empty_segment_files())
+    queue_items = queue_items_by_segment.get((route_id, segment), [])
+
+    uploaded = [kind for kind in required_file_order if files.get(kind)]
+    active = []
+    queued = []
+    for kind in required_file_order:
+        if kind in uploaded:
+            continue
+        matching = [item for item in queue_items if item.file_kind == kind]
+        if any(item.current for item in matching):
+            active.append(kind)
+        elif matching:
+            queued.append(kind)
+    missing = [kind for kind in required_file_order if kind not in uploaded and kind not in active and kind not in queued]
+    return {
+        "segment": segment,
+        "uploaded_file_kinds": uploaded,
+        "queued_file_kinds": queued,
+        "active_file_kinds": active,
+        "missing_file_kinds": missing,
+        "is_complete": not active and not queued and not missing,
+    }
+
+
+def summarize_incident_completion(segment_statuses: list[dict[str, Any]]) -> dict[str, int]:
+    uploaded = sum(len(status["uploaded_file_kinds"]) for status in segment_statuses)
+    queued = sum(len(status["queued_file_kinds"]) for status in segment_statuses)
+    active = sum(len(status["active_file_kinds"]) for status in segment_statuses)
+    missing = sum(len(status["missing_file_kinds"]) for status in segment_statuses)
+    return {
+        "uploaded": uploaded,
+        "queued": queued,
+        "active": active,
+        "missing": missing,
+        "total": uploaded + queued + active + missing,
+    }
+
+
+def incident_ready_state(segment_statuses: list[dict[str, Any]]) -> str:
+    if segment_statuses and all(status["is_complete"] for status in segment_statuses):
+        return "complete"
+    if any(status["active_file_kinds"] for status in segment_statuses):
+        return "in_progress"
+    if any(status["queued_file_kinds"] for status in segment_statuses):
+        return "queued"
+    return "waiting"
+
+
+def first_incomplete_segment(segment_statuses: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for status in segment_statuses:
+        if status["is_complete"]:
+            continue
+        return {
+            "segment": status["segment"],
+            "missing_file_kinds": list(status["missing_file_kinds"]),
+            "queued_file_kinds": list(status["queued_file_kinds"]),
+            "active_file_kinds": list(status["active_file_kinds"]),
+        }
+    return None
+
+
+def currently_uploading_files(segment_statuses: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    files: list[dict[str, Any]] = []
+    for status in segment_statuses:
+        for kind in status["active_file_kinds"]:
+            files.append({"segment": status["segment"], "file_kind": kind})
+    return files
+
+
+def build_incident_windows(
+    *,
+    routes_by_id: dict[str, Route],
+    bookmark_events: list[SegmentEvent],
+    dm_alert_events: list[SegmentEvent],
+    alert_events: list[SegmentEvent],
+    recent_bookmark_targets: list[SegmentTarget],
+    older_bookmark_targets: list[SegmentTarget],
+    active_phase_name: str | None,
+    active_phase_targets: list[SegmentTarget],
+    recent_fill_targets: list[SegmentTarget],
+    older_fill_targets: list[SegmentTarget],
+    previous_segments: int,
+    next_segments: int,
+    alert_lookback_segments: int,
+    file_types: list[str],
+    route_inventories: dict[str, dict[tuple[str, int], dict[str, bool]]],
+    queue_items_by_segment: dict[tuple[str, int], list[QueueEntry]],
+) -> list[dict[str, Any]]:
+    active_phase_keys = {(target.route_id, target.segment) for target in active_phase_targets}
+    recent_fill_routes = {target.route_id for target in recent_fill_targets}
+    older_fill_routes = {target.route_id for target in older_fill_targets}
+    windows: list[dict[str, Any]] = []
+
+    bookmark_events_sorted = sorted(bookmark_events, key=lambda event: event.event_time)
+    recent_bookmark_events = list(reversed(bookmark_events_sorted[-RECENT_BOOKMARK_COUNT:]))
+    older_bookmark_events = bookmark_events_sorted[:-RECENT_BOOKMARK_COUNT]
+    dm_alert_events_sorted = sorted(dm_alert_events, key=lambda event: event.event_time)
+    alert_events_sorted = sorted(alert_events, key=lambda event: event.event_time)
+
+    def append_window(event: SegmentEvent, *, category: str, base_phase: str) -> None:
+        route = routes_by_id[event.route_id]
+        if category == "bookmark":
+            segment_order = prioritize_segments(
+                [event.segment],
+                previous_segments=previous_segments,
+                next_segments=next_segments,
+                max_segment=event.max_segment,
+            )
+            required_order = file_kinds_for_file_types(file_types)
+        elif category == "dm_alert":
+            segment_order = alert_segments_with_lookback(
+                event.segment,
+                previous_segments=alert_lookback_segments,
+                max_segment=event.max_segment,
+            )
+            required_order = file_kinds_for_file_types(file_types, dm_boost=True)
+        else:
+            segment_order = alert_segments_with_lookback(
+                event.segment,
+                previous_segments=alert_lookback_segments,
+                max_segment=event.max_segment,
+            )
+            required_order = file_kinds_for_file_types(file_types)
+
+        segment_statuses = [
+            segment_status_for_window(
+                route_id=event.route_id,
+                segment=segment,
+                required_file_order=required_order,
+                route_inventory=route_inventories.get(event.route_id, {}),
+                queue_items_by_segment=queue_items_by_segment,
+            )
+            for segment in segment_order
+        ]
+        completion = summarize_incident_completion(segment_statuses)
+        ready_state = incident_ready_state(segment_statuses)
+
+        phase_membership = base_phase
+        is_active_phase_window = any((event.route_id, segment) in active_phase_keys for segment in segment_order)
+        if category == "bookmark" and active_phase_name == "bookmark_fill_recent" and event.route_id in recent_fill_routes:
+            phase_membership = "bookmark_fill_recent"
+            is_active_phase_window = True
+        elif category == "bookmark" and active_phase_name == "bookmark_fill_older" and event.route_id in older_fill_routes:
+            phase_membership = "bookmark_fill_older"
+            is_active_phase_window = True
+        elif active_phase_name == base_phase and is_active_phase_window:
+            phase_membership = base_phase
+
+        windows.append(
+            {
+                "id": f"{category}:{event.route_id}:{event.segment}",
+                "category": category,
+                "route_id": event.route_id,
+                "event_time": event.event_time.isoformat(),
+                "anchor_segment": event.segment,
+                "segment_order": segment_order,
+                "phase_membership": phase_membership,
+                "is_active_phase_window": is_active_phase_window,
+                "route_start_time": route.start_time,
+                "segment_statuses": segment_statuses,
+                "required_file_order": required_order,
+                "completion": completion,
+                "first_incomplete_segment": first_incomplete_segment(segment_statuses),
+                "currently_uploading_files": currently_uploading_files(segment_statuses),
+                "ready_state": ready_state,
+            }
+        )
+
+    for event in recent_bookmark_events:
+        append_window(event, category="bookmark", base_phase="recent_bookmarks")
+    for event in older_bookmark_events:
+        append_window(event, category="bookmark", base_phase="older_bookmarks")
+    for event in dm_alert_events_sorted:
+        append_window(event, category="dm_alert", base_phase="dm_alerts")
+    for event in alert_events_sorted:
+        append_window(event, category="alert", base_phase="alerts")
+
+    windows.sort(
+        key=lambda window: (
+            0 if window["is_active_phase_window"] else 1,
+            {
+                "recent_bookmarks": 0,
+                "older_bookmarks": 1,
+                "dm_alerts": 2,
+                "alerts": 3,
+                "bookmark_fill_recent": 4,
+                "bookmark_fill_older": 5,
+            }.get(window["phase_membership"], 6),
+            window["event_time"],
+        )
+    )
+    return windows
+
+
+def annotate_queue_entries(
+    queue_entries: list[QueueEntry],
+    *,
+    incident_windows: list[dict[str, Any]],
+    active_phase_name: str | None,
+    active_phase_targets: list[SegmentTarget],
+) -> list[dict[str, Any]]:
+    active_phase_keys = {(target.route_id, target.segment) for target in active_phase_targets}
+    annotated: list[dict[str, Any]] = []
+    for entry in queue_entries:
+        incident_context: dict[str, Any] | None = None
+        for window in incident_windows:
+            if window["route_id"] != entry.route_id or entry.segment not in window["segment_order"]:
+                continue
+            segment_rank = window["segment_order"].index(entry.segment) + 1
+            file_rank = window["required_file_order"].index(entry.file_kind) + 1 if entry.file_kind in window["required_file_order"] else None
+            incident_context = {
+                "incident_window_id": window["id"],
+                "reason_label": phase_reason_label(window["phase_membership"]),
+                "segment_rank_within_window": segment_rank,
+                "file_rank_within_segment": file_rank,
+            }
+            break
+        if incident_context is None and (entry.route_id, entry.segment) in active_phase_keys and active_phase_name in {
+            "bookmark_fill_recent",
+            "bookmark_fill_older",
+        }:
+            incident_context = {
+                "incident_window_id": None,
+                "reason_label": phase_reason_label(active_phase_name),
+                "segment_rank_within_window": None,
+                "file_rank_within_segment": None,
+            }
+        annotated.append(
+            {
+                "path": entry.path,
+                "route_id": entry.route_id,
+                "segment": entry.segment,
+                "filename": entry.filename,
+                "file_kind": entry.file_kind,
+                "current": entry.current,
+                "progress": entry.progress,
+                "retry_count": entry.retry_count,
+                "priority": entry.priority,
+                "upload_id": entry.upload_id,
+                "incident_window_id": incident_context["incident_window_id"] if incident_context else None,
+                "reason_label": incident_context["reason_label"] if incident_context else None,
+                "segment_rank_within_window": incident_context["segment_rank_within_window"] if incident_context else None,
+                "file_rank_within_segment": incident_context["file_rank_within_segment"] if incident_context else None,
+            }
+        )
+    return annotated
+
+
 def request_uploads(api: CommaApi, dongle_id: str, paths: list[str]) -> dict[str, Any]:
     ordered_paths = athena_enqueue_order(paths)
     upload_metadata = api.request_upload_urls(dongle_id, ordered_paths)
@@ -785,6 +1250,7 @@ def scan_once(
     next_segments: int,
     file_types: list[str],
     exclusive_bookmark_priority: bool,
+    state_path: Path,
 ) -> ScanOutcome:
     targets_found = False
     uploads_queued = False
@@ -793,11 +1259,13 @@ def scan_once(
     devices = select_devices(api.get_devices(), device_alias or None)
     now_local = datetime.now(tz)
     window_start = now_local - timedelta(hours=lookback_hours)
+    watcher_state = build_watch_state(now_local=now_local, window_start=window_start, devices_state=[])
     print(
         f"[{now_local.isoformat()}] Watching {len(devices)} device(s) in the last {lookback_hours} hour(s) "
         f"since {window_start.isoformat()}"
     )
     if not devices:
+        write_state_snapshot(state_path, watcher_state)
         return ScanOutcome(targets_found=False, uploads_queued=False, all_target_files_satisfied=False, queue_cleared=False)
 
     any_routes_found = False
@@ -805,18 +1273,63 @@ def scan_once(
         print(f"Device {device.alias or device.dongle_id} ({device.dongle_id})")
         routes = list_routes_in_lookback_window(api, device.dongle_id, window_start=window_start, tz=tz)
         print(f"Found {len(routes)} route(s) in lookback window")
+        device_state: dict[str, Any] = {
+            "alias": device.alias,
+            "dongle_id": device.dongle_id,
+            "routes": [],
+            "incident_windows": [],
+            "queue": {
+                "length": 0,
+                "active_length": 0,
+                "items": [],
+            },
+            "active_phase": None,
+        }
+        watcher_state["devices"].append(device_state)
         if not routes:
             continue
         any_routes_found = True
 
         online_queue = api.athena_call(device.dongle_id, "listUploadQueue", {}).get("result", [])
         offline_queue = api.get_athena_offline_queue(device.dongle_id)
+        queue_entries = summarize_online_queue(online_queue)
+        queue_items_by_segment: dict[tuple[str, int], list[QueueEntry]] = {}
+        for entry in queue_entries:
+            queue_items_by_segment.setdefault((entry.route_id, entry.segment), []).append(entry)
+        device_state["queue"] = {
+            "length": len(queue_entries),
+            "active_length": sum(1 for entry in queue_entries if entry.current),
+            "items": [
+                {
+                    "path": entry.path,
+                    "route_id": entry.route_id,
+                    "segment": entry.segment,
+                    "filename": entry.filename,
+                    "file_kind": entry.file_kind,
+                    "current": entry.current,
+                    "progress": entry.progress,
+                    "retry_count": entry.retry_count,
+                    "priority": entry.priority,
+                    "upload_id": entry.upload_id,
+                }
+                for entry in queue_entries
+            ],
+        }
         queued_paths = normalize_queue_paths(online_queue, offline_queue)
         target_paths: set[str] = set()
         uploaded_paths: set[str] = set()
         bookmark_events: list[SegmentEvent] = []
         dm_alert_events: list[SegmentEvent] = []
         alert_events: list[SegmentEvent] = []
+        routes_by_id: dict[str, Route] = {}
+        route_states_by_id: dict[str, dict[str, Any]] = {}
+        route_inventories: dict[str, dict[tuple[str, int], dict[str, bool]]] = {}
+        route_bookmark_segments: dict[str, set[int]] = {}
+        route_dm_alert_segments: dict[str, set[int]] = {}
+        route_alert_segments: dict[str, set[int]] = {}
+        active_phase_name: str | None = None
+        recent_fill_targets: list[SegmentTarget] = []
+        older_fill_targets: list[SegmentTarget] = []
 
         for route in routes:
             route_detail = api.get_route(route.fullname)
@@ -830,6 +1343,7 @@ def scan_once(
                 url=route_detail.get("url", route.url),
             )
             start_local = parse_route_start_local(hydrated_route.start_time, tz)
+            routes_by_id[hydrated_route.route_id] = hydrated_route
             route_files = api.get_route_files(hydrated_route.fullname)
             qlog_count = len(route_files.get("qlogs", []))
             parsed_upper_bound = parsed_segment_upper_bound(hydrated_route)
@@ -840,10 +1354,14 @@ def scan_once(
             if parsed_upper_bound < hydrated_route.maxqlog:
                 print(f"Waiting for parsed qlogs: scanning segments 0..{parsed_upper_bound} so far")
             uploaded_paths.update(normalize_uploaded_paths(route_files))
+            route_inventories[hydrated_route.route_id] = build_route_file_inventory(route_files)
             priority_events = collect_priority_events(api, hydrated_route)
             bookmark_segments = sorted({event.segment for event in priority_events.bookmark_events})
             dm_alert_segments = sorted({event.segment for event in priority_events.dm_alert_events})
             alert_segments = sorted({event.segment for event in priority_events.alert_events})
+            route_bookmark_segments[hydrated_route.route_id] = set(bookmark_segments)
+            route_dm_alert_segments[hydrated_route.route_id] = set(dm_alert_segments)
+            route_alert_segments[hydrated_route.route_id] = set(alert_segments)
             print(f"Bookmarked segments: {bookmark_segments}")
             print(f"DM alert segments: {dm_alert_segments}")
             print(f"Alert segments: {alert_segments}")
@@ -852,6 +1370,21 @@ def scan_once(
             bookmark_events.extend(priority_events.bookmark_events)
             dm_alert_events.extend(priority_events.dm_alert_events)
             alert_events.extend(priority_events.alert_events)
+            route_state = {
+                "fullname": hydrated_route.fullname,
+                "route_id": hydrated_route.route_id,
+                "start_time": hydrated_route.start_time,
+                "end_time": hydrated_route.end_time,
+                "maxqlog": hydrated_route.maxqlog,
+                "procqlog": hydrated_route.procqlog,
+                "qlogs": qlog_count,
+                "bookmark_segments": bookmark_segments,
+                "dm_alert_segments": dm_alert_segments,
+                "alert_segments": alert_segments,
+                "segments": [],
+            }
+            route_states_by_id[hydrated_route.route_id] = route_state
+            device_state["routes"].append(route_state)
 
         prioritized_segment_groups = combine_priority_segments(
             bookmark_events=bookmark_events,
@@ -878,8 +1411,16 @@ def scan_once(
             "Alert targets:",
             [f"{target.route_id}:{target.segment}" for target in alert_targets],
         )
+        segment_lookup: dict[tuple[str, int], dict[str, Any]] = {}
+        active_phase_targets: list[SegmentTarget] = []
         if prioritized_segments:
             dm_boost_file_types = [file_type for file_type in ("cameras", "logs", "dcameras", "ecameras") if file_type in file_types]
+            named_phase_targets = [
+                ("recent_bookmarks", recent_bookmark_targets),
+                ("older_bookmarks", older_bookmark_targets),
+                ("dm_alerts", dm_alert_targets),
+                ("alerts", alert_targets),
+            ]
             priority_phase = first_pending_phase(
                 [
                     ("recent_bookmarks", recent_bookmark_targets, file_types),
@@ -890,7 +1431,6 @@ def scan_once(
                 uploaded_paths,
             )
 
-            active_phase_name: str | None = None
             active_phase_targets: list[SegmentTarget] = []
             desired_paths: list[str] = []
             pending_paths: list[str] = []
@@ -910,6 +1450,8 @@ def scan_once(
                         for target in (fill_targets.recent_fill_targets + fill_targets.older_fill_targets)
                     ],
                 )
+                recent_fill_targets = fill_targets.recent_fill_targets
+                older_fill_targets = fill_targets.older_fill_targets
                 fill_phase = first_pending_phase(
                     [
                         ("bookmark_fill_recent", fill_targets.recent_fill_targets, file_types),
@@ -933,6 +1475,10 @@ def scan_once(
                     f"Active phase: {active_phase_name}",
                     [f"{target.route_id}:{target.segment}" for target in active_phase_targets],
                 )
+                device_state["active_phase"] = {
+                    "name": active_phase_name,
+                    "targets": [f"{target.route_id}:{target.segment}" for target in active_phase_targets],
+                }
             print(
                 f"Desired files={len(desired_paths)} uploaded={len(uploaded_paths)} queued={len(queued_paths)} missing={len(missing_paths)}"
             )
@@ -967,11 +1513,37 @@ def scan_once(
                 queued_paths.update(missing_paths)
                 uploads_queued = True
                 all_target_files_satisfied = False
+
+            segment_lookup = phase_segment_lookup(named_phase_targets)
+            for route in routes:
+                route_state = route_states_by_id[route.route_id]
+                route_state["segments"] = route_segment_rows(
+                    route=routes_by_id[route.route_id],
+                    route_inventory=route_inventories.get(route.route_id, {}),
+                    queue_items_by_segment=queue_items_by_segment,
+                    segment_phase_lookup=segment_lookup,
+                    active_phase_targets=active_phase_targets,
+                    bookmark_segments=route_bookmark_segments.get(route.route_id, set()),
+                    dm_alert_segments=route_dm_alert_segments.get(route.route_id, set()),
+                    alert_segments=route_alert_segments.get(route.route_id, set()),
+                )
         else:
             print("No bookmark or alert targets found in lookback window.")
             all_target_files_satisfied = False
             has_pending_priority = False
             has_pending_targets = False
+            for route in routes:
+                route_state = route_states_by_id[route.route_id]
+                route_state["segments"] = route_segment_rows(
+                    route=routes_by_id[route.route_id],
+                    route_inventory=route_inventories.get(route.route_id, {}),
+                    queue_items_by_segment=queue_items_by_segment,
+                    segment_phase_lookup={},
+                    active_phase_targets=[],
+                    bookmark_segments=route_bookmark_segments.get(route.route_id, set()),
+                    dm_alert_segments=route_dm_alert_segments.get(route.route_id, set()),
+                    alert_segments=route_alert_segments.get(route.route_id, set()),
+                )
 
         if exclusive_bookmark_priority:
             if prioritized_segments and has_pending_targets:
@@ -996,8 +1568,56 @@ def scan_once(
                     print(json.dumps(response, indent=2))
                     queue_cleared = True
 
+        refreshed_online_queue = api.athena_call(device.dongle_id, "listUploadQueue", {}).get("result", [])
+        refreshed_queue_entries = summarize_online_queue(refreshed_online_queue)
+        refreshed_queue_by_segment: dict[tuple[str, int], list[QueueEntry]] = {}
+        for entry in refreshed_queue_entries:
+            refreshed_queue_by_segment.setdefault((entry.route_id, entry.segment), []).append(entry)
+        incident_windows = build_incident_windows(
+            routes_by_id=routes_by_id,
+            bookmark_events=bookmark_events,
+            dm_alert_events=dm_alert_events,
+            alert_events=alert_events,
+            recent_bookmark_targets=recent_bookmark_targets,
+            older_bookmark_targets=older_bookmark_targets,
+            active_phase_name=active_phase_name if prioritized_segments else None,
+            active_phase_targets=active_phase_targets,
+            recent_fill_targets=recent_fill_targets,
+            older_fill_targets=older_fill_targets,
+            previous_segments=previous_segments,
+            next_segments=next_segments,
+            alert_lookback_segments=ALERT_LOOKBACK_SEGMENTS,
+            file_types=file_types,
+            route_inventories=route_inventories,
+            queue_items_by_segment=refreshed_queue_by_segment,
+        )
+        device_state["queue"] = {
+            "length": len(refreshed_queue_entries),
+            "active_length": sum(1 for entry in refreshed_queue_entries if entry.current),
+            "items": annotate_queue_entries(
+                refreshed_queue_entries,
+                incident_windows=incident_windows,
+                active_phase_name=active_phase_name if prioritized_segments else None,
+                active_phase_targets=active_phase_targets,
+            ),
+        }
+        device_state["incident_windows"] = incident_windows
+        for route in routes:
+            route_state = route_states_by_id[route.route_id]
+            route_state["segments"] = route_segment_rows(
+                route=routes_by_id[route.route_id],
+                route_inventory=route_inventories.get(route.route_id, {}),
+                queue_items_by_segment=refreshed_queue_by_segment,
+                segment_phase_lookup=segment_lookup,
+                active_phase_targets=active_phase_targets,
+                bookmark_segments=route_bookmark_segments.get(route.route_id, set()),
+                dm_alert_segments=route_dm_alert_segments.get(route.route_id, set()),
+                alert_segments=route_alert_segments.get(route.route_id, set()),
+            )
+
     if not any_routes_found or not targets_found:
         all_target_files_satisfied = False
+    write_state_snapshot(state_path, watcher_state)
     return ScanOutcome(
         targets_found=targets_found,
         uploads_queued=uploads_queued,
@@ -1014,6 +1634,7 @@ def main() -> int:
 
     tz = ZoneInfo(args.timezone)
     api = CommaApi(args.jwt_token)
+    state_path = Path(args.state_path)
 
     start_time = time.monotonic()
     outcome = ScanOutcome(targets_found=False, uploads_queued=False, all_target_files_satisfied=False, queue_cleared=False)
@@ -1028,6 +1649,7 @@ def main() -> int:
                 next_segments=args.next_segments,
                 file_types=args.file_types,
                 exclusive_bookmark_priority=args.exclusive_bookmark_priority,
+                state_path=state_path,
             )
             if args.exit_when_satisfied and outcome.targets_found and (
                 outcome.uploads_queued or outcome.all_target_files_satisfied

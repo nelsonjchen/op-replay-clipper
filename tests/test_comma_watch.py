@@ -1,7 +1,10 @@
 from datetime import datetime
 
 from tools.comma_watch import (
+    annotate_queue_entries,
     athena_enqueue_order,
+    build_route_file_inventory,
+    build_incident_windows,
     categorize_segment_events,
     combine_bookmark_route_fill_segments,
     combine_priority_segments,
@@ -23,8 +26,12 @@ from tools.comma_watch import (
     normalize_online_queue_item_path,
     normalize_queue_paths,
     normalize_uploaded_paths,
+    parse_segment_path,
     parsed_segment_upper_bound,
+    QueueEntry,
+    route_segment_rows,
     select_devices,
+    summarize_online_queue,
     should_clear_queue_while_waiting,
     target_queue_refresh_needed,
 )
@@ -225,6 +232,30 @@ def test_normalize_uploaded_paths_extracts_route_segment_and_filename() -> None:
     }
 
 
+def test_build_route_file_inventory_tracks_low_and_high_quality_files() -> None:
+    filelist = {
+        "cameras": [
+            "https://blob.test/fde53c3c109fb4c0/0000026f--c5469f881d/2/fcamera.hevc?sig=x",
+        ],
+        "qlogs": [
+            "https://blob.test/fde53c3c109fb4c0/0000026f--c5469f881d/2/qlog.zst?sig=x",
+        ],
+        "qcameras": [
+            "https://blob.test/fde53c3c109fb4c0/0000026f--c5469f881d/2/qcamera.ts?sig=x",
+        ],
+    }
+    assert build_route_file_inventory(filelist) == {
+        ("0000026f--c5469f881d", 2): {
+            "fcamera": True,
+            "rlog": False,
+            "ecamera": False,
+            "dcamera": False,
+            "qcamera": True,
+            "qlog": True,
+        }
+    }
+
+
 def test_normalize_queue_paths_handles_online_and_offline_shapes() -> None:
     online_queue = [
         {"path": "/data/media/0/realdata/0000026f--c5469f881d--2/fcamera.hevc"},
@@ -255,6 +286,205 @@ def test_ordered_online_queue_paths_preserves_queue_order() -> None:
         "0000026f--c5469f881d--2/fcamera.hevc",
         "0000026f--c5469f881d--1/rlog.zst",
     ]
+
+
+def test_parse_segment_path_splits_route_segment_and_filename() -> None:
+    assert parse_segment_path("0000026f--c5469f881d--2/fcamera.hevc") == (
+        "0000026f--c5469f881d",
+        2,
+        "fcamera.hevc",
+    )
+
+
+def test_summarize_online_queue_and_route_segment_rows_annotate_active_phase() -> None:
+    queue = [
+        {
+            "id": "1",
+            "path": "/data/media/0/realdata/0000026f--c5469f881d--2/fcamera.hevc",
+            "current": True,
+            "progress": 0.5,
+            "retry_count": 1,
+            "priority": 1,
+        }
+    ]
+    entries = summarize_online_queue(queue)
+    assert entries == [
+        QueueEntry(
+            path="0000026f--c5469f881d--2/fcamera.hevc",
+            route_id="0000026f--c5469f881d",
+            segment=2,
+            filename="fcamera.hevc",
+            file_kind="fcamera",
+            current=True,
+            progress=0.5,
+            retry_count=1,
+            priority=1,
+            upload_id="1",
+        )
+    ]
+    route = Route(
+        fullname="fde53c3c109fb4c0|0000026f--c5469f881d",
+        route_id="0000026f--c5469f881d",
+        start_time="2026-03-28T04:59:16",
+        end_time="2026-03-28T05:19:16",
+        maxqlog=3,
+        procqlog=3,
+        url="https://example.test/route",
+    )
+    rows = route_segment_rows(
+        route=route,
+        route_inventory={("0000026f--c5469f881d", 2): {"fcamera": True, "rlog": False, "ecamera": False, "dcamera": False, "qcamera": True, "qlog": True}},
+        queue_items_by_segment={("0000026f--c5469f881d", 2): entries},
+        segment_phase_lookup={("0000026f--c5469f881d", 2): {"phase": "recent_bookmarks", "rank": 1}},
+        active_phase_targets=[SegmentTarget("0000026f--c5469f881d", 2)],
+        bookmark_segments={2},
+        dm_alert_segments=set(),
+        alert_segments=set(),
+    )
+    assert rows[2]["bookmark"] is True
+    assert rows[2]["phase"] == "recent_bookmarks"
+    assert rows[2]["active_phase_rank"] == 1
+    assert rows[2]["queued_count"] == 1
+    assert rows[2]["active_count"] == 1
+
+
+def test_build_incident_windows_creates_prompt_bookmark_window_and_queue_context() -> None:
+    route = Route(
+        fullname="dongle|0000026f--c5469f881d",
+        route_id="0000026f--c5469f881d",
+        start_time="2026-03-28T04:59:16",
+        end_time="2026-03-28T05:19:16",
+        maxqlog=6,
+        procqlog=6,
+        url="https://example.test/route",
+    )
+    queue_entries = [
+        QueueEntry(
+            path="0000026f--c5469f881d--5/rlog.zst",
+            route_id="0000026f--c5469f881d",
+            segment=5,
+            filename="rlog.zst",
+            file_kind="rlog",
+            current=False,
+            progress=0.0,
+            retry_count=0,
+            priority=1,
+            upload_id="1",
+        )
+    ]
+    windows = build_incident_windows(
+        routes_by_id={route.route_id: route},
+        bookmark_events=[SegmentEvent(route.route_id, 5, datetime.fromisoformat("2026-03-28T05:10:00+00:00"), 6)],
+        dm_alert_events=[],
+        alert_events=[],
+        recent_bookmark_targets=[SegmentTarget(route.route_id, 5), SegmentTarget(route.route_id, 4)],
+        older_bookmark_targets=[],
+        active_phase_name="recent_bookmarks",
+        active_phase_targets=[SegmentTarget(route.route_id, 5), SegmentTarget(route.route_id, 4)],
+        recent_fill_targets=[],
+        older_fill_targets=[],
+        previous_segments=3,
+        next_segments=1,
+        alert_lookback_segments=2,
+        file_types=["cameras", "logs", "ecameras", "dcameras"],
+        route_inventories={route.route_id: {(route.route_id, 5): {"fcamera": True, "rlog": False, "ecamera": False, "dcamera": False, "qcamera": True, "qlog": True}}},
+        queue_items_by_segment={(route.route_id, 5): queue_entries},
+    )
+    assert windows[0]["id"] == "bookmark:0000026f--c5469f881d:5"
+    assert windows[0]["segment_order"] == [5, 4, 6, 3, 2]
+    assert windows[0]["required_file_order"] == ["fcamera", "rlog", "ecamera", "dcamera"]
+    assert windows[0]["phase_membership"] == "recent_bookmarks"
+    assert windows[0]["is_active_phase_window"] is True
+    assert windows[0]["segment_statuses"][0]["queued_file_kinds"] == ["rlog"]
+    assert windows[0]["first_incomplete_segment"]["segment"] == 5
+
+    annotated = annotate_queue_entries(
+        queue_entries,
+        incident_windows=windows,
+        active_phase_name="recent_bookmarks",
+        active_phase_targets=[SegmentTarget(route.route_id, 5)],
+    )
+    assert annotated[0]["incident_window_id"] == "bookmark:0000026f--c5469f881d:5"
+    assert annotated[0]["reason_label"] == "recent bookmark"
+    assert annotated[0]["segment_rank_within_window"] == 1
+    assert annotated[0]["file_rank_within_segment"] == 2
+
+
+def test_build_incident_windows_uses_dm_file_order() -> None:
+    route = Route(
+        fullname="dongle|route-dm",
+        route_id="route-dm",
+        start_time="2026-03-28T04:59:16",
+        end_time="2026-03-28T05:19:16",
+        maxqlog=6,
+        procqlog=6,
+        url="https://example.test/route",
+    )
+    windows = build_incident_windows(
+        routes_by_id={route.route_id: route},
+        bookmark_events=[],
+        dm_alert_events=[SegmentEvent(route.route_id, 4, datetime.fromisoformat("2026-03-28T05:10:00+00:00"), 6, category="dm_alert")],
+        alert_events=[],
+        recent_bookmark_targets=[],
+        older_bookmark_targets=[],
+        active_phase_name="dm_alerts",
+        active_phase_targets=[SegmentTarget(route.route_id, 4)],
+        recent_fill_targets=[],
+        older_fill_targets=[],
+        previous_segments=3,
+        next_segments=1,
+        alert_lookback_segments=2,
+        file_types=["cameras", "logs", "ecameras", "dcameras"],
+        route_inventories={route.route_id: {}},
+        queue_items_by_segment={},
+    )
+    assert windows[0]["category"] == "dm_alert"
+    assert windows[0]["required_file_order"] == ["fcamera", "rlog", "dcamera", "ecamera"]
+    assert windows[0]["segment_order"] == [4, 3, 2]
+
+
+def test_build_incident_windows_marks_bookmark_fill_when_core_window_complete() -> None:
+    route = Route(
+        fullname="dongle|route-fill",
+        route_id="route-fill",
+        start_time="2026-03-28T04:59:16",
+        end_time="2026-03-28T05:19:16",
+        maxqlog=8,
+        procqlog=8,
+        url="https://example.test/route",
+    )
+    inventory = {
+        (route.route_id, segment): {
+            "fcamera": True,
+            "rlog": True,
+            "ecamera": True,
+            "dcamera": True,
+            "qcamera": True,
+            "qlog": True,
+        }
+        for segment in [5, 4, 6, 3, 2]
+    }
+    windows = build_incident_windows(
+        routes_by_id={route.route_id: route},
+        bookmark_events=[SegmentEvent(route.route_id, 5, datetime.fromisoformat("2026-03-28T05:10:00+00:00"), 8)],
+        dm_alert_events=[],
+        alert_events=[],
+        recent_bookmark_targets=[SegmentTarget(route.route_id, 5)],
+        older_bookmark_targets=[],
+        active_phase_name="bookmark_fill_recent",
+        active_phase_targets=[SegmentTarget(route.route_id, 7), SegmentTarget(route.route_id, 8)],
+        recent_fill_targets=[SegmentTarget(route.route_id, 7), SegmentTarget(route.route_id, 8)],
+        older_fill_targets=[],
+        previous_segments=3,
+        next_segments=1,
+        alert_lookback_segments=2,
+        file_types=["cameras", "logs", "ecameras", "dcameras"],
+        route_inventories={route.route_id: inventory},
+        queue_items_by_segment={},
+    )
+    assert windows[0]["phase_membership"] == "bookmark_fill_recent"
+    assert windows[0]["ready_state"] == "complete"
+    assert windows[0]["first_incomplete_segment"] is None
 
 
 def test_desired_pending_paths_skips_uploaded_files() -> None:
