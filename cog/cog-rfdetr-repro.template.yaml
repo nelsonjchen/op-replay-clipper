@@ -7,4 +7,5 @@ build:
     - "echo ENCODED_SCRIPT | base64 -d > bootstrap_image_env.sh && bash bootstrap_image_env.sh"
 environment:
   - UV_BREAK_SYSTEM_PACKAGES=true
+  - OP_REPLAY_CLIPPER_GIT_DESCRIBE=__CLIPPER_GIT_DESCRIBE__
 predict: "cog_rfdetr_repro_predictor.py:Predictor"

@@ -119,6 +119,25 @@ def test_parse_styled_text_tracks_inline_code_segments() -> None:
     ]
 
 
+def test_format_clipper_version_text_uses_git_describe() -> None:
+    assert (
+        big_ui_engine.format_clipper_version_text("v1.2.3-4-gabc123-dirty")
+        == "clipper v1.2.3-4-gabc123-dirty"
+    )
+    assert big_ui_engine.format_clipper_version_text("") == ""
+
+
+def test_resolve_clipper_git_describe_prefers_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    big_ui_engine.resolve_clipper_git_describe.cache_clear()
+    monkeypatch.setenv("OP_REPLAY_CLIPPER_GIT_DESCRIBE", "env-version")
+    monkeypatch.setattr(big_ui_engine.subprocess, "run", mock.Mock(side_effect=AssertionError("git should not run")))
+
+    try:
+        assert big_ui_engine.resolve_clipper_git_describe() == "env-version"
+    finally:
+        big_ui_engine.resolve_clipper_git_describe.cache_clear()
+
+
 def test_load_qcam_segment_frames_accepts_pipe_characters_in_local_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     qcam_path = "dongle|route/1/qcamera.ts"
     commands: list[list[str]] = []
@@ -520,8 +539,8 @@ def test_compute_ui_alt_stacked_canvas_width_matches_ui_aspect_camera_column() -
 
 
 def test_compute_footer_cta_height_uses_shared_inline_bounds() -> None:
-    assert big_ui_engine.compute_footer_cta_height(panel_height=400.0, panel_width=400.0) == 56.0
-    assert big_ui_engine.compute_footer_cta_height(panel_height=1200.0, panel_width=1200.0) == 64.0
+    assert big_ui_engine.compute_footer_cta_height(panel_height=400.0, panel_width=400.0) == 80.0
+    assert big_ui_engine.compute_footer_cta_height(panel_height=1200.0, panel_width=1200.0) == 92.0
 
 
 def test_patch_pyray_headless_window_flags_forces_hidden(monkeypatch) -> None:
