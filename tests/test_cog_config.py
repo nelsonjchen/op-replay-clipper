@@ -10,10 +10,20 @@ def test_render_cog_config_embeds_base64_setup_script(tmp_path) -> None:
     setup_path = tmp_path / "setup.sh"
     output_path = tmp_path / "cog.yaml"
 
-    template_path.write_text("run:\n  - echo ENCODED_SCRIPT\n")
+    template_path.write_text(
+        "run:\n"
+        "  - echo ENCODED_SCRIPT\n"
+        "environment:\n"
+        "  - OP_REPLAY_CLIPPER_GIT_DESCRIBE=__CLIPPER_GIT_DESCRIBE__\n"
+    )
     setup_path.write_text("#!/usr/bin/env bash\necho hello\n")
 
-    render_cog_config(template_path, setup_path, output_path)
+    render_cog_config(template_path, setup_path, output_path, clipper_git_describe="test-describe")
 
     encoded_script = base64.b64encode(setup_path.read_bytes()).decode("ascii")
-    assert output_path.read_text() == f"run:\n  - echo {encoded_script}\n"
+    assert output_path.read_text() == (
+        f"run:\n"
+        f"  - echo {encoded_script}\n"
+        f"environment:\n"
+        f"  - OP_REPLAY_CLIPPER_GIT_DESCRIBE=test-describe\n"
+    )

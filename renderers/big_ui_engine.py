@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Mapping
 import datetime
+from functools import lru_cache
 import importlib
 import json
 import logging
@@ -61,8 +62,8 @@ UI_ALT_TELEMETRY_HEADER_HEIGHT = 92.0
 UI_ALT_FOOTER_CTA_LINE = "Make your own `ui-alt` clips with"
 UI_ALT_FOOTER_CTA_URL = "https://github.com/nelsonjchen/op-replay-clipper"
 UI_ALT_FOOTER_CTA_URL_DISPLAY = "github.com/nelsonjchen/op-replay-clipper"
-UI_ALT_FOOTER_CTA_HEIGHT_MIN = 56.0
-UI_ALT_FOOTER_CTA_HEIGHT_MAX = 64.0
+UI_ALT_FOOTER_CTA_HEIGHT_MIN = 80.0
+UI_ALT_FOOTER_CTA_HEIGHT_MAX = 92.0
 UI_ALT_HEADER_TEXT_DRAW_OVERHANG_PAD = 20
 UI_ALT_TELEMETRY_WIDTH_RATIO = 0.30
 UI_ALT_TELEMETRY_MIN_WIDTH = 420
@@ -467,7 +468,37 @@ def compute_stacked_ui_border_size(*, default_border_size: int, panel_height: in
 
 def compute_footer_cta_height(*, panel_height: float, panel_width: float) -> float:
     _ = panel_width
-    return min(UI_ALT_FOOTER_CTA_HEIGHT_MAX, max(UI_ALT_FOOTER_CTA_HEIGHT_MIN, panel_height * 0.06))
+    return min(UI_ALT_FOOTER_CTA_HEIGHT_MAX, max(UI_ALT_FOOTER_CTA_HEIGHT_MIN, panel_height * 0.08))
+
+
+@lru_cache(maxsize=1)
+def resolve_clipper_git_describe() -> str:
+    env_value = (
+        os.environ.get("OP_REPLAY_CLIPPER_GIT_DESCRIBE")
+        or os.environ.get("CLIPPER_GIT_DESCRIBE")
+        or ""
+    ).strip()
+    if env_value:
+        return env_value
+
+    try:
+        result = subprocess.run(
+            ["git", "describe", "--tags", "--always", "--dirty"],
+            cwd=REPO_ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=2,
+        )
+    except Exception:
+        return ""
+    return result.stdout.strip()
+
+
+def format_clipper_version_text(git_describe: object) -> str:
+    describe = str(git_describe or "").strip()
+    return f"clipper {describe}" if describe else ""
 
 
 def compute_time_overlay_position(*, gui_width: int, time_width: int, big: bool) -> tuple[int, int]:
@@ -2034,6 +2065,7 @@ class SteeringFooterRenderer:
         self._styled_fonts = StyledTextFonts(regular=value_font, bold=value_font, italic=value_font, bold_italic=value_font)
         self._wheel_texture = gui_app.texture("icons_mici/wheel.png", 220, 220)
         self._confidence_filter = FirstOrderFilter(-0.5, 0.5, 1 / gui_app.target_fps)
+        self._clipper_version_text = format_clipper_version_text(resolve_clipper_git_describe())
 
     def _draw_meter(self, rect, *, label: str, value: float, color, value_text: str, active: bool) -> None:
         import pyray as rl
@@ -2467,18 +2499,22 @@ class SteeringFooterRenderer:
 
         lead_text = UI_ALT_FOOTER_CTA_LINE
         url = UI_ALT_FOOTER_CTA_URL_DISPLAY
+        version_text = self._clipper_version_text
         lead_color = rl.Color(255, 255, 255, 195)
         url_color = rl.Color(118, 210, 255, 255)
+        version_color = rl.Color(255, 255, 255, 125)
         code_fill = rl.Color(255, 255, 255, 18)
         code_border = rl.Color(255, 255, 255, 45)
         panel_rect = rl.Rectangle(rect.x, rect.y + UI_ALT_FOOTER_CTA_PAD_Y, rect.width, max(0.0, rect.height - (2 * UI_ALT_FOOTER_CTA_PAD_Y)))
         target_width = max(1.0, panel_rect.width - 32.0)
         lead_runs = parse_inline_text(lead_text)
         url_runs = [StyledTextRun(url, StyledTextState(), color=url_color)]
+        version_runs = [StyledTextRun(version_text, StyledTextState(), color=version_color)] if version_text else []
         lead_font_size = 20
         url_font_size = 18
+        version_font_size = 13
 
-        def _fit_runs(runs, starting_size: int) -> tuple[int, object]:
+        def _fit_runs(runs, starting_size: int, *, min_size: int = 16) -> tuple[int, object]:
             metrics = measure_styled_text_line(
                 fonts=self._styled_fonts,
                 text=runs,
@@ -2489,7 +2525,7 @@ class SteeringFooterRenderer:
             )
             fitted_size = starting_size
             if metrics.width > target_width and metrics.width > 0:
-                fitted_size = max(16, int(starting_size * (target_width / metrics.width)))
+                fitted_size = max(min_size, int(starting_size * (target_width / metrics.width)))
                 metrics = measure_styled_text_line(
                     fonts=self._styled_fonts,
                     text=runs,
@@ -2502,13 +2538,22 @@ class SteeringFooterRenderer:
 
         lead_font_size, lead_metrics = _fit_runs(lead_runs, lead_font_size)
         url_font_size, url_metrics = _fit_runs(url_runs, url_font_size)
+        version_metrics = None
+        if version_runs:
+            version_font_size, version_metrics = _fit_runs(version_runs, version_font_size, min_size=10)
         line_gap = 6.0
+        version_gap = 5.0
         text_height = lead_metrics.height + line_gap + url_metrics.height
+        if version_metrics is not None:
+            text_height += version_gap + version_metrics.height
         line_y = float(int(round(panel_rect.y + max(0.0, panel_rect.height - text_height))))
-        for runs, current_font_size, metrics, text_run_color in (
+        line_specs = [
             (lead_runs, lead_font_size, lead_metrics, lead_color),
             (url_runs, url_font_size, url_metrics, url_color),
-        ):
+        ]
+        if version_metrics is not None:
+            line_specs.append((version_runs, version_font_size, version_metrics, version_color))
+        for line_index, (runs, current_font_size, metrics, text_run_color) in enumerate(line_specs):
             line_x = float(int(round(panel_rect.x + max(0.0, (panel_rect.width - metrics.width) / 2))))
             draw_styled_text_line(
                 fonts=self._styled_fonts,
@@ -2525,7 +2570,7 @@ class SteeringFooterRenderer:
                 code_padding_x=10.0,
                 code_padding_y=4.0,
             )
-            line_y += metrics.height + line_gap
+            line_y += metrics.height + (version_gap if line_index == 1 else line_gap)
 
     def render(self, rect, *, telemetry: FooterTelemetry, route_seconds: float) -> None:
         import pyray as rl
