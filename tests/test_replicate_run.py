@@ -387,7 +387,9 @@ def test_validate_connect_url_rejects_non_connect_hosts() -> None:
     try:
         replicate_run.validate_connect_url("https://example.com/not-connect")
     except SystemExit as exc:
-        assert str(exc) == "Expected a full https://connect.comma.ai/... clip URL."
+        message = str(exc)
+        assert "start and end seconds" in message
+        assert "https://connect.comma.ai/<dongle>/<route>/<start>/<end>" in message
     else:
         raise AssertionError("validate_connect_url should reject non-connect URLs")
 
