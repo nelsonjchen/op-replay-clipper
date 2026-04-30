@@ -390,6 +390,7 @@ def test_validate_connect_url_rejects_non_connect_hosts() -> None:
         message = str(exc)
         assert "start and end seconds" in message
         assert "https://connect.comma.ai/<dongle>/<route>/<start>/<end>" in message
+        assert "https://github.com/nelsonjchen/op-replay-clipper#quick-usage" in message
     else:
         raise AssertionError("validate_connect_url should reject non-connect URLs")
 

@@ -86,7 +86,7 @@ def test_build_plan_explains_connect_url_missing_clip_window() -> None:
 
     message = str(excinfo.value)
     assert "start and end seconds" in message
-    assert "README Quick Usage" in message
+    assert "https://github.com/nelsonjchen/op-replay-clipper#quick-usage" in message
     assert "last two numbers" in message
 
 

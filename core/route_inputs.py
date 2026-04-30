@@ -9,7 +9,8 @@ LITERAL_URL_PREFIX = "literal:"
 CONNECT_CLIP_URL_HELP = (
     "Expected a full comma Connect clip URL with start and end seconds, like "
     "https://connect.comma.ai/<dongle>/<route>/<start>/<end>. "
-    "In Connect, follow the README Quick Usage steps: select a route, drag-select the clip window, "
+    "In Connect, follow the README Quick Usage steps at "
+    "https://github.com/nelsonjchen/op-replay-clipper#quick-usage: select a route, drag-select the clip window, "
     "then copy the browser URL. The last two numbers should be the clip start second and end second."
 )
 
