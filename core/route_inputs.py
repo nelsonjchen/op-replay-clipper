@@ -6,6 +6,12 @@ from urllib.parse import urlparse
 
 
 LITERAL_URL_PREFIX = "literal:"
+CONNECT_CLIP_URL_HELP = (
+    "Expected a full comma Connect clip URL with start and end seconds, like "
+    "https://connect.comma.ai/<dongle>/<route>/<start>/<end>. "
+    "In Connect, follow the README Quick Usage steps: select a route, drag-select the clip window, "
+    "then copy the browser URL. The last two numbers should be the clip start second and end second."
+)
 
 
 def _coerce_route_text(route_or_url: Any) -> str:
@@ -40,7 +46,7 @@ def validate_connect_url(route_or_url: str | os.PathLike[str], *, error_message:
     route_or_url = _normalize_route_text(route_or_url)
     parsed = urlparse(route_or_url)
     if parsed.scheme != "https" or parsed.hostname != "connect.comma.ai":
-        raise ValueError(error_message or "Expected a full https://connect.comma.ai/... clip URL.")
+        raise ValueError(error_message or CONNECT_CLIP_URL_HELP)
     return route_or_url
 
 # These have a dash in the 2nd part and 4 parts
@@ -68,9 +74,16 @@ def parseRouteRelativeUrl(
     segment_name = path_parts[2]
     internal_route_name = f"{dongle_id}|{segment_name}"
     # The third part should be the start time relative to the start time of the route
-    start_time = int(path_parts[3])
+    try:
+        start_time = int(path_parts[3])
+        end_time = int(path_parts[4])
+    except ValueError as exc:
+        raise ValueError(CONNECT_CLIP_URL_HELP) from exc
     # The fourth part should be end time relative to the start time of the route
-    end_time = int(path_parts[4])
+    if end_time <= start_time:
+        raise ValueError(
+            f"Connect clip URL end second must be greater than the start second. Got start={start_time}, end={end_time}."
+        )
 
 
     start_seconds = start_time
@@ -276,10 +289,8 @@ def parseRouteOrUrl(
     if len(url_parts) == 5 and "-" in url_parts[2]:
         return parseRouteRelativeUrl(route_or_url, jwt_token)
 
-    print("Number of url parts: ", len(url_parts))
-
     # If the URL is not an absolute time URL, throw an exception
-    raise ValueError("Invalid URL")
+    raise ValueError(CONNECT_CLIP_URL_HELP)
 
 # Make an argparse test for this
 if __name__ == "__main__":
