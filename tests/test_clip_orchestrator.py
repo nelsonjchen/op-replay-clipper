@@ -72,6 +72,24 @@ def test_build_plan_parses_route_for_ui_requests() -> None:
     assert plan.target_mb == 8
 
 
+def test_build_plan_explains_connect_url_missing_clip_window() -> None:
+    with pytest.raises(ValueError) as excinfo:
+        clip_orchestrator.build_clip_plan(
+            clip_orchestrator.ClipRequest(
+                render_type="ui",
+                route_or_url="https://connect.comma.ai/a2a0ccea32023010/000001bb--4c0c0efba9",
+                start_seconds=0,
+                length_seconds=0,
+                target_mb=9,
+            )
+        )
+
+    message = str(excinfo.value)
+    assert "start and end seconds" in message
+    assert "https://github.com/nelsonjchen/op-replay-clipper#quick-usage" in message
+    assert "last two numbers" in message
+
+
 def test_build_plan_treats_ui_alt_as_ui_render() -> None:
     plan = clip_orchestrator.build_clip_plan(
         clip_orchestrator.ClipRequest(
