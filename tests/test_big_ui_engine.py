@@ -320,7 +320,26 @@ def test_ui_alt_dates_text_uses_no_gps_fallback_when_clip_start_missing() -> Non
     )
 
 
-def test_resolve_model_commit_metadata_uses_local_git(monkeypatch) -> None:
+def test_resolve_model_commit_metadata_prefers_github_over_stale_local_git(monkeypatch) -> None:
+    monkeypatch.setattr(
+        big_ui_engine,
+        "_model_commit_from_github_api",
+        lambda *_args: ("4988a62b", 'Revert "POP model (#37727)" (#37871)'),
+    )
+    monkeypatch.setattr(
+        big_ui_engine,
+        "_model_commit_from_local_git",
+        lambda *_args: ("61f7c7ea", "use vendored xvfb (#37934)"),
+    )
+
+    assert big_ui_engine.resolve_model_commit_metadata("ab43fd13", "github.com/commaai/openpilot") == {
+        "model_commit": "4988a62b",
+        "model_commit_title": 'Revert "POP model (#37727)" (#37871)',
+    }
+
+
+def test_resolve_model_commit_metadata_falls_back_to_local_git(monkeypatch) -> None:
+    monkeypatch.setattr(big_ui_engine, "_model_commit_from_github_api", lambda *_args: None)
     monkeypatch.setattr(big_ui_engine, "_find_openpilot_checkout_root", lambda: big_ui_engine.REPO_ROOT)
     monkeypatch.setattr(
         big_ui_engine,

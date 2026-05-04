@@ -1,0 +1,1533 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Comma Watch Dashboard</title>
+    <style>
+      :root {
+        --bg: #091017;
+        --panel: rgba(15, 22, 31, 0.92);
+        --panel-2: rgba(21, 30, 42, 0.96);
+        --panel-3: rgba(12, 17, 25, 0.86);
+        --line: rgba(255, 255, 255, 0.08);
+        --line-strong: rgba(255, 255, 255, 0.14);
+        --text: #edf4ff;
+        --muted: #90a4ba;
+        --muted-2: #6d8096;
+        --accent: #5ea2ff;
+        --bookmark: #f0c63c;
+        --bookmark-bg: rgba(240, 198, 60, 0.18);
+        --alert: #f2994a;
+        --alert-bg: rgba(242, 153, 74, 0.18);
+        --dm: #ff8b94;
+        --dm-bg: rgba(255, 139, 148, 0.2);
+        --success: #31bf7a;
+        --success-deep: #1f7f53;
+        --queue: #58a6ff;
+        --active: #ffffff;
+        --shadow: 0 20px 48px rgba(0, 0, 0, 0.28);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(94, 162, 255, 0.14), transparent 28%),
+          radial-gradient(circle at top right, rgba(242, 153, 74, 0.12), transparent 24%),
+          linear-gradient(180deg, #0b1119 0%, #081018 100%);
+      }
+
+      button,
+      summary {
+        font: inherit;
+      }
+
+      .shell {
+        max-width: 1540px;
+        margin: 0 auto;
+        padding: 18px 20px 28px;
+      }
+
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: flex-start;
+        margin-bottom: 16px;
+      }
+
+      .hero h1 {
+        margin: 0;
+        font-size: 32px;
+        line-height: 1.04;
+        letter-spacing: -0.03em;
+      }
+
+      .hero p {
+        margin: 8px 0 0;
+        max-width: 760px;
+        color: var(--muted);
+      }
+
+      .stamp {
+        flex: 0 0 auto;
+        padding: 9px 12px;
+        border-radius: 999px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+      }
+
+      .overview {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .metric {
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.012));
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+      }
+
+      .metric-label {
+        color: var(--muted-2);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .metric-value {
+        margin-top: 6px;
+        font-size: 26px;
+        font-weight: 750;
+        line-height: 1.1;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.9fr) minmax(320px, 0.92fr);
+        gap: 14px;
+      }
+
+      .stack {
+        display: grid;
+        gap: 14px;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(14px);
+      }
+
+      .device-card {
+        padding: 18px;
+      }
+
+      .device-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+      }
+
+      .device-name {
+        font-size: 24px;
+        font-weight: 760;
+        letter-spacing: -0.02em;
+      }
+
+      .device-meta {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .device-status {
+        display: grid;
+        gap: 4px;
+        justify-items: end;
+        text-align: right;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .phase-banner {
+        margin-top: 14px;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: linear-gradient(90deg, rgba(94, 162, 255, 0.13), rgba(240, 198, 60, 0.12));
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .phase-title {
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted-2);
+      }
+
+      .phase-name {
+        margin-top: 4px;
+        font-size: 20px;
+        font-weight: 730;
+        letter-spacing: -0.02em;
+      }
+
+      .phase-summary {
+        margin-top: 4px;
+        color: var(--muted);
+      }
+
+      .phase-count {
+        white-space: nowrap;
+        color: var(--muted);
+      }
+
+      .section-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: baseline;
+        margin: 18px 0 12px;
+      }
+
+      .section-head h2,
+      .queue-card h2 {
+        margin: 0;
+        font-size: 19px;
+        letter-spacing: -0.02em;
+      }
+
+      .section-note {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .key-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0 0 12px;
+      }
+
+      .key-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .key-chip strong {
+        color: var(--text);
+        font-size: 11px;
+        letter-spacing: 0.04em;
+      }
+
+      .incident-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .incident-card {
+        padding: 14px;
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+        border: 1px solid var(--line);
+      }
+
+      .incident-card.active-window {
+        border-color: rgba(94, 162, 255, 0.35);
+        box-shadow: 0 0 0 1px rgba(94, 162, 255, 0.12);
+      }
+
+      .incident-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: flex-start;
+        margin-bottom: 8px;
+      }
+
+      .incident-meta {
+        display: grid;
+        gap: 8px;
+        justify-items: end;
+      }
+
+      .chip-block {
+        display: grid;
+        gap: 4px;
+        justify-items: end;
+      }
+
+      .incident-route {
+        font-weight: 730;
+      }
+
+      .incident-time {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .incident-status {
+        margin: 10px 0 12px;
+        color: var(--muted);
+      }
+
+      .chip-row,
+      .segment-pill-row,
+      .file-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 12px;
+        border: 1px solid transparent;
+      }
+
+      .chip.bookmark {
+        color: #f7df88;
+        background: var(--bookmark-bg);
+        border-color: rgba(240, 198, 60, 0.22);
+      }
+
+      .chip.alert {
+        color: #fdc88f;
+        background: var(--alert-bg);
+        border-color: rgba(242, 153, 74, 0.2);
+      }
+
+      .chip.dm-alert {
+        color: #ffb1b7;
+        background: var(--dm-bg);
+        border-color: rgba(255, 139, 148, 0.24);
+      }
+
+      .chip.phase {
+        color: #cae0ff;
+        background: rgba(94, 162, 255, 0.12);
+        border-color: rgba(94, 162, 255, 0.18);
+      }
+
+      .chip.neutral {
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+
+      .segment-pill {
+        min-width: 34px;
+        justify-content: center;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .segment-pill.complete {
+        color: #dbffe9;
+        background: rgba(49, 191, 122, 0.18);
+        border-color: rgba(49, 191, 122, 0.24);
+      }
+
+      .segment-pill.active {
+        color: #fff;
+        background: rgba(94, 162, 255, 0.22);
+        border-color: rgba(94, 162, 255, 0.3);
+      }
+
+      .segment-pill.queued {
+        color: #d5e7ff;
+        background: rgba(94, 162, 255, 0.1);
+        border-color: rgba(94, 162, 255, 0.18);
+      }
+
+      .incident-strip {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+        gap: 6px;
+        margin-top: 10px;
+      }
+
+      .incident-explainer {
+        display: grid;
+        gap: 10px;
+        margin-top: 10px;
+        margin-bottom: 14px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .incident-explainer-copy {
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .file-key,
+      .status-key {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .key-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 30px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: #dce9f8;
+        font-size: 12px;
+      }
+
+      .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        flex: 0 0 auto;
+      }
+
+      .status-dot.uploaded {
+        background: linear-gradient(90deg, var(--success), var(--success-deep));
+      }
+
+      .status-dot.active {
+        background: linear-gradient(90deg, #ffffff, #91c4ff);
+      }
+
+      .status-dot.queued {
+        background: linear-gradient(90deg, rgba(94, 162, 255, 0.85), rgba(94, 162, 255, 0.55));
+      }
+
+      .status-dot.missing {
+        background: rgba(255, 255, 255, 0.18);
+      }
+
+      .incident-segment {
+        padding: 7px 8px 8px;
+        border-radius: 12px;
+        background: var(--panel-3);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .incident-segment.complete {
+        border-color: rgba(49, 191, 122, 0.24);
+        background: rgba(49, 191, 122, 0.09);
+      }
+
+      .incident-segment.active {
+        border-color: rgba(94, 162, 255, 0.28);
+        background: rgba(94, 162, 255, 0.12);
+      }
+
+      .incident-segment-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+        align-items: center;
+        margin-bottom: 6px;
+        font-size: 12px;
+      }
+
+      .incident-segment-rank {
+        color: var(--muted-2);
+        font-size: 11px;
+      }
+
+      .mini-files {
+        display: grid;
+        gap: 4px;
+      }
+
+      .mini-file-row {
+        display: grid;
+        grid-template-columns: 36px minmax(0, 1fr);
+        gap: 6px;
+        align-items: center;
+      }
+
+      .mini-file-label {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 16px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.09);
+        color: #ecf5ff;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .mini-file {
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+
+      .mini-file > span {
+        display: block;
+        height: 100%;
+        width: 100%;
+      }
+
+      .mini-file.uploaded > span {
+        background: linear-gradient(90deg, var(--success), var(--success-deep));
+      }
+
+      .mini-file.active > span {
+        background: linear-gradient(90deg, #ffffff, #91c4ff);
+      }
+
+      .mini-file.queued > span {
+        background: linear-gradient(90deg, rgba(94, 162, 255, 0.85), rgba(94, 162, 255, 0.55));
+      }
+
+      .mini-file.missing > span {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .incident-footer {
+        margin-top: 12px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .inline-label {
+        color: var(--muted-2);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 11px;
+      }
+
+      .inline-value {
+        color: var(--muted);
+      }
+
+      .route-details {
+        margin-top: 18px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        overflow: hidden;
+      }
+
+      .route-details summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 14px 16px;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .route-details summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .summary-copy strong {
+        display: block;
+        font-size: 16px;
+        margin-bottom: 2px;
+      }
+
+      .summary-copy span {
+        color: var(--muted);
+      }
+
+      .summary-toggle {
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .details-body {
+        padding: 0 16px 16px;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .route-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .route-card {
+        padding: 14px;
+        border-radius: 16px;
+        background: var(--panel-3);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .route-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 10px;
+      }
+
+      .route-id {
+        font-weight: 730;
+      }
+
+      .route-time {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .route-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+
+      .timeline-shell {
+        position: relative;
+        overflow: hidden;
+        padding-bottom: 6px;
+      }
+
+      .timeline-shell::before,
+      .timeline-shell::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 24px;
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      .timeline-shell::before {
+        left: 0;
+        background: linear-gradient(90deg, rgba(9, 16, 23, 0.92), rgba(9, 16, 23, 0));
+      }
+
+      .timeline-shell::after {
+        right: 0;
+        background: linear-gradient(270deg, rgba(9, 16, 23, 0.92), rgba(9, 16, 23, 0));
+      }
+
+      .timeline-wrap {
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 2px 28px 20px 0;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+
+      .timeline-wrap::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+      }
+
+      .timeline {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: 20px;
+        gap: 5px;
+        min-height: 88px;
+        align-items: end;
+      }
+
+      .segment {
+        position: relative;
+        width: 20px;
+        height: 42px;
+        border-radius: 9px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        opacity: 0.34;
+        transition: opacity 120ms ease, transform 120ms ease;
+      }
+
+      .segment.lowq {
+        background: linear-gradient(180deg, rgba(48, 93, 165, 0.92), rgba(27, 54, 99, 0.96));
+        opacity: 0.7;
+      }
+
+      .segment.hq {
+        background: linear-gradient(180deg, rgba(49, 191, 122, 0.96), rgba(31, 127, 83, 0.98));
+        opacity: 0.96;
+      }
+
+      .segment.queued {
+        background-image:
+          repeating-linear-gradient(
+            -45deg,
+            rgba(255, 255, 255, 0.16) 0 4px,
+            transparent 4px 8px
+          );
+        opacity: 0.88;
+      }
+
+      .segment.active {
+        opacity: 1;
+        box-shadow:
+          0 0 0 1px rgba(255, 255, 255, 0.18),
+          0 0 18px rgba(255, 255, 255, 0.26);
+      }
+
+      .segment.phase-target {
+        transform: translateY(-2px);
+      }
+
+      .segment.bookmark,
+      .segment.alert,
+      .segment.dm-alert,
+      .segment.active,
+      .segment.queued,
+      .segment.hq {
+        opacity: 1;
+      }
+
+      .segment::before,
+      .segment::after {
+        content: "";
+        position: absolute;
+        left: 2px;
+        right: 2px;
+        border-radius: 999px;
+      }
+
+      .segment.bookmark::before {
+        top: 2px;
+        height: 4px;
+        background: var(--bookmark);
+      }
+
+      .segment.alert::after {
+        bottom: 2px;
+        height: 4px;
+        background: var(--alert);
+      }
+
+      .segment.dm-alert::after {
+        bottom: 2px;
+        height: 4px;
+        background: var(--dm);
+      }
+
+      .segment-label {
+        position: absolute;
+        left: 50%;
+        bottom: -20px;
+        transform: translateX(-50%);
+        font-size: 11px;
+        font-weight: 600;
+        color: #cfe0f3;
+        text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+      }
+
+      .queue-card {
+        padding: 18px;
+        display: grid;
+        gap: 14px;
+        align-content: start;
+      }
+
+      .queue-summary {
+        display: grid;
+        gap: 6px;
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: var(--panel-2);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .queue-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .queue-group-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .queue-group {
+        display: grid;
+        gap: 8px;
+      }
+
+      .queue-group-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: baseline;
+      }
+
+      .queue-group-title {
+        font-weight: 700;
+      }
+
+      .queue-group-subtitle {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .queue-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .queue-item {
+        padding: 12px;
+        border-radius: 14px;
+        background: var(--panel-2);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .queue-item.current {
+        border-color: rgba(94, 162, 255, 0.28);
+        box-shadow: 0 0 0 1px rgba(94, 162, 255, 0.12);
+      }
+
+      .queue-primary {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: baseline;
+      }
+
+      .queue-main {
+        font-weight: 700;
+      }
+
+      .queue-meta {
+        margin-top: 4px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .queue-path {
+        margin-top: 6px;
+        color: var(--muted-2);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px;
+        overflow-wrap: anywhere;
+      }
+
+      .progress {
+        margin-top: 8px;
+        height: 7px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+
+      .progress > span {
+        display: block;
+        height: 100%;
+        background: linear-gradient(90deg, rgba(255, 255, 255, 0.9), rgba(94, 162, 255, 0.94));
+      }
+
+      .empty {
+        padding: 18px;
+        color: var(--muted);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.025);
+        border: 1px dashed rgba(255, 255, 255, 0.08);
+      }
+
+      .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        display: inline-block;
+      }
+
+      .status-dot.uploaded {
+        background: linear-gradient(180deg, var(--success), var(--success-deep));
+      }
+
+      .status-dot.active {
+        background: linear-gradient(180deg, #ffffff, #91c4ff);
+      }
+
+      .status-dot.queued {
+        background: linear-gradient(180deg, rgba(94, 162, 255, 0.92), rgba(94, 162, 255, 0.58));
+      }
+
+      .status-dot.missing {
+        background: rgba(255, 255, 255, 0.18);
+      }
+
+      @media (max-width: 1220px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 980px) {
+        .overview {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .incident-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .shell {
+          padding: 14px 14px 22px;
+        }
+
+        .hero {
+          flex-direction: column;
+        }
+
+        .overview {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .device-head,
+        .phase-banner,
+        .queue-primary,
+        .queue-group-head,
+        .route-head,
+        .section-head,
+        .incident-top {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .device-status {
+          justify-items: start;
+          text-align: left;
+        }
+
+        .incident-meta,
+        .chip-block {
+          justify-items: start;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .overview {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <div>
+          <h1>Comma Watch Dashboard</h1>
+          <p>
+            Watch what is becoming clip-usable next, what Athena is actively uploading for it, and how far the
+            watcher has gotten before route-fill takes over.
+          </p>
+        </div>
+        <div class="stamp" id="stamp">Loading…</div>
+      </header>
+
+      <section class="overview" id="overview"></section>
+
+      <div class="layout">
+        <main id="devices" class="stack"></main>
+        <aside class="queue-card card">
+          <div>
+            <h2>Queue With Reasons</h2>
+          </div>
+          <div id="queue-summary"></div>
+          <div id="queue"></div>
+        </aside>
+      </div>
+    </div>
+
+    <script>
+      const byId = (id) => document.getElementById(id);
+
+      function fmtTime(value) {
+        if (!value) return "unknown";
+        try {
+          return new Date(value).toLocaleString();
+        } catch {
+          return String(value);
+        }
+      }
+
+      function pct(value) {
+        return `${Math.round((value || 0) * 100)}%`;
+      }
+
+      function titleCase(value) {
+        return String(value || "")
+          .replaceAll("_", " ")
+          .replace(/\b\w/g, (match) => match.toUpperCase());
+      }
+
+      function categoryLabel(category) {
+        if (category === "dm_alert") return "DM Alert";
+        if (category === "bookmark") return "Bookmark";
+        if (category === "alert") return "Alert";
+        return titleCase(category);
+      }
+
+      function categoryClass(category) {
+        if (category === "dm_alert") return "dm-alert";
+        if (category === "alert") return "alert";
+        return "bookmark";
+      }
+
+      function queueReasonLabel(item) {
+        return item.reason_label || "unclassified";
+      }
+
+      function fileKindLabel(kind) {
+        const labels = {
+          fcamera: "Fwd",
+          rlog: "Log",
+          ecamera: "Wide",
+          dcamera: "Drv",
+        };
+        return labels[kind] || titleCase(kind);
+      }
+
+      function buildOverview(state) {
+        const devices = state.devices || [];
+        const queueItems = devices.flatMap((device) => device.queue?.items || []);
+        const incidentWindows = devices.flatMap((device) => device.incident_windows || []);
+        const activeItems = queueItems.filter((item) => item.current);
+        const activeWindows = incidentWindows.filter((window) => window.is_active_phase_window);
+        return [
+          ["Devices Online", String(devices.length)],
+          ["Incident Windows", String(incidentWindows.length)],
+          ["Queue Length", String(queueItems.length)],
+          ["Active Uploads", String(activeItems.length)],
+          ["Windows In Flight", String(activeWindows.length)],
+          ["Generated", fmtTime(state.generated_at)],
+        ];
+      }
+
+      function renderOverview(state) {
+        const root = byId("overview");
+        root.innerHTML = "";
+        for (const [label, value] of buildOverview(state)) {
+          const card = document.createElement("div");
+          card.className = "metric";
+          card.innerHTML = `<div class="metric-label">${label}</div><div class="metric-value">${value}</div>`;
+          root.appendChild(card);
+        }
+      }
+
+      function segmentPillClass(status) {
+        if (status.is_complete) return "segment-pill complete";
+        if ((status.active_file_kinds || []).length) return "segment-pill active";
+        if ((status.queued_file_kinds || []).length) return "segment-pill queued";
+        return "segment-pill";
+      }
+
+      function miniFileState(status, kind) {
+        if ((status.uploaded_file_kinds || []).includes(kind)) return "uploaded";
+        if ((status.active_file_kinds || []).includes(kind)) return "active";
+        if ((status.queued_file_kinds || []).includes(kind)) return "queued";
+        return "missing";
+      }
+
+      function incidentStatusLine(window) {
+        const completion = window.completion || {};
+        const totalSegments = (window.segment_order || []).length;
+        const completeSegments = (window.segment_statuses || []).filter((status) => status.is_complete).length;
+        return `segment ${window.anchor_segment} window • ${completeSegments}/${totalSegments} segments complete • ${completion.missing || 0} files still missing`;
+      }
+
+      function incidentFooterLine(window) {
+        const first = window.first_incomplete_segment;
+        if (window.ready_state === "complete" && String(window.phase_membership || "").startsWith("bookmark_fill")) {
+          return "Core clip ready; filling outward";
+        }
+        if (window.ready_state === "complete") {
+          return "Clip-ready window complete";
+        }
+        if (!first) {
+          return "Waiting for queue activity";
+        }
+        const active = first.active_file_kinds?.length ? `active ${first.active_file_kinds.join(", ")}` : null;
+        const queued = first.queued_file_kinds?.length ? `queued ${first.queued_file_kinds.join(", ")}` : null;
+        const missing = first.missing_file_kinds?.length ? `missing ${first.missing_file_kinds.join(", ")}` : null;
+        return `Next up: seg ${first.segment} • ${[active, queued, missing].filter(Boolean).join(" • ")}`;
+      }
+
+      function renderIncidentCard(window) {
+        const card = document.createElement("section");
+        card.className = `incident-card ${window.is_active_phase_window ? "active-window" : ""}`;
+
+        const reasonChip = `<span class="chip phase">${titleCase(window.phase_membership || "none")}</span>`;
+        const typeChip = `<span class="chip ${categoryClass(window.category)}">${categoryLabel(window.category)}</span>`;
+        const stateChip = `<span class="chip neutral">${titleCase(window.ready_state)}</span>`;
+
+        const segmentPills = (window.segment_statuses || [])
+          .map((status, index) => `<span class="${segmentPillClass(status)}">#${status.segment}</span>`)
+          .join("");
+
+        const strip = (window.segment_statuses || [])
+          .map((status, index) => {
+            const files = (window.required_file_order || [])
+              .map(
+                (kind) => `
+                  <div class="mini-file-row">
+                    <span class="mini-file-label">${fileKindLabel(kind)}</span>
+                    <div class="mini-file ${miniFileState(status, kind)}"><span></span></div>
+                  </div>
+                `,
+              )
+              .join("");
+            return `
+              <div class="incident-segment ${status.is_complete ? "complete" : ""} ${
+              (status.active_file_kinds || []).length ? "active" : ""
+            }">
+                <div class="incident-segment-header">
+                  <strong>Seg ${status.segment}</strong>
+                  <span class="incident-segment-rank">${index + 1}</span>
+                </div>
+                <div class="mini-files">${files}</div>
+              </div>
+            `;
+          })
+          .join("");
+
+        const uploading = (window.currently_uploading_files || []).length
+          ? `<div><div class="inline-label">Now Uploading</div><div class="file-chip-row">${window.currently_uploading_files
+              .map((file) => `<span class="chip neutral">seg ${file.segment} ${file.file_kind}</span>`)
+              .join("")}</div></div>`
+          : "";
+
+        card.innerHTML = `
+          <div class="incident-top">
+            <div>
+              <div class="incident-route">${window.route_id}</div>
+              <div class="incident-time">${fmtTime(window.route_start_time)}</div>
+            </div>
+            <div class="incident-meta">
+              <div class="chip-block">
+                <div class="inline-label">Reason</div>
+                <div class="chip-row">${reasonChip}</div>
+              </div>
+              <div class="chip-block">
+                <div class="inline-label">Incident</div>
+                <div class="chip-row">${typeChip}</div>
+              </div>
+              <div class="chip-block">
+                <div class="inline-label">State</div>
+                <div class="chip-row">${stateChip}</div>
+              </div>
+            </div>
+          </div>
+          <div class="incident-status">${incidentStatusLine(window)}</div>
+          <div class="segment-pill-row">${segmentPills}</div>
+          <div class="incident-strip">${strip}</div>
+          <div class="incident-footer">
+            ${uploading}
+            <div>
+              <div class="inline-label">Next Up</div>
+              <div class="inline-value">${incidentFooterLine(window)}</div>
+            </div>
+          </div>
+        `;
+        return card;
+      }
+
+      function renderIncidentExplainer() {
+        const wrapper = document.createElement("div");
+        wrapper.className = "incident-explainer";
+        wrapper.innerHTML = `
+          <div class="incident-explainer-copy">
+            Each card is one incident window. The Reason chip tells you why the watcher picked this window, the
+            Incident chip tells you what kind of event it is, and the State chip tells you whether that window is
+            complete or still being assembled. Inside each segment card, every row is one required file.
+          </div>
+          <div class="file-key">
+            <span class="key-chip"><strong>Fwd</strong> forward camera</span>
+            <span class="key-chip"><strong>Log</strong> route logs</span>
+            <span class="key-chip"><strong>Wide</strong> wide road camera</span>
+            <span class="key-chip"><strong>Drv</strong> driver camera</span>
+          </div>
+          <div class="status-key">
+            <span class="key-chip"><span class="status-dot uploaded"></span> uploaded</span>
+            <span class="key-chip"><span class="status-dot active"></span> uploading now</span>
+            <span class="key-chip"><span class="status-dot queued"></span> queued</span>
+            <span class="key-chip"><span class="status-dot missing"></span> still missing</span>
+          </div>
+        `;
+        return wrapper;
+      }
+
+      function segmentClass(segment) {
+        const files = segment.files || {};
+        const hasHQ = files.fcamera && files.rlog && files.ecamera && files.dcamera;
+        const hasLowQ = files.qcamera || files.qlog;
+        const classes = ["segment"];
+        if (hasHQ) classes.push("hq");
+        else if (hasLowQ) classes.push("lowq");
+        if (segment.queued_count) classes.push("queued");
+        if (segment.active_count) classes.push("active");
+        if (segment.active_phase_rank) classes.push("phase-target");
+        if (segment.bookmark) classes.push("bookmark");
+        if (segment.dm_alert) classes.push("dm-alert");
+        else if (segment.alert) classes.push("alert");
+        return classes.join(" ");
+      }
+
+      function segmentTitle(route, segment) {
+        const files = segment.files || {};
+        const available = Object.entries(files)
+          .filter(([, present]) => present)
+          .map(([name]) => name);
+        return [
+          `${route.route_id} seg ${segment.segment}`,
+          `bookmark=${segment.bookmark} dm=${segment.dm_alert} alert=${segment.alert}`,
+          `phase=${segment.phase || "none"} rank=${segment.phase_rank || "-"}`,
+          `available=${available.join(", ") || "none"}`,
+          `queued=${(segment.queued_file_kinds || []).join(", ") || "none"}`,
+          `active=${(segment.active_file_kinds || []).join(", ") || "none"}`,
+        ].join("\n");
+      }
+
+      function routeSummary(device) {
+        const routes = device.routes || [];
+        const bookmarkRoutes = routes.filter((route) => (route.bookmark_segments || []).length).length;
+        const alertRoutes = routes.filter((route) => (route.alert_segments || []).length || (route.dm_alert_segments || []).length).length;
+        return `${routes.length} routes in window • ${bookmarkRoutes} routes with bookmarks • ${alertRoutes} routes with alerts`;
+      }
+
+      function renderRoutes(device) {
+        const routes = [...(device.routes || [])].sort((a, b) => (a.start_time < b.start_time ? 1 : -1));
+        const details = document.createElement("details");
+        details.className = "route-details";
+
+        const summary = document.createElement("summary");
+        summary.innerHTML = `
+          <div class="summary-copy">
+            <strong>Route Timelines</strong>
+            <span>${routeSummary(device)}</span>
+          </div>
+          <div class="summary-toggle">Show route timelines</div>
+        `;
+        details.appendChild(summary);
+
+        details.addEventListener("toggle", () => {
+          const toggle = summary.querySelector(".summary-toggle");
+          if (toggle) toggle.textContent = details.open ? "Hide route timelines" : "Show route timelines";
+        });
+
+        const body = document.createElement("div");
+        body.className = "details-body";
+        body.innerHTML = `
+          <div class="legend">
+            <span class="chip neutral">Each big pill = one 60-second segment</span>
+            <span class="chip bookmark">Bookmark</span>
+            <span class="chip dm-alert">DM Alert</span>
+            <span class="chip alert">Alert</span>
+            <span class="chip neutral">Blue = low quality present</span>
+            <span class="chip neutral">Green = clip-ready HQ bundle</span>
+            <span class="chip neutral">Glow = actively uploading</span>
+          </div>
+        `;
+
+        const list = document.createElement("div");
+        list.className = "route-list";
+        for (const route of routes) {
+          const routeCard = document.createElement("section");
+          routeCard.className = "route-card";
+
+          const tags = [];
+          if ((route.bookmark_segments || []).length) tags.push(`<span class="chip bookmark">Bookmarks ${route.bookmark_segments.join(", ")}</span>`);
+          if ((route.dm_alert_segments || []).length) tags.push(`<span class="chip dm-alert">DM ${route.dm_alert_segments.join(", ")}</span>`);
+          if ((route.alert_segments || []).length) tags.push(`<span class="chip alert">Alerts ${route.alert_segments.join(", ")}</span>`);
+          tags.push(`<span class="chip neutral">maxqlog ${route.maxqlog}</span>`);
+          tags.push(`<span class="chip neutral">procqlog ${route.procqlog ?? "?"}</span>`);
+
+          const timeline = document.createElement("div");
+          timeline.className = "timeline";
+          for (const segment of route.segments || []) {
+            const segEl = document.createElement("div");
+            segEl.className = segmentClass(segment);
+            segEl.title = segmentTitle(route, segment);
+            if (segment.segment % 5 === 0 || segment.bookmark || segment.alert || segment.dm_alert || segment.active_count) {
+              const label = document.createElement("div");
+              label.className = "segment-label";
+              label.textContent = String(segment.segment);
+              segEl.appendChild(label);
+            }
+            timeline.appendChild(segEl);
+          }
+
+          routeCard.innerHTML = `
+            <div class="route-head">
+              <div>
+                <div class="route-id">${route.route_id}</div>
+                <div class="route-time">${fmtTime(route.start_time)}</div>
+              </div>
+              <div class="route-time">${(route.segments || []).length} segments</div>
+            </div>
+            <div class="route-tags">${tags.join("")}</div>
+          `;
+
+          const timelineShell = document.createElement("div");
+          timelineShell.className = "timeline-shell";
+          const scroll = document.createElement("div");
+          scroll.className = "timeline-wrap";
+          scroll.appendChild(timeline);
+          timelineShell.appendChild(scroll);
+          routeCard.appendChild(timelineShell);
+          list.appendChild(routeCard);
+        }
+
+        body.appendChild(list);
+        details.appendChild(body);
+        return details;
+      }
+
+      function renderDevices(state) {
+        const root = byId("devices");
+        root.innerHTML = "";
+        const devices = state.devices || [];
+        if (!devices.length) {
+          root.innerHTML = `<section class="device-card card"><div class="empty">No online devices in the current watcher snapshot.</div></section>`;
+          return;
+        }
+
+        for (const device of devices) {
+          const card = document.createElement("section");
+          card.className = "device-card card";
+          const incidents = (device.incident_windows || []).slice(0, 6);
+          const activePhase = device.active_phase;
+          const activeWindows = (device.incident_windows || []).filter((window) => window.is_active_phase_window);
+
+          card.innerHTML = `
+            <div class="device-head">
+              <div>
+                <div class="device-name">${device.alias || device.dongle_id}</div>
+                <div class="device-meta">${device.dongle_id}</div>
+              </div>
+              <div class="device-status">
+                <span>queue ${device.queue?.length || 0} · active ${device.queue?.active_length || 0}</span>
+                <span>${(device.incident_windows || []).length} incident windows tracked</span>
+              </div>
+            </div>
+            <div class="phase-banner">
+              <div>
+                <div class="phase-title">Watcher Focus</div>
+                <div class="phase-name">${titleCase(activePhase?.name || "idle")}</div>
+                <div class="phase-summary">${
+                  activeWindows.length
+                    ? `${activeWindows.length} incident window(s) actively being serviced`
+                    : "No active incident window right now"
+                }</div>
+              </div>
+              <div class="phase-count">${activePhase?.targets?.length || 0} target segments</div>
+            </div>
+          `;
+
+          const sectionHead = document.createElement("div");
+          sectionHead.className = "section-head";
+          sectionHead.innerHTML = `
+            <h2>Now Becoming Usable</h2>
+            <div class="section-note">Top incident windows in watcher priority order</div>
+          `;
+          card.appendChild(sectionHead);
+
+          if (!incidents.length) {
+            const empty = document.createElement("div");
+            empty.className = "empty";
+            empty.textContent = "No bookmark or alert windows are visible right now.";
+            card.appendChild(empty);
+          } else {
+            card.appendChild(renderIncidentExplainer());
+            const grid = document.createElement("div");
+            grid.className = "incident-grid";
+            for (const incident of incidents) grid.appendChild(renderIncidentCard(incident));
+            card.appendChild(grid);
+          }
+
+          card.appendChild(renderRoutes(device));
+          root.appendChild(card);
+        }
+      }
+
+      function sortQueueItems(items) {
+        return [...items].sort((a, b) => {
+          if (a.current !== b.current) return a.current ? -1 : 1;
+          const aSeg = a.segment_rank_within_window ?? 999;
+          const bSeg = b.segment_rank_within_window ?? 999;
+          if (aSeg !== bSeg) return aSeg - bSeg;
+          const aFile = a.file_rank_within_segment ?? 999;
+          const bFile = b.file_rank_within_segment ?? 999;
+          if (aFile !== bFile) return aFile - bFile;
+          return String(a.path).localeCompare(String(b.path));
+        });
+      }
+
+      function renderQueue(state) {
+        const summaryRoot = byId("queue-summary");
+        const queueRoot = byId("queue");
+        summaryRoot.innerHTML = "";
+        queueRoot.innerHTML = "";
+
+        const devices = state.devices || [];
+        const queueItems = devices.flatMap((device) => device.queue?.items || []);
+        const activeItems = queueItems.filter((item) => item.current);
+        const activePhase = devices.map((device) => device.active_phase?.name).find(Boolean) || "idle";
+        const incidentWindows = devices.flatMap((device) => device.incident_windows || []);
+        const activeWindows = incidentWindows.filter((window) => window.is_active_phase_window);
+
+        summaryRoot.innerHTML = `
+          <div class="queue-summary">
+            <div class="phase-title">Queue Summary</div>
+            <div class="phase-name">${titleCase(activePhase)}</div>
+            <div class="queue-summary-grid">
+              <div>
+                <div class="metric-label">Active uploads</div>
+                <div class="metric-value">${activeItems.length}</div>
+              </div>
+              <div>
+                <div class="metric-label">Windows in service</div>
+                <div class="metric-value">${activeWindows.length}</div>
+              </div>
+            </div>
+            <div class="section-note">${
+              activeWindows.length
+                ? activeWindows.slice(0, 3).map((window) => `${window.route_id} seg ${window.anchor_segment}`).join(" • ")
+                : "No active incident windows right now"
+            }</div>
+          </div>
+        `;
+
+        if (!queueItems.length) {
+          queueRoot.innerHTML = `<div class="empty">Nothing queued right now.</div>`;
+          return;
+        }
+
+        const grouped = new Map();
+        const sorted = sortQueueItems(queueItems).slice(0, 24);
+        for (const item of sorted) {
+          const groupKey = item.incident_window_id || `fallback:${queueReasonLabel(item)}`;
+          if (!grouped.has(groupKey)) grouped.set(groupKey, []);
+          grouped.get(groupKey).push(item);
+        }
+
+        const incidentsById = new Map(incidentWindows.map((window) => [window.id, window]));
+        const list = document.createElement("div");
+        list.className = "queue-group-list";
+
+        for (const [groupKey, items] of grouped.entries()) {
+          const first = items[0];
+          const incident = first.incident_window_id ? incidentsById.get(first.incident_window_id) : null;
+          const section = document.createElement("section");
+          section.className = "queue-group";
+          section.innerHTML = `
+            <div class="queue-group-head">
+              <div>
+                <div class="queue-group-title">${
+                  incident ? `${categoryLabel(incident.category)} • ${incident.route_id} • seg ${incident.anchor_segment}` : titleCase(queueReasonLabel(first))
+                }</div>
+                <div class="queue-group-subtitle">${
+                  incident
+                    ? `${titleCase(incident.phase_membership)} • ${titleCase(incident.ready_state)}`
+                    : first.reason_label
+                      ? titleCase(first.reason_label)
+                      : "Queue item"
+                }</div>
+              </div>
+              <div class="queue-group-subtitle">${items.length} file(s)</div>
+            </div>
+          `;
+
+          const queueList = document.createElement("div");
+          queueList.className = "queue-list";
+          for (const item of items) {
+            const entry = document.createElement("article");
+            entry.className = `queue-item ${item.current ? "current" : ""}`;
+            entry.innerHTML = `
+              <div class="queue-primary">
+                <div class="queue-main">${item.route_id} • seg ${item.segment} • ${item.file_kind || item.filename}</div>
+                <div class="queue-group-subtitle">${item.current ? "active" : "queued"} • ${pct(item.progress)}</div>
+              </div>
+              <div class="queue-meta">
+                <span>${titleCase(queueReasonLabel(item))}</span>
+                ${item.segment_rank_within_window ? `<span>segment rank ${item.segment_rank_within_window}</span>` : ""}
+                ${item.file_rank_within_segment ? `<span>file rank ${item.file_rank_within_segment}</span>` : ""}
+                <span>retry ${item.retry_count}</span>
+              </div>
+              <div class="queue-path">${item.path}</div>
+              <div class="progress"><span style="width:${Math.max(3, Math.round((item.progress || 0) * 100))}%"></span></div>
+            `;
+            queueList.appendChild(entry);
+          }
+          section.appendChild(queueList);
+          list.appendChild(section);
+        }
+
+        queueRoot.appendChild(list);
+      }
+
+      async function load() {
+        const response = await fetch(`/state?ts=${Date.now()}`, { cache: "no-store" });
+        const state = await response.json();
+        byId("stamp").textContent = state.generated_at ? `Snapshot ${fmtTime(state.generated_at)}` : "Waiting for watcher state…";
+        renderOverview(state);
+        renderDevices(state);
+        renderQueue(state);
+      }
+
+      load().catch((error) => {
+        byId("stamp").textContent = `Failed to load state: ${error}`;
+      });
+      setInterval(() => load().catch(() => {}), 4000);
+    </script>
+  </body>
+</html>

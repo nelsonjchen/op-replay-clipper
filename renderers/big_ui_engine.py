@@ -726,9 +726,9 @@ def _model_commit_from_github_api(source_commit: object, remote: object) -> tupl
 
 
 def resolve_model_commit_metadata(source_commit: object, remote: object) -> dict[str, str]:
-    resolved = _model_commit_from_local_git(source_commit)
+    resolved = _model_commit_from_github_api(source_commit, remote)
     if resolved is None:
-        resolved = _model_commit_from_github_api(source_commit, remote)
+        resolved = _model_commit_from_local_git(source_commit)
     if resolved is None:
         return {}
     model_commit, model_commit_title = resolved
