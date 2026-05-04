@@ -51,6 +51,16 @@ PHASE_REASON_LABELS = {
     "bookmark_fill_recent": "bookmark fill",
     "bookmark_fill_older": "bookmark fill",
 }
+LOW_QUALITY_FILE_KINDS = {"qlog", "qcamera"}
+PHASE_PRIORITY_BASES = {
+    "recent_bookmarks": 0,
+    "older_bookmarks": 12,
+    "dm_alerts": 24,
+    "alerts": 36,
+    "bookmark_fill_recent": 60,
+    "bookmark_fill_older": 72,
+}
+MAX_WATCHER_PRIORITY = 98
 FILE_KIND_BY_TYPE = {
     "cameras": ("fcamera",),
     "logs": ("rlog",),
@@ -802,25 +812,39 @@ def desired_pending_paths(desired_paths: Iterable[str], uploaded_paths: set[str]
 
 
 def target_queue_refresh_needed(
-    online_queue: list[dict[str, Any]],
+    queue_entries: list[QueueEntry],
     *,
-    desired_pending_paths: list[str],
-    missing_paths: list[str],
-    target_paths: set[str],
+    desired_priorities: dict[str, int],
 ) -> bool:
-    if not desired_pending_paths:
+    if not desired_priorities:
         return False
-    if not missing_paths:
-        return False
-    ordered_paths = ordered_online_queue_paths(online_queue)
-    expected_queue_tail = athena_enqueue_order(desired_pending_paths)
-    if len(ordered_paths) < len(expected_queue_tail):
-        return True
-    return ordered_paths[-len(expected_queue_tail) :] != expected_queue_tail
+    for entry in queue_entries:
+        desired_priority = desired_priorities.get(entry.path)
+        if desired_priority is None:
+            continue
+        if entry.priority != desired_priority:
+            return True
+    return False
 
 
 def should_clear_queue_while_waiting(*, prioritized_segments: list[SegmentTarget], has_pending_priority: bool) -> bool:
     return False
+
+
+def watcher_priority_for_index(phase_name: str | None, index: int) -> int:
+    base = PHASE_PRIORITY_BASES.get(phase_name or "", 80)
+    return min(base + index, MAX_WATCHER_PRIORITY)
+
+
+def desired_path_priorities(phase_name: str | None, paths: Iterable[str]) -> dict[str, int]:
+    return {
+        path: watcher_priority_for_index(phase_name, index)
+        for index, path in enumerate(paths)
+    }
+
+
+def is_preserved_queue_entry(entry: QueueEntry) -> bool:
+    return entry.file_kind in LOW_QUALITY_FILE_KINDS
 
 
 def generate_candidate_paths(route: Route, segments: Iterable[int], file_types: Iterable[str]) -> list[str]:
@@ -1218,8 +1242,8 @@ def annotate_queue_entries(
     return annotated
 
 
-def request_uploads(api: CommaApi, dongle_id: str, paths: list[str]) -> dict[str, Any]:
-    ordered_paths = athena_enqueue_order(paths)
+def request_uploads(api: CommaApi, dongle_id: str, paths: list[str], *, priorities: dict[str, int]) -> dict[str, Any]:
+    ordered_paths = list(paths)
     upload_metadata = api.request_upload_urls(dongle_id, ordered_paths)
     files = [
         UploadFile(file_path=path, url=metadata["url"], headers=metadata["headers"])
@@ -1231,7 +1255,7 @@ def request_uploads(api: CommaApi, dongle_id: str, paths: list[str]) -> dict[str
                 "allow_cellular": False,
                 "fn": file.file_path,
                 "headers": file.headers,
-                "priority": 1,
+                "priority": priorities[file.file_path],
                 "url": file.url,
             }
             for file in files
@@ -1479,26 +1503,36 @@ def scan_once(
                     "name": active_phase_name,
                     "targets": [f"{target.route_id}:{target.segment}" for target in active_phase_targets],
                 }
+            pending_priorities = desired_path_priorities(active_phase_name, pending_paths)
             print(
                 f"Desired files={len(desired_paths)} uploaded={len(uploaded_paths)} queued={len(queued_paths)} missing={len(missing_paths)}"
             )
             refreshed_queue = False
             if exclusive_bookmark_priority and target_queue_refresh_needed(
-                online_queue,
-                desired_pending_paths=pending_paths,
-                missing_paths=missing_paths,
-                target_paths=target_paths,
+                queue_entries,
+                desired_priorities=pending_priorities,
             ):
-                cancel_ids = [item["id"] for item in online_queue if item.get("id")]
+                cancel_ids = [
+                    entry.upload_id
+                    for entry in queue_entries
+                    if entry.upload_id
+                    and entry.path in pending_priorities
+                    and entry.priority != pending_priorities[entry.path]
+                ]
                 if cancel_ids:
                     response = api.cancel_uploads(device.dongle_id, cancel_ids)
-                    print(f"Canceled {len(cancel_ids)} queue item(s) to rebuild priority order:")
+                    print(f"Canceled {len(cancel_ids)} queued target item(s) to refresh priorities:")
                     print(json.dumps(response, indent=2))
                     queue_cleared = True
-                online_queue = []
+                online_queue = api.athena_call(device.dongle_id, "listUploadQueue", {}).get("result", [])
+                queue_entries = summarize_online_queue(online_queue)
+                queue_items_by_segment = {}
+                for entry in queue_entries:
+                    queue_items_by_segment.setdefault((entry.route_id, entry.segment), []).append(entry)
                 offline_queue = api.get_athena_offline_queue(device.dongle_id)
                 queued_paths = normalize_queue_paths(online_queue, offline_queue)
                 missing_paths = [path for path in desired_paths if path not in uploaded_paths and path not in queued_paths]
+                pending_priorities = desired_path_priorities(active_phase_name, missing_paths)
                 refreshed_queue = True
 
             if not missing_paths:
@@ -1507,7 +1541,7 @@ def scan_once(
                 else:
                     print("Priority segment files are already uploaded or queued.")
             else:
-                response = request_uploads(api, device.dongle_id, missing_paths)
+                response = request_uploads(api, device.dongle_id, missing_paths, priorities=pending_priorities)
                 print("Queued upload request:")
                 print(json.dumps(response, indent=2))
                 queued_paths.update(missing_paths)
@@ -1547,21 +1581,16 @@ def scan_once(
 
         if exclusive_bookmark_priority:
             if prioritized_segments and has_pending_targets:
-                cancel_ids = [
-                    item["id"]
-                    for item in online_queue
-                    if item.get("id") and normalize_online_queue_item_path(item) not in target_paths
-                ]
-                if cancel_ids:
-                    response = api.cancel_uploads(device.dongle_id, cancel_ids)
-                    print(f"Canceled {len(cancel_ids)} non-priority queue item(s):")
-                    print(json.dumps(response, indent=2))
-                    queue_cleared = True
+                pass
             elif should_clear_queue_while_waiting(
                 prioritized_segments=prioritized_segments,
                 has_pending_priority=has_pending_targets,
             ):
-                cancel_ids = [item["id"] for item in online_queue if item.get("id")]
+                cancel_ids = [
+                    entry.upload_id
+                    for entry in queue_entries
+                    if entry.upload_id and not is_preserved_queue_entry(entry)
+                ]
                 if cancel_ids:
                     response = api.cancel_uploads(device.dongle_id, cancel_ids)
                     print(f"Canceled {len(cancel_ids)} queue item(s) while waiting for priority segments:")

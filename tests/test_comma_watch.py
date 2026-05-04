@@ -14,9 +14,11 @@ from tools.comma_watch import (
     SegmentTarget,
     alert_segments_with_lookback,
     desired_pending_paths,
+    desired_path_priorities,
     generate_candidate_paths,
     generate_candidate_paths_by_priority,
     is_owned_online_device,
+    is_preserved_queue_entry,
     is_dm_alert_event,
     ordered_online_queue_paths,
     prioritize_segments,
@@ -34,6 +36,7 @@ from tools.comma_watch import (
     summarize_online_queue,
     should_clear_queue_while_waiting,
     target_queue_refresh_needed,
+    watcher_priority_for_index,
 )
 
 
@@ -494,69 +497,158 @@ def test_desired_pending_paths_skips_uploaded_files() -> None:
     ) == ["a/fcamera.hevc", "a/ecamera.hevc"]
 
 
-def test_target_queue_refresh_needed_when_order_is_wrong() -> None:
-    online_queue = [
-        {"id": "1", "path": "/data/media/0/realdata/route--2/fcamera.hevc"},
-        {"id": "2", "path": "/data/media/0/realdata/route--2/rlog.zst"},
+def test_target_queue_refresh_needed_when_priority_is_wrong() -> None:
+    queue_entries = [
+        QueueEntry(
+            path="route--2/fcamera.hevc",
+            route_id="route",
+            segment=2,
+            filename="fcamera.hevc",
+            file_kind="fcamera",
+            current=False,
+            progress=0.0,
+            retry_count=0,
+            priority=99,
+            upload_id="1",
+        ),
+        QueueEntry(
+            path="route--2/rlog.zst",
+            route_id="route",
+            segment=2,
+            filename="rlog.zst",
+            file_kind="rlog",
+            current=False,
+            progress=0.0,
+            retry_count=0,
+            priority=99,
+            upload_id="2",
+        ),
     ]
     assert (
         target_queue_refresh_needed(
-            online_queue,
-            desired_pending_paths=["route--2/fcamera.hevc", "route--2/rlog.zst"],
-            missing_paths=["route--2/fcamera.hevc"],
-            target_paths={"route--2/fcamera.hevc", "route--2/rlog.zst"},
+            queue_entries,
+            desired_priorities={
+                "route--2/fcamera.hevc": 0,
+                "route--2/rlog.zst": 1,
+            },
         )
         is True
     )
 
 
-def test_target_queue_refresh_not_needed_when_order_matches() -> None:
-    online_queue = [
-        {"id": "1", "path": "/data/media/0/realdata/lower--1/fcamera.hevc"},
-        {"id": "2", "path": "/data/media/0/realdata/route--2/rlog.zst"},
-        {"id": "3", "path": "/data/media/0/realdata/route--2/fcamera.hevc"},
+def test_target_queue_refresh_not_needed_when_priority_matches() -> None:
+    queue_entries = [
+        QueueEntry(
+            path="route--2/rlog.zst",
+            route_id="route",
+            segment=2,
+            filename="rlog.zst",
+            file_kind="rlog",
+            current=False,
+            progress=0.0,
+            retry_count=0,
+            priority=1,
+            upload_id="2",
+        ),
+        QueueEntry(
+            path="route--2/fcamera.hevc",
+            route_id="route",
+            segment=2,
+            filename="fcamera.hevc",
+            file_kind="fcamera",
+            current=False,
+            progress=0.0,
+            retry_count=0,
+            priority=0,
+            upload_id="3",
+        ),
     ]
     assert (
         target_queue_refresh_needed(
-            online_queue,
-            desired_pending_paths=["route--2/fcamera.hevc", "route--2/rlog.zst"],
-            missing_paths=["route--2/fcamera.hevc"],
-            target_paths={"route--2/fcamera.hevc", "route--2/rlog.zst"},
+            queue_entries,
+            desired_priorities={
+                "route--2/fcamera.hevc": 0,
+                "route--2/rlog.zst": 1,
+            },
         )
         is False
     )
 
 
 def test_target_queue_refresh_not_needed_when_no_pending_targets_remain() -> None:
-    online_queue = [
-        {"id": "1", "path": "/data/media/0/realdata/other--2/fcamera.hevc"},
-        {"id": "2", "path": "/data/media/0/realdata/other--2/rlog.zst"},
+    queue_entries = [
+        QueueEntry(
+            path="other--2/fcamera.hevc",
+            route_id="other",
+            segment=2,
+            filename="fcamera.hevc",
+            file_kind="fcamera",
+            current=False,
+            progress=0.0,
+            retry_count=0,
+            priority=99,
+            upload_id="1",
+        ),
+        QueueEntry(
+            path="other--2/rlog.zst",
+            route_id="other",
+            segment=2,
+            filename="rlog.zst",
+            file_kind="rlog",
+            current=False,
+            progress=0.0,
+            retry_count=0,
+            priority=99,
+            upload_id="2",
+        ),
     ]
     assert (
         target_queue_refresh_needed(
-            online_queue,
-            desired_pending_paths=[],
-            missing_paths=[],
-            target_paths={"route--2/fcamera.hevc", "route--2/rlog.zst"},
+            queue_entries,
+            desired_priorities={},
         )
         is False
     )
 
 
-def test_target_queue_refresh_not_needed_when_all_desired_paths_are_already_queued() -> None:
-    online_queue = [
-        {"id": "1", "path": "/data/media/0/realdata/route--2/rlog.zst"},
-        {"id": "2", "path": "/data/media/0/realdata/route--2/fcamera.hevc"},
-    ]
-    assert (
-        target_queue_refresh_needed(
-            online_queue,
-            desired_pending_paths=["route--2/fcamera.hevc", "route--2/rlog.zst"],
-            missing_paths=[],
-            target_paths={"route--2/fcamera.hevc", "route--2/rlog.zst"},
+def test_desired_path_priorities_follow_phase_bands() -> None:
+    assert desired_path_priorities("recent_bookmarks", ["a", "b", "c"]) == {
+        "a": 0,
+        "b": 1,
+        "c": 2,
+    }
+    assert watcher_priority_for_index("bookmark_fill_recent", 50) == 98
+
+
+def test_is_preserved_queue_entry_marks_low_quality_files() -> None:
+    assert is_preserved_queue_entry(
+        QueueEntry(
+            path="route--2/qlog.zst",
+            route_id="route",
+            segment=2,
+            filename="qlog.zst",
+            file_kind="qlog",
+            current=False,
+            progress=0.0,
+            retry_count=0,
+            priority=99,
+            upload_id="1",
         )
-        is False
-    )
+    ) is True
+    assert is_preserved_queue_entry(
+        QueueEntry(
+            path="route--2/fcamera.hevc",
+            route_id="route",
+            segment=2,
+            filename="fcamera.hevc",
+            file_kind="fcamera",
+            current=False,
+            progress=0.0,
+            retry_count=0,
+            priority=99,
+            upload_id="2",
+        )
+    ) is False
 
 
 def test_should_not_clear_queue_when_priority_targets_are_already_done() -> None:
